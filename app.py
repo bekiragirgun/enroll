@@ -821,26 +821,39 @@ def terminal_kopma():
 
 @socketio.on('ogretmen_baglan', namespace='/terminal')
 def ogretmen_baglan_event():
-    """Öğretmen bağlandığında sunucuda bir PTY (bash) aç."""
+    """Öğretmen bağlandığında Docker container başlat."""
     global ogretmen_sid, ogretmen_pty_fd, ogretmen_pty_pid
 
     ogretmen_sid = request.sid
+    ogretmen_numara = 'ogretmen'  # Öğretmen için özel numara
 
-    # Öğretmen için yerel PTY başlat
-    pid, fd = pty.fork()
-    if pid == 0:
-        # Çocuk süreç → bash
-        os.execvp('/bin/bash', ['/bin/bash'])
-    else:
-        ogretmen_pty_fd = fd
-        ogretmen_pty_pid = pid
-        # PTY çıktısını oku ve tüm istemcilere yayınla
+    # Docker container başlat
+    cid = konteyner_baslat(ogretmen_numara)
+    if not cid:
+        emit('hata', 'Öğretmen container başlatılamadı!')
+        return
+
+    # Container'a docker exec ile bağlan (PTY modunda)
+    try:
+        master_fd, slave_fd = pty.openpty()
+        proc = subprocess.Popen(
+            ['docker', 'exec', '-it', f'terminal-{ogretmen_numara}', '/bin/bash'],
+            stdin=slave_fd, stdout=slave_fd, stderr=slave_fd,
+            preexec_fn=os.setsid
+        )
+        os.close(slave_fd)
+
+        ogretmen_pty_fd = master_fd
+        ogretmen_pty_pid = proc.pid
+
+        # PTY çıktısını oku ve tüm öğrencilere yayınla
         t = threading.Thread(target=_pty_oku_ve_yayinla,
-                             args=(fd, 'ogretmen_cikti', None, True), daemon=True)
+                             args=(master_fd, 'ogretmen_cikti', None, True), daemon=True)
         t.start()
 
-    # Öğrenci sayısını gönder
-    emit('bagli_ogrenci_sayisi', len(ogrenci_sidleri))
+        emit('bagli_ogrenci_sayisi', len(ogrenci_sidleri))
+    except Exception as e:
+        emit('hata', f'Container bağlantı hatası: {str(e)}')
 
 
 @socketio.on('ogretmen_girdi', namespace='/terminal')
