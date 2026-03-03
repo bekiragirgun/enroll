@@ -70,7 +70,7 @@
 
     <h3 style="margin-bottom:0.75rem;">📁 Slayt Seçimi</h3>
     <div class="slayt-secici">
-      <select id="slayt-secici">
+      <select id="slayt-secici" onchange="slaytOnizleme(this.value)">
         {% for dosya in slaytlar %}
         <option value="{{ dosya }}" {% if dosya == aktif_dosya %}selected{% endif %}>
           {{ dosya | replace('.html','') | replace('_',' ') }}
@@ -78,6 +78,7 @@
         {% endfor %}
       </select>
       <button class="btn-kucuk" onclick="slaytDegistir()">▶ Göster</button>
+      <button class="btn-kucuk" style="background:#4299e1;" onclick="slaytOnizlemeAc()">👁️ Önizle</button>
     </div>
   </div>
 
@@ -162,6 +163,20 @@
   </div>
 
 </div>
+
+<!-- Slayt Önizleme Modal -->
+<div id="slayt-onizleme-modal" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.8);z-index:9999;align-items:center;justify-content:center;">
+  <div style="position:relative;width:90%;height:90%;max-width:1200px;background:#1a202c;border-radius:12px;padding:1rem;display:flex;flex-direction:column;">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;">
+      <h3 style="margin:0;color:#e2e8f0;">👁️ Slayt Önizleme</h3>
+      <button onclick="slaytOnizlemeKapat()" style="background:#e53e3e;border:none;border-radius:6px;padding:0.5rem 1rem;color:#fff;cursor:pointer;font-size:1rem;">✕ Kapat</button>
+    </div>
+    <div style="flex:1;overflow:hidden;border-radius:8px;background:#000;">
+      <iframe id="slayt-onizleme-iframe" style="width:100%;height:100%;border:none;" allowfullscreen></iframe>
+    </div>
+  </div>
+</div>
+
 <script src="/static/js/ogretmen.js"></script>
 </body>
 </html>

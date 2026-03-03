@@ -73,6 +73,42 @@ async function slaytDegistir() {
   await modDegistir('slayt');
 }
 
+function slaytOnizlemeAc() {
+  const secici = document.getElementById('slayt-secici');
+  if (!secici) return;
+
+  const dosya = secici.value;
+  if (!dosya) {
+    alert('Lütfen bir slayt seçin.');
+    return;
+  }
+
+  const modal = document.getElementById('slayt-onizleme-modal');
+  const iframe = document.getElementById('slayt-onizleme-iframe');
+
+  if (modal && iframe) {
+    iframe.src = '/slayt/' + dosya;
+    modal.style.display = 'flex';
+  }
+}
+
+function slaytOnizlemeKapat() {
+  const modal = document.getElementById('slayt-onizleme-modal');
+  if (modal) {
+    modal.style.display = 'none';
+  }
+}
+
+function slaytOnizleme(dosya) {
+  // Slayt değiştiğinde otomatik önizleme güncelle (modal açıksa)
+  const modal = document.getElementById('slayt-onizleme-modal');
+  const iframe = document.getElementById('slayt-onizleme-iframe');
+
+  if (modal && modal.style.display === 'flex' && iframe && dosya) {
+    iframe.src = '/slayt/' + dosya;
+  }
+}
+
 async function yoklamaCek() {
   try {
     const yanit = await fetch('/api/yoklama');
