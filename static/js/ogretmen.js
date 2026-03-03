@@ -116,6 +116,30 @@ function slaytOnizlemeKapat() {
   }
 }
 
+function hashGonder() {
+  // Manuel hash gönderme - debug için
+  const iframe = document.getElementById('slayt-onizleme-iframe');
+  if (!iframe) {
+    alert('❌ iframe bulunamadı!');
+    return;
+  }
+
+  try {
+    const hash = iframe.contentWindow.location.hash;
+    console.log('🔧 Manuel hash gönderme:', hash);
+    alert(`📤 Mevcut hash: ${hash || '(yok)'}\n\nConsole detayları için F12'`);
+
+    if (hash) {
+      slaytHashGonder(hash);
+    } else {
+      alert('⚠️ Hash yok! Slaytta ileri/geri gitmeyi deneyin.');
+    }
+  } catch(e) {
+    console.error('❌ Cross-origin hatası:', e);
+    alert('❌ Cross-Origin hatası!\n\niframe içeriği okunamıyor.\n\nConsolu kontrol et (F12)');
+  }
+}
+
 function slaytOnizleme(dosya) {
   // Slayt değiştiğinde otomatik önizleme güncelle (modal açıksa)
   const modal = document.getElementById('slayt-onizleme-modal');
