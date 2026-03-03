@@ -1,0 +1,14 @@
+[Unit]
+Description=Ders Takip Sistemi - Flask App
+After=network.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/root/enroll
+Environment="PATH=/root/enroll/venv/bin:/usr/local/bin:/usr/bin:/bin"
+ExecStart=/root/enroll/venv/bin/python app.py
+Restart=always
+
+[Install]
+WantedBy=multi-user.target
