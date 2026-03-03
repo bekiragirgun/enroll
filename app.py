@@ -718,12 +718,30 @@ def api_yoklama_sil_tek():
 # ── Terminal Rotaları ─────────────────────────────────────────
 @app.route('/terminal')
 def terminal_sayfasi():
-    """Öğrenci terminal sayfası — giriş yapmış öğrenci gerekir."""
+    """Öğrenci terminal sayfası — SSH bilgilerini gösterir."""
     numara   = session.get('ogrenci_numara')
     ad_soyad = session.get('ogrenci_ad')
     if not numara:
         return redirect(url_for('ana'))
-    return render_template('terminal.html', numara=numara, ad_soyad=ad_soyad)
+
+    # Container'ı başlat
+    cid = konteyner_baslat(numara)
+
+    # IP adresini al
+    try:
+        rc, ip_output = subprocess.run(
+            ['docker', 'inspect', '-f', '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}', f'terminal-{numara}'],
+            capture_output=True, text=True, timeout=5
+        ).returncode, subprocess.run(
+            ['docker', 'inspect', '-f', '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}', f'terminal-{numara}'],
+            capture_output=True, text=True, timeout=5
+        ).stdout.strip()
+
+        ip = ip_output if rc == 0 and ip_output else 'Container başlatılıyor...'
+    except:
+        ip = 'Container başlatılıyor...'
+
+    return render_template('terminal_ssh.html', numara=numara, ad_soyad=ad_soyad, container_ip=ip, container_id=cid)
 
 @app.route('/teacher/terminal')
 @ogretmen_giris_gerekli
