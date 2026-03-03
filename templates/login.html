@@ -3,190 +3,122 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>BGY106 Linux İşletim Sistemleri — Ders Takip</title>
+  <title>BGY106 Linux İşletim Sistemleri — Yoklama</title>
   <link rel="stylesheet" href="/static/css/stil.css">
-  <style>
-    body {
-      background: linear-gradient(135deg, #0f1117 0%, #1a1f2e 100%);
-      min-height: 100vh;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      padding: 1rem;
-    }
-
-    .login-container {
-      background: rgba(26, 31, 46, 0.95);
-      border: 1px solid #2d3748;
-      border-radius: 20px;
-      padding: 3rem;
-      width: 100%;
-      max-width: 450px;
-      box-shadow: 0 25px 80px rgba(0,0,0,0.5);
-      backdrop-filter: blur(10px);
-    }
-
-    .logo {
-      text-align: center;
-      margin-bottom: 2rem;
-    }
-
-    .logo h1 {
-      font-size: 1.5rem;
-      color: #90cdf4;
-      margin-bottom: 0.5rem;
-      font-weight: 700;
-    }
-
-    .logo p {
-      color: #718096;
-      font-size: 0.9rem;
-    }
-
-    .form-group {
-      margin-bottom: 1.5rem;
-    }
-
-    .form-group label {
-      display: block;
-      color: #cbd5e0;
-      font-size: 0.9rem;
-      font-weight: 600;
-      margin-bottom: 0.5rem;
-    }
-
-    .form-group select,
-    .form-group input {
-      width: 100%;
-      padding: 0.85rem 1rem;
-      background: #0f1117;
-      border: 1px solid #4a5568;
-      border-radius: 10px;
-      color: #e2e8f0;
-      font-size: 1rem;
-      transition: all 0.2s;
-      box-sizing: border-box;
-    }
-
-    .form-group select:focus,
-    .form-group input:focus {
-      outline: none;
-      border-color: #4299e1;
-      box-shadow: 0 0 0 3px rgba(66, 153, 225, 0.2);
-    }
-
-    .btn-submit {
-      width: 100%;
-      padding: 1rem;
-      background: linear-gradient(135deg, #4299e1 0%, #3182ce 100%);
-      color: white;
-      border: none;
-      border-radius: 10px;
-      font-size: 1rem;
-      font-weight: 700;
-      cursor: pointer;
-      transition: all 0.2s;
-    }
-
-    .btn-submit:hover {
-      transform: translateY(-2px);
-      box-shadow: 0 10px 30px rgba(66, 153, 225, 0.3);
-    }
-
-    .ders-paketi {
-      display: flex;
-      gap: 1rem;
-      margin-top: 1rem;
-    }
-
-    .ders-paketi label {
-      flex: 1;
-      padding: 1rem;
-      background: #0f1117;
-      border: 2px solid #4a5568;
-      border-radius: 10px;
-      text-align: center;
-      cursor: pointer;
-      transition: all 0.2s;
-      color: #718096;
-      font-weight: 600;
-    }
-
-    .ders-paketi input[type="radio"] {
-      display: none;
-    }
-
-    .ders-paketi input[type="radio"]:checked + label {
-      border-color: #4299e1;
-      background: rgba(66, 153, 225, 0.2);
-      color: #90cdf4;
-    }
-
-    {% if hata %}
-    .error {
-      background: rgba(229, 62, 62, 0.1);
-      border: 1px solid #e53e3e;
-      border-radius: 10px;
-      padding: 1rem;
-      margin-bottom: 1.5rem;
-      color: #fc8181;
-      font-size: 0.9rem;
-      text-align: center;
-    }
-    {% endif %}
-  </style>
 </head>
 <body>
-
-<div class="login-container">
-  <div class="logo">
-    <h1>💻 İşletim Sistemleri</h1>
-    <p>Kapadokya Üniversitesi — BGY106</p>
-  </div>
-
-  {% if hata %}
-  <div class="error">
-    ⚠️ {{ hata }}
-  </div>
-  {% endif %}
-
-  <form method="POST" action="/giris">
-    <div class="form-group">
-      <label for="ogrenci_id">Öğrenci Seçiniz</label>
-      <select id="ogrenci_id" name="ogrenci_id" required>
-        <option value="">-- Öğrenci Seçin --</option>
-        {% for ogrenci in ogrenciler %}
-        <option value="{{ ogrenci.id }}">{{ ogrenci.ad }} {{ ogrenci.soyad }} ({{ ogrenci.numara }})</option>
-        {% endfor %}
-      </select>
-    </div>
-
-    <div class="form-group">
-      <label for="sifre">Şifre (Öğrenci Numaranız)</label>
-      <input type="password" id="sifre" name="sifre" required
-             placeholder="Öğrenci numaranızı giriniz"
-             pattern="[0-9]+">
-    </div>
-
-    <div class="form-group">
-      <label>Ders Paketi Seçiniz</label>
-      <div class="ders-paketi">
-        <input type="radio" id="pakets" name="ders_paketi" value="1" required>
-        <label for="pakets">Paket 1</label>
-
-        <input type="radio" id="paket2" name="ders_paketi" value="2">
-        <label for="paket2">Paket 2</label>
-
-        <input type="radio" id="paket3" name="ders_paketi" value="3">
-        <label for="paket3">Paket 3</label>
+  <div class="giris-kapsayici">
+    <div class="giris-kutu">
+      <!-- Tux Logo -->
+      <div style="text-align:center;margin-bottom:0.75rem;">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 120" width="72" height="86" style="display:inline-block;">
+          <!-- Gövde -->
+          <ellipse cx="50" cy="72" rx="30" ry="36" fill="#1a1a1a"/>
+          <!-- Göbek -->
+          <ellipse cx="50" cy="80" rx="18" ry="22" fill="#f5deb3"/>
+          <!-- Kafa -->
+          <ellipse cx="50" cy="30" rx="22" ry="22" fill="#1a1a1a"/>
+          <!-- Sol göz beyazı -->
+          <ellipse cx="41" cy="24" rx="7" ry="8" fill="white"/>
+          <!-- Sağ göz beyazı -->
+          <ellipse cx="59" cy="24" rx="7" ry="8" fill="white"/>
+          <!-- Sol göz -->
+          <circle cx="41" cy="25" r="4" fill="#1a1a1a"/>
+          <!-- Sağ göz -->
+          <circle cx="59" cy="25" r="4" fill="#1a1a1a"/>
+          <!-- Sol göz parlaklık -->
+          <circle cx="43" cy="23" r="1.5" fill="white"/>
+          <!-- Sağ göz parlaklık -->
+          <circle cx="61" cy="23" r="1.5" fill="white"/>
+          <!-- Gaga -->
+          <ellipse cx="50" cy="35" rx="7" ry="4" fill="#f5a623" transform="rotate(-5,50,35)"/>
+          <!-- Sol kanat -->
+          <ellipse cx="22" cy="68" rx="10" ry="22" fill="#1a1a1a" transform="rotate(-15,22,68)"/>
+          <!-- Sağ kanat -->
+          <ellipse cx="78" cy="68" rx="10" ry="22" fill="#1a1a1a" transform="rotate(15,78,68)"/>
+          <!-- Sol ayak -->
+          <ellipse cx="38" cy="108" rx="12" ry="5" fill="#f5a623"/>
+          <!-- Sağ ayak -->
+          <ellipse cx="62" cy="108" rx="12" ry="5" fill="#f5a623"/>
+        </svg>
       </div>
+      <h1 style="font-size:1.3rem;line-height:1.3;">BGY106<br>Linux İşletim Sistemleri</h1>
+      <p class="alt-baslik">Derse katılmak için bilgilerini gir</p>
+
+      {% if hata %}
+      <div style="background:#742a2a; border:1px solid #c53030; border-radius:8px; padding:0.75rem 1rem; margin-bottom:1rem; font-size:0.9rem; color:#fed7d7;">
+        ⚠️ {{ hata }}
+      </div>
+      {% endif %}
+
+      <form method="POST" action="/giris">
+        <div class="form-grup">
+          <label>Sınıf</label>
+          <select name="sinif_id" id="sinif-sec" required
+                  onchange="ogrenciListesiYukle(this.value)"
+                  style="width:100%; padding:0.75rem 1rem; background:#2d3748; color:#e2e8f0; border:1px solid #4a5568; border-radius:8px; font-size:1rem; outline:none;">
+            <option value="" disabled selected>— Sınıfınızı seçin —</option>
+            {% for sinif in siniflar %}
+            <option value="{{ sinif.id }}">{{ sinif.ad }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-grup">
+          <label>Ad Soyad</label>
+          <select name="ad_soyad" id="ogrenci-sec" required disabled
+                  style="width:100%; padding:0.75rem 1rem; background:#2d3748; color:#718096; border:1px solid #4a5568; border-radius:8px; font-size:1rem; outline:none; cursor:not-allowed;">
+            <option value="">— Önce sınıf seçin —</option>
+          </select>
+        </div>
+        <div class="form-grup">
+          <label>Öğrenci Numarası</label>
+          <input type="password" name="numara" placeholder="Öğrenci numaranız" required>
+        </div>
+        <div class="form-grup">
+          <label>Ders Paketi</label>
+          <select name="ders_paketi" required style="width:100%; padding:0.75rem 1rem; background:#2d3748; color:#e2e8f0; border:1px solid #4a5568; border-radius:8px; font-size:1rem; outline:none;">
+            <option value="1">Paket 1</option>
+            <option value="2">Paket 2</option>
+            <option value="3">Paket 3</option>
+          </select>
+        </div>
+        <button type="submit" class="btn-ana">✅ Derse Katıl</button>
+      </form>
+
+      <script>
+        async function ogrenciListesiYukle(sinifId) {
+          const sec = document.getElementById('ogrenci-sec');
+
+          // Sıfırla
+          sec.innerHTML = '<option value="">Yükleniyor…</option>';
+          sec.disabled  = true;
+          sec.style.color  = '#718096';
+          sec.style.cursor = 'not-allowed';
+
+          if (!sinifId) return;
+
+          try {
+            const r    = await fetch('/api/ogrenci_listesi/' + sinifId);
+            const veri = await r.json();
+
+            sec.innerHTML = '<option value="">— Adınızı seçin —</option>';
+            veri.ogrenciler.forEach(function(o) {
+              const opt = document.createElement('option');
+              opt.value              = o.ad_soyad;
+              opt.dataset.numara     = o.numara;
+              opt.textContent        = o.ad_soyad;
+              sec.appendChild(opt);
+            });
+            sec.disabled     = false;
+            sec.style.color  = '#e2e8f0';
+            sec.style.cursor = 'default';
+          } catch(e) {
+            sec.innerHTML = '<option value="">Hata — sayfayı yenileyin</option>';
+          }
+        }
+
+      </script>
     </div>
-
-    <button type="submit" class="btn-submit">
-      📝 Kayıt Ol
-    </button>
-  </form>
-</div>
-
+  </div>
 </body>
 </html>
