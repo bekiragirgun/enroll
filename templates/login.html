@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>BGY106 Linux İşletim Sistemi — Terminal</title>
+  <title>BGY106 Linux İşletim Sistemleri — Ders Takip</title>
   <link rel="stylesheet" href="/static/css/stil.css">
   <style>
     body {
@@ -55,6 +55,7 @@
       margin-bottom: 0.5rem;
     }
 
+    .form-group select,
     .form-group input {
       width: 100%;
       padding: 0.85rem 1rem;
@@ -67,39 +68,11 @@
       box-sizing: border-box;
     }
 
+    .form-group select:focus,
     .form-group input:focus {
       outline: none;
       border-color: #4299e1;
       box-shadow: 0 0 0 3px rgba(66, 153, 225, 0.2);
-    }
-
-    .form-group .hint {
-      font-size: 0.8rem;
-      color: #718096;
-      margin-top: 0.5rem;
-      display: block;
-    }
-
-    .username-preview {
-      background: #0f1117;
-      border: 1px dashed #4299e1;
-      border-radius: 8px;
-      padding: 1rem;
-      margin: 1rem 0;
-      text-align: center;
-    }
-
-    .username-preview .label {
-      font-size: 0.8rem;
-      color: #718096;
-      margin-bottom: 0.5rem;
-    }
-
-    .username-preview .value {
-      font-size: 1.1rem;
-      color: #48bb78;
-      font-family: 'Courier New', monospace;
-      font-weight: 600;
     }
 
     .btn-submit {
@@ -120,18 +93,33 @@
       box-shadow: 0 10px 30px rgba(66, 153, 225, 0.3);
     }
 
-    .info-box {
-      background: rgba(66, 153, 225, 0.1);
-      border: 1px solid #4299e1;
-      border-radius: 10px;
-      padding: 1rem;
-      margin-top: 2rem;
-      font-size: 0.85rem;
-      color: #90cdf4;
+    .ders-paketi {
+      display: flex;
+      gap: 1rem;
+      margin-top: 1rem;
     }
 
-    .info-box strong {
-      color: #fff;
+    .ders-paketi label {
+      flex: 1;
+      padding: 1rem;
+      background: #0f1117;
+      border: 2px solid #4a5568;
+      border-radius: 10px;
+      text-align: center;
+      cursor: pointer;
+      transition: all 0.2s;
+      color: #718096;
+      font-weight: 600;
+    }
+
+    .ders-paketi input[type="radio"] {
+      display: none;
+    }
+
+    .ders-paketi input[type="radio"]:checked + label {
+      border-color: #4299e1;
+      background: rgba(66, 153, 225, 0.2);
+      color: #90cdf4;
     }
 
     {% if hata %}
@@ -152,7 +140,7 @@
 
 <div class="login-container">
   <div class="logo">
-    <h1>💻 Linux Terminal</h1>
+    <h1>💻 İşletim Sistemleri</h1>
     <p>Kapadokya Üniversitesi — BGY106</p>
   </div>
 
@@ -164,76 +152,41 @@
 
   <form method="POST" action="/giris">
     <div class="form-group">
-      <label for="ad">Ad</label>
-      <input type="text" id="ad" name="ad" required
-             placeholder="Örn: Bekir"
-             oninput="updateUsernamePreview()"
-             autocomplete="off">
+      <label for="ogrenci_id">Öğrenci Seçiniz</label>
+      <select id="ogrenci_id" name="ogrenci_id" required>
+        <option value="">-- Öğrenci Seçin --</option>
+        {% for ogrenci in ogrenciler %}
+        <option value="{{ ogrenci.id }}">{{ ogrenci.ad }} {{ ogrenci.soyad }} ({{ ogrenci.numara }})</option>
+        {% endfor %}
+      </select>
     </div>
 
     <div class="form-group">
-      <label for="soyad">Soyad</label>
-      <input type="text" id="soyad" name="soyad" required
-             placeholder="Örn: Ağırğün"
-             oninput="updateUsernamePreview()"
-             autocomplete="off">
+      <label for="sifre">Şifre (Öğrenci Numaranız)</label>
+      <input type="password" id="sifre" name="sifre" required
+             placeholder="Öğrenci numaranızı giriniz"
+             pattern="[0-9]+">
     </div>
 
     <div class="form-group">
-      <label for="numara">Öğrenci Numarası</label>
-      <input type="text" id="numara" name="numara" required
-             placeholder="Örn: 220001001"
-             pattern="[0-9]+"
-             oninput="updateUsernamePreview()"
-             autocomplete="off">
-      <small class="hint">Sadece rakamlar</small>
-    </div>
+      <label>Ders Paketi Seçiniz</label>
+      <div class="ders-paketi">
+        <input type="radio" id="pakets" name="ders_paketi" value="1" required>
+        <label for="pakets">Paket 1</label>
 
-    <div class="username-preview">
-      <div class="label">🔑 SSH Kullanıcı Adınız:</div>
-      <div class="value" id="username-preview">adinizsoyadiniznumaraniz</div>
+        <input type="radio" id="paket2" name="ders_paketi" value="2">
+        <label for="paket2">Paket 2</label>
+
+        <input type="radio" id="paket3" name="ders_paketi" value="3">
+        <label for="paket3">Paket 3</label>
+      </div>
     </div>
 
     <button type="submit" class="btn-submit">
-      🚀 Terminal Bağlantısı Al
+      📝 Kayıt Ol
     </button>
   </form>
-
-  <div class="info-box">
-    <strong>ℹ️ Bilgi:</strong> Sistem otomatik olarak size özel bir SSH hesabı oluşturacaktır.
-    Terminal bilgilerini bir sonraki sayfada göreceksiniz.
-  </div>
 </div>
-
-<script>
-function updateUsernamePreview() {
-  const ad = document.getElementById('ad').value.trim().toLowerCase();
-  const soyad = document.getElementById('soyad').value.trim().toLowerCase();
-  const numara = document.getElementById('numara').value.trim();
-
-  let username = '';
-
-  if (ad && soyad && numara) {
-    // Türkçe karakterleri dönüştür
-    const trToEn = {
-      'ç': 'c', 'ğ': 'g', 'ı': 'i', 'ö': 'o', 'ş': 's', 'ü': 'u'
-    };
-
-    const normalize = (str) => {
-      return str.toLowerCase().replace(/[çğıöşü]/g, c => trToEn[c] || c);
-    };
-
-    username = `${normalize(ad)}${normalize(soyad)}${numara}`;
-  } else {
-    username = 'adinizsoyadiniznumaraniz';
-  }
-
-  document.getElementById('username-preview').textContent = username;
-}
-
-// Sayfa yüklendiğinde önizlemeyi güncelle
-document.addEventListener('DOMContentLoaded', updateUsernamePreview);
-</script>
 
 </body>
 </html>

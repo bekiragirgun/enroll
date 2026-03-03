@@ -209,61 +209,60 @@ PAKET_SECENEKLERI = [
 @app.route('/')
 def ana():
     """Ana sayfa - Giriş formu."""
-    return render_template('login.html')
+    with db_baglantisi() as db:
+        ogrenciler = db.execute(
+            'SELECT id, ad, soyad, numara FROM ogrenciler ORDER BY ad, soyad'
+        ).fetchall()
+    return render_template('login.html', ogrenciler=ogrenciler)
 
 @app.route('/giris', methods=['POST'])
 def giris():
-    ad_soyad = request.form.get('ad_soyad', '').strip().upper()
-    numara   = request.form.get('numara', '').strip()
-    sinif_id = request.form.get('sinif_id', '').strip()
-    paket    = request.form.get('paket', '').strip()
-
-    siniflar = sinif_listesi()
+    ogrenci_id = request.form.get('ogrenci_id', '').strip()
+    sifre      = request.form.get('sifre', '').strip()
+    ders_paketi = request.form.get('ders_paketi', '').strip()
 
     # Hata durumunda formu tekrar göstermek için yardımcı
     def hata_goster(mesaj):
-        return render_template('ogrenci_giris.html',
-                               hata=mesaj,
-                               siniflar=siniflar,
-                               paket_secenekleri=PAKET_SECENEKLERI,
-                               paket_varsayilan=paket or paket_hesapla())
+        with db_baglantisi() as db:
+            ogrenciler = db.execute(
+                'SELECT id, ad, soyad, numara FROM ogrenciler ORDER BY ad, soyad'
+            ).fetchall()
+        return render_template('login.html', hata=mesaj, ogrenciler=ogrenciler)
 
-    if not ad_soyad or not numara or not sinif_id:
+    if not ogrenci_id or not sifre or not ders_paketi:
         return hata_goster('Lütfen tüm alanları doldurun.')
 
-    # Paket doğrulama
-    if paket not in PAKET_SECENEKLERI:
-        paket = paket_hesapla()   # Geçersizse saate göre dön
+    # Ders paketi doğrulama
+    if ders_paketi not in ['1', '2', '3']:
+        return hata_goster('Geçersiz ders paketi seçimi.')
 
-    # ── Whitelist kontrolü ──
+    # Öğrenci bilgilerini getir
     with db_baglantisi() as db:
         ogrenci = db.execute(
-            'SELECT ad, soyad, sifre FROM ogrenciler WHERE numara=? AND sinif_id=?',
-            (numara, sinif_id)
+            'SELECT id, ad, soyad, numara FROM ogrenciler WHERE id=?',
+            (ogrenci_id,)
         ).fetchone()
 
-    if not ogrenci:
-        return hata_goster('Bu öğrenci numarası seçili sınıfa kayıtlı değil.')
+        if not ogrenci:
+            return hata_goster('Öğrenci bulunamadı.')
+
+        # Şifre kontrolü (öğrenci numarası ile)
+        if ogrenci['numara'] != sifre:
+            return hata_goster('Hatalı şifre!')
 
     tam_ad = (ogrenci['ad'] + ' ' + ogrenci['soyad']).upper()
-    if ad_soyad != tam_ad:
-        return hata_goster('İsim ve numara uyuşmuyor.')
-
-    saat      = simdi()
-    tarih     = bugun()
-    istemci   = istemci_ip()
+    numara = ogrenci['numara']
+    saat = simdi()
+    tarih = bugun()
+    istemci = istemci_ip()
 
     with db_baglantisi() as db:
-        # Sınıf adını al
-        sinif_row = db.execute('SELECT ad FROM siniflar WHERE id=?', (sinif_id,)).fetchone()
-        sinif_ad  = sinif_row['ad'] if sinif_row else ''
-
         # ── 1. AYNI IP'DEN FARKLI ÖĞRENCİ KONTROLÜ ────────────────────
         # Aynı IP'den bugün BU PAKET'te FARKLI bir öğrenci giriş yapmış mı?
         # (Aynı öğrenci tekrar giriyorsa NUMARA AYNI olacağı için atlanır)
         ip_var_mi = db.execute(
             "SELECT DISTINCT numara FROM yoklama WHERE tarih=? AND ip=? AND paket=? AND kaynak='web'",
-            (tarih, istemci, paket)
+            (tarih, istemci, ders_paketi)
         ).fetchall()
 
         # Birden fazla farklı numara varsa ve girilen numara bunlardan farklıysa şüpheli
@@ -280,7 +279,7 @@ def giris():
                      list(ip_numaralar)[0],  # İlk numara
                      'Aynı IP',  # Gerçek ad (IP logu)
                      numara, tam_ad,
-                     sinif_ad)
+                     '')  # Sinif bilgisi dropdown'dan yok
                 )
                 db.commit()
                 # ─────────────────────────────────────────────────────
@@ -291,31 +290,33 @@ def giris():
         # Aynı gün aynı numara BU PAKET'te daha önce girmiş mi?
         var_mi = db.execute(
             'SELECT id, saat FROM yoklama WHERE tarih=? AND numara=? AND paket=?',
-            (tarih, numara, paket)
+            (tarih, numara, ders_paketi)
         ).fetchone()
         if var_mi:
             # Öğrenci zaten giriş yapmış, tekrar hoş geldin!
             session['ogrenci_numara'] = numara
             session['ogrenci_ad'] = tam_ad
+            session['ogrenci_id'] = ogrenci_id
             return render_template('ogrenci_ana.html',
                                    ad_soyad=tam_ad,
                                    saat=var_mi['saat'],
-                                   paket=paket,
+                                   paket=ders_paketi,
                                    tekrar_giris=True)
 
         # ── 3. YENİ KAYIT ──────────────────────────────────────────
         db.execute(
             'INSERT INTO yoklama (tarih, ad_soyad, numara, saat, sinif, paket, ip, kaynak) '
             'VALUES (?,?,?,?,?,?,?,?)',
-            (tarih, tam_ad, numara, saat, sinif_ad, paket, istemci, 'web')
+            (tarih, tam_ad, numara, saat, '', ders_paketi, istemci, 'web')
         )
         db.commit()
 
     # Öğrenci session bilgileri (terminal sayfası için gerekli)
     session['ogrenci_numara'] = numara
     session['ogrenci_ad'] = tam_ad
+    session['ogrenci_id'] = ogrenci_id
 
-    return render_template('ogrenci_ana.html', ad_soyad=tam_ad, saat=saat, paket=paket)
+    return render_template('ogrenci_ana.html', ad_soyad=tam_ad, saat=saat, paket=ders_paketi)
 
 @app.route('/api/durum')
 def api_durum():
