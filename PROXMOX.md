@@ -1,289 +1,393 @@
-# Proxmox Linux Eğitim Ortamı Kurulum Rehberi
+# Proxmox CT Deployment Rehberi
 
-Bu rehber, Kapadokya Linux eğitim ortamını Proxmox VE'ye taşımak için hazırlanmıştır.
+Bu rehber, Kapadokya Ders Takip Sistemi'nin Proxmox CT (LXC Container) üzerinde çalıştırılması için hazırlanmıştır.
 
-## 🎯 Özet
+## 🎯 Mimari
 
-Projenizi Proxmox'a aktararak:
-- ✅ Tam Linux sistemi (systemd dahil)
-- ✅ Tüm network ve sistem araçları
-- ✅ Öğrenci hesabı ve eğitim materyalleri
-- ✅ Kalıcı ve stabil çalışma ortamı
+Sistem iki ayrı CT olarak çalışır:
+
+| CT | ID | Hostname | Amaç |
+|----|----|----------|------|
+| **Web** | 9001 | ders-takip-web | Flask web uygulaması, öğrenci/öğretmen arayüzü |
+| **Terminal** | 9002 | linux-egitim | Öğrenciler için Linux eğitim ortamı, web terminal |
 
 ## 📋 Gereksinimler
 
-- Proxmox VE kurulu bir sunucu
-- VM için kaynaklar (2GB RAM, 2 CPU, 20GB disk yeterli)
-- Debian 12 veya Ubuntu 22.04 ISO dosyası
+- **Proxmox VE** kurulu bir sunucu (v7.x+ önerilir)
+- **Kaynaklar:**
+  - Web CT: 2GB RAM, 2 CPU, 20GB disk
+  - Terminal CT: 2GB RAM, 2 CPU, 20GB disk
+- **Network:** Bridge (vmbr0) varsayılan
+- **Depolama:** local-lvm veya benzeri
 
-## 🚀 Kurulum Adımları
+## 🚀 Hızlı Kurulum
 
-### Adım 1: VM Oluştur
-
-Proxmox web arayüzünde:
-
-1. **VM Oluştur:**
-   - Sol menüden "Create VM" tıklayın
-   - **General:**
-     - Name: `linux-egitim`
-     - VM ID: Otomatik (boş bırakın)
-     - BIOS Type: OVMF (UEFI) - ARM64 için gerekli
-
-2. **OS:**
-   - **Type:** Linux
-   - **Version:** Debian 12 Bookworm (ARM64)
-   - ISO: Yüklediğiniz Debian/Ubuntu ISO'yu seçin
-
-3. **Hard Disk:**
-   - **Bus/Device:** VirtIO
-   - **Storage:** Local-lvm veya uygun storage
-   - **Disk size:** 20G (veya daha fazla)
-   - **SSD emulation:** İşaretleyin
-
-4. **CPU:**
-   - **Type:** ARM64 (Apple Silicon için)
-   - **Cores:** 2 (veya daha fazla)
-   - **Type:** Host
-
-5. **Memory:**
-   - **Memory:** 2048 MB (2GB)
-
-6. **Network:**
-   - **Device:** VirtIO (paravirtualized)
-   - **Bridge:** vmbr0
-   - **Firewall:** Off (sonra açabilirsiniz)
-   - **VLAN ID:** Boş
-
-7. **Confirm:** Review edip "Finish" tıklayın
-
-### Adım 2: VM'i Başlat ve Kurulum Yap
-
-1. VM'i seçin ve **Start** tıklayın
-2. **Console** butonuna tıklayın
-3. Debian/Ubuntu kurulumunu yapın:
-   - Language: English (veya Turkish)
-   - Location: Turkey
-   - Keyboard: Turkish
-   - Hostname: `linux-egitim`
-   - Domain: (boş bırakın)
-   - User: Sadece root kullanacağız (user oluşturmayın)
-   - Partition: Guided - use entire disk
-   - SSH: OpenSSH server kurun
-   - Software: Standard system utilities
-
-### Adım 3: İlk Kurulum
-
-VM kurulduktan sonra console'da:
+### 1. Scripti İndirin
 
 ```bash
-# Root girişi yapın (şifre belirlediyseniz)
-
-# Sistem güncelle
-apt update && apt upgrade -y
-
-# Temel araçlar
-apt install -y curl wget vim git sudo
-
-# SSH erişimi için IP öğrenin
-ip addr show
-```
-
-Bu IP adresini not alın.
-
-### Adım 4: provision.sh'ı İçeri Aktarın
-
-Yöntem 1 - SSH ile:
-
-```bash
-# Ana makinenizden Proxmox VM'e SSH ile bağlanın
-ssh root@<VM_IP_ADRESI>
-
-# provision.sh dosyasını oluşturun
-cat > /root/provision.sh << 'EOFPROVISION'
-[provision.sh dosyasının içeriğini buraya yapıştırın]
-EOFPROVISION
-
-# Çalıştırılabilir yapın
-chmod +x /root/provision.sh
-
-# Çalıştırın
-bash /root/provision.sh
-```
-
-Yöntem 2 - Direct Console:
-
-Proxmox console'dan direkt provision.sh içeriğini yapıştırın.
-
-### Adım 5: provision.sh'ı Çalıştırın
-
-```bash
-# VM içinde
+# Proxmox host üzerinde
 cd /root
-bash provision.sh
+# Scripti projenizden kopyalayın veya buraya upload edin
 ```
 
-Bu işlem 5-10 dakika sürecek, 100+ paket kuracak.
-
-## 🎯 VM Hazır Olduğunda
+### 2. Scripti Çalıştırın
 
 ```bash
-# Öğrenci kullanıcısına geçin
-su - ogrenci
-# Şifre: ogrenci
+# Her iki container'ı da oluştur (varsayılan)
+./proxmox-deploy.sh
 
-# Test edin
-sysinfo
-which ip tcpdump nmap ufw systemctl
+# Sadece web container oluştur
+./proxmox-deploy.sh --web-only
+
+# Sadece terminal container oluştur
+./proxmox-deploy.sh --term-only
+
+# Kurulumu test et (gerçek işlem yok)
+./proxmox-deploy.sh --dry-run
 ```
 
-## 🌐 VM'e Erişim
+### 3. Tamamlandı
 
-### SSH ile Bağlanma
+Script otomatik olarak:
+- ✅ Debian 12 template indirir
+- ✅ İki CT oluşturur ve yapılandırır
+- ✅ Sistem güncellemelerini yapar
+- ✅ Gerekli paketleri yükler
+- ✅ Servisleri başlatır
+
+## 📝 Detaylı Kullanım
+
+### Script Seçenekleri
+
+```
+KULLANIM:
+    ./proxmox-deploy.sh [SEÇENEKLER]
+
+SEÇENEKLER:
+    -h, --help              Bu yardım mesajını göster
+    -w, --web-only          Sadece web container oluştur
+    -t, --term-only         Sadece terminal container oluştur
+    -b, --both              Her iki container'ı da oluştur (varsayılan)
+    -c, --config <dosya>    Konfigürasyon dosyası kullan
+    -s, --skip-template     Template indirmeyi atla
+    --dry-run               Kurulum simülasyonu yap (gerçek işlem yok)
+
+ÖRNEKLER:
+    # İki container'ı da oluştur (varsayılan)
+    ./proxmox-deploy.sh
+
+    # Sadece web container oluştur
+    ./proxmox-deploy.sh --web-only
+
+    # Özel konfigürasyon ile
+    ./proxmox-deploy.sh --config my-config.sh
+
+    # Kurulumu test et (gerçek işlem yok)
+    ./proxmox-deploy.sh --dry-run
+```
+
+### Özel Konfigürasyon
+
+Varsayılan ayarları değiştirmek için bir konfigürasyon dosyası oluşturun:
 
 ```bash
-# Ana makineden
-ssh root@<VM_IP_ADRESI>
-
-# Öğrenci kullanıcısı ile
-ssh ogrenci@<VM_IP_ADRESI>
+# config.sh
+CTID_WEB=9010
+CTID_TERM=9011
+MEMORY=4096
+CORES=4
+DISK_SIZE=40
+STORAGE="local-zfs"
+BRIDGE="vmbr0"
 ```
 
-### Web Arayüzü
-
-Proxmox web arayüzünden:
-- VM: Console butonu ile
-- Network: 22 portuna erişim
-
-## 📚 Eğitim Kullanımı
-
-### Öğrenci Girişi
+Kullanımı:
 
 ```bash
-ssh ogrenci@<VM_IP_ADRESI>
-# Şifre: ogrenci
-
-cd ~/egitim/
-ls -la
-./network-egzersizleri.sh
-./process-egzersizleri.sh
+./proxmox-deploy.sh --config config.sh
 ```
 
-### Sistem Bilgisi
+## 🌐 Erişim Bilgileri
+
+### Web Container (9001)
+
+```
+Web Paneli:    http://<CT_IP>
+Öğretmen:      http://<CT_IP>/teacher
+Şifre:         linux2024
+
+Yönetim:
+pct enter 9001
+systemctl status ders-takip
+journalctl -u ders-takip -f
+```
+
+### Terminal Container (9002)
+
+```
+Web Terminal:  http://<CT_IP>:7681
+
+SSH Erişimi:
+ssh root@<CT_IP>
+ssh ogrenci@<CT_IP>  (Şifre: ogrenci)
+
+Yönetim:
+pct enter 9002
+systemctl status ttyd
+```
+
+## 🔧 CT Yönetimi
+
+### Temel Komutlar
 
 ```bash
-sysinfo  # Özel komut
-ip addr
-df -h
-free -h
+# Tüm CT'leri listele
+pct list
+
+# CT başlat/durdur
+pct start <CT_ID>
+pct stop <CT_ID>
+pct restart <CT_ID>
+
+# CT içine gir
+pct enter <CT_ID>
+
+# CT içinde komut çalıştır
+pct exec <CT_ID> -- bash -c "komut"
+
+# CT sil
+pct destroy <CT_ID>
+
+# Snapshot al
+pct snapshot <CT_ID> <snapshot-adı>
+
+# Snapshot'tan dön
+pct rollback <CT_ID> <snapshot-adı>
 ```
 
-## 🔧 Otomasyon Seçenekleri
+### Log Görüntüleme
 
-### Cloud-Init Kullanırsanız
-
-Proxmox Cloud-Init ile otomatik kurulum:
-
-1. **CICustom:** provision.sh'ı yükleyin
-2. **First Boot:** Otomatik çalışır
-3. **Network:** Otomatik IP alır
-
-### Yedekleme
-
-**VM Snapshot:**
 ```bash
-# Proxmox web arayüzünde
-1. VM seçin
-2. Backup -> Snapshot
-3. Adını girin (örn: "temel-kurulum")
-4. Snapshot alın
+# Web CT logları
+pct exec 9001 -- journalctl -u ders-takip -f
+pct exec 9001 -- journalctl -u nginx -f
+
+# Terminal CT logları
+pct exec 9002 -- journalctl -u ttyd -f
 ```
 
-**SSH Key:**
+## 🔄 Servis Yönetimi
+
+### Web Container (9001)
+
 ```bash
-# SSH anahtarı oluştur
-ssh-keygen -t rsa -b 4096
-
-# Public key'i VM'e kopyala
-ssh-copy-id root@<VM_IP_ADRESI>
+pct exec 9001 -- systemctl status ders-takip
+pct exec 9001 -- systemctl restart ders-takip
+pct exec 9001 -- systemctl status nginx
 ```
 
-## 🎓 Kullanım Senaryoları
+### Terminal Container (9002)
 
-### Ders İçin
-
-1. **Öğrenci erişimi:** SSH ile bağlanma
-2. **Eğitim materyalleri:** ~/egitim/
-3. **Pratik:** ~/pratik/
-4. **Test:** ~/testler/
-
-### Eğitmen İçin
-
-1. **VM yönetimi:** Proxmox web arayüzü
-2. **Snapshot yönetimi:** Ders öncesi/sonrası
-3. **Resource monitoring:** Proxmox dashboard
-4. **Log erişimi:** ~/loglar/
+```bash
+pct exec 9002 -- systemctl status ttyd
+pct exec 9002 -- systemctl restart ttyd
+```
 
 ## 📊 Kaynak Kullanımı
 
-**Minimum:**
-- RAM: 2GB
-- CPU: 2 çekirdek
-- Disk: 20GB
+### Minimum Kaynaklar
 
-**Önerilen:**
-- RAM: 4GB
-- CPU: 4 çekirdek
-- Disk: 40GB
+| CT | RAM | CPU | Disk |
+|----|-----|-----|------|
+| Web | 2GB | 2 | 20GB |
+| Terminal | 2GB | 2 | 20GB |
+| **Toplam** | **4GB** | **4** | **40GB** |
+
+### Önerilen Kaynaklar
+
+| CT | RAM | CPU | Disk |
+|----|-----|-----|------|
+| Web | 4GB | 4 | 40GB |
+| Terminal | 4GB | 4 | 40GB |
+| **Toplam** | **8GB** | **8** | **80GB** |
 
 ## 🔐 Güvenlik
 
 ### Firewall
 
 ```bash
-# VM içinde
-ufw enable
-ufw allow ssh
-ufw allow from 192.168.1.0/24  # Yerel ağa izin ver
+# Web CT - Nginx için
+pct exec 9001 -- ufw allow 80/tcp
+pct exec 9001 -- ufw allow 443/tcp
+
+# Terminal CT - SSH ve TTYD için
+pct exec 9002 -- ufw allow 22/tcp
+pct exec 9002 -- ufw allow 7681/tcp
+
+# Firewall'ı etkinleştir
+pct exec 9001 -- ufw enable
+pct exec 9002 -- ufw enable
 ```
 
 ### SSH Güvenliği
 
 ```bash
-# /etc/ssh/sshd_config
-PermitRootLogin no
-PasswordAuthentication no
+# Root girişini kapat
+pct exec 9002 -- sed -i 's/PermitRootLogin yes/PermitRootLogin no/' /etc/ssh/sshd_config
+pct exec 9002 -- systemctl restart sshd
 
-# Reload
-systemctl restart sshd
+# Sadece anahtar tabanlı kimlik doğrulama
+pct exec 9002 -- sed -i 's/#PasswordAuthentication yes/PasswordAuthentication no/' /etc/ssh/sshd_config
+pct exec 9002 -- systemctl restart sshd
 ```
 
 ## 🐛 Sorun Giderme
 
-### VM Başlamıyor
+### CT Başlamıyor
 
-- BIOS Type: OVMF (UEFI) kontrol edin
-- ISO dosyası doğru seçilmiş mi?
-- CPU Type: ARM64 kontrol edin
+```bash
+# Logları kontrol et
+journalctl -xe
+pct status <CT_ID>
+
+# CT loglarını görüntüle
+pct exec <CT_ID -- journalctl -n 50
+```
 
 ### Network Çalışmıyor
 
-- Bridge: vmbr0 kontrol edin
-- Firewall kapalı mı kontrol edin
-- VLAN ID boş bırakın
+```bash
+# Network konfigürasyonunu kontrol et
+pct exec <CT_ID> -- ip addr
+pct exec <CT_ID> -- ip route
 
-### Provision Çalışmıyor
+# Bridge kontrol et
+cat /etc/network/interfaces
+```
 
-- Console'dan manuel çalıştırın
-- Hata mesajını kontrol edin
-- İnternet bağlantısını kontrol edin: `ping google.com`
+### Template İndirilemiyor
+
+```bash
+# Manuel olarak indirin
+wget https://download.proxmox.com/images/system/debian-12-standard_12.2-1_amd64.tar.zst \
+  -O /var/lib/vz/template/cache/debian-12-standard_12.2-1_amd64.tar.zst
+
+# Scripti --skip-template ile çalıştırın
+./proxmox-deploy.sh --skip-template
+```
+
+### Servis Başlamıyor
+
+```bash
+# Web CT
+pct exec 9001 -- systemctl status ders-takip
+pct exec 9001 -- journalctl -u ders-takip -n 50
+
+# Terminal CT
+pct exec 9002 -- systemctl status ttyd
+pct exec 9002 -- journalctl -u ttyd -n 50
+```
+
+## 📦 Backup ve Restore
+
+### Backup
+
+```bash
+# Proxmox web arayüzünde
+1. CT seçin
+2. Backup -> Backup
+3. Bekleyin
+
+# Vzdump ile
+vzdump 9001 --storage local --mode snapshot
+vzdump 9002 --storage local --mode snapshot
+```
+
+### Restore
+
+```bash
+# Proxmox web arayüzünde
+1. Backup listesinden seçin
+2. Restore -> CT ID belirtin
+3. Onaylayın
+
+# CLI ile
+pctrestore <backup-file> <new-ctid>
+```
+
+### Snapshot
+
+```bash
+# Ders öncesi snapshot
+pct snapshot 9001 "ders-basi"
+pct snapshot 9002 "ders-basi"
+
+# Snapshot listele
+pct snapshot-list 9001
+
+# Snapshot'tan dön
+pct rollback 9001 "ders-basi"
+```
+
+## 🎓 Kullanım Senaryoları
+
+### Ders Öncesi Hazırlık
+
+```bash
+# 1. Snapshot al
+pct snapshot 9001 "ders-basi-$(date +%Y%m%d)"
+pct snapshot 9002 "ders-basi-$(date +%Y%m%d)"
+
+# 2. Servisleri kontrol et
+pct exec 9001 -- systemctl status ders-takip
+pct exec 9002 -- systemctl status ttyd
+
+# 3. IP adreslerini öğren
+pct exec 9001 -- hostname -I
+pct exec 9002 -- hostname -I
+```
+
+### Ders Sonrası Temizlik
+
+```bash
+# 1. Öğrenci oturumlarını kapat
+pct exec 9002 -- pkill -u ogrenci
+
+# 2. Logları temizle
+pct exec 9001 -- journalctl --vacuum-time=1d
+pct exec 9002 -- journalctl --vacuum-time=1d
+
+# 3. İsteğe bağlı: Ders sonrası snapshot
+pct snapshot 9001 "ders-sonu-$(date +%Y%m%d)"
+```
+
+### Öğrenci Erişimi
+
+```bash
+# SSH
+ssh ogrenci@<TERM_IP>
+
+# Web Terminal
+http://<TERM_IP>:7681
+
+# Web Paneli
+http://<WEB_IP>
+```
+
+## 🔗 Faydalı Linkler
+
+- [Proxmox VE Dokümantasyonu](https://pve.proxmox.com/wiki/Main_Page)
+- [LXC Container Dokümantasyonu](https://pve.proxmox.com/wiki/Linux_Container)
+- [TTYD Web Terminal](https://github.com/tsl0922/ttyd)
 
 ## 📞 Destek
 
-Eğer sorun yaşarsanız:
-1. Proxmox loglarını kontrol edin
-2. VM console çıktısını inceleyin
-3. Network ayarlarını doğrulayın
+Sorun yaşarsanız:
+1. Script loglarını kontrol edin
+2. CT loglarını inceleyin: `journalctl -xe`
+3. Proxmox loglarını kontrol edin
+4. Network ayarlarını doğrulayın
 
 ## 🎉 Başarılar!
 
-Artık Linux eğitim ortamınız Proxmox'ta çalışıyor!
+Artık Kapadokya Ders Takip Sistemi Proxmox CT'lerde çalışıyor!
