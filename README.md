@@ -32,6 +32,7 @@ ders_takip/
 ├── app.py              # Ana Flask uygulaması
 ├── requirements.txt    # Bağımlılıklar
 ├── README.md           # Bu dosya
+├── PROXMOX.md          # Proxmox deployment dokümantasyonu
 ├── templates/          # HTML şablonları
 │   ├── ogrenci_giris.html
 │   ├── ogrenci_ana.html
@@ -42,7 +43,8 @@ ders_takip/
 │       ├── ogrenci.js
 │       └── ogretmen.js
 ├── data/               # SQLite DB (otomatik oluşur)
-└── slaytlar/           # Marp HTML sunumlar
+├── slaytlar/           # Marp HTML sunumlar
+└── sanalmakine/        # Proxmox VM/CT yapılandırmaları
 ```
 
 ## Aşamalar
