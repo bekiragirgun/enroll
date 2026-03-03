@@ -24,6 +24,13 @@ async function modDegistir(mod) {
     }
   }
 
+  // Slayt moduna geçiliyorsa hash'i sıfırla
+  if (mod === 'slayt') {
+    veri.slayt_hash = '';
+    sonHash = ''; // Frontend'de de sıfırla
+    console.log('🔄 Slayt modu, hash sıfırlandı');
+  }
+
   await fetch('/api/mod', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -514,16 +521,28 @@ let sonHash = '';
 
 function slaytHashGonder(hash) {
   const takipCheckbox = document.getElementById('ogrenci-takip');
-  if (!takipCheckbox || !takipCheckbox.checked) return;
+  if (!takipCheckbox || !takipCheckbox.checked) {
+    console.log('⏸️ Senkronizasyon kapalı, hash gönderilmiyor');
+    return;
+  }
 
-  if (hash === sonHash) return; // Aynı hash'i tekrar gönderme
+  if (hash === sonHash) {
+    console.log('⏭️ Aynı hash, atlanıyor:', hash);
+    return; // Aynı hash'i tekrar gönderme
+  }
 
+  console.log('📤 Hash gönderiliyor:', hash);
   sonHash = hash;
-  fetch('/api/slayt_hash', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ hash })
-  }).catch(e => console.error('Hash gönderme hatası:', e));
+  // GET request ile query parametresi olarak gönder (Cloudflare Access CORS sorunu için)
+  fetch('/api/durum?hash=' + encodeURIComponent(hash))
+    .then(res => {
+      console.log('✅ Hash gönderildi:', hash);
+      return res.json();
+    })
+    .then(data => {
+      console.log('📊 Sunucu yanıtı:', data);
+    })
+    .catch(e => console.error('❌ Hash gönderme hatası:', e));
 }
 
 function slaytHashKontrol() {
@@ -535,10 +554,13 @@ function slaytHashKontrol() {
 
   try {
     const currentHash = iframe.contentWindow.location.hash;
+    console.log('🔍 Hash kontrolü:', { currentHash, sonHash, iframeSrc: iframe.src });
+
     if (currentHash && currentHash !== sonHash) {
       slaytHashGonder(currentHash);
     }
   } catch(e) {
+    console.error('⚠️ Cross-origin hash okuma hatası:', e);
     // Cross-origin hatası yok say
   }
 }

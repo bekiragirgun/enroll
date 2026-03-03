@@ -324,6 +324,11 @@ def giris():
 @app.route('/api/durum')
 def api_durum():
     # Öğrenci için durum
+    # Eğer öğretmenden hash query parametresi geldiyse, kaydet (Cloudflare Access CORS sorunu için)
+    hash_param = request.args.get('hash', '')
+    if hash_param:
+        ders_durumu['slayt_hash'] = hash_param
+
     response = {
         'mod': ders_durumu['mod'],
         'dosya': ders_durumu['dosya'],
@@ -389,9 +394,13 @@ def ogretmen_panel():
 @ogretmen_giris_gerekli
 def api_mod_degistir():
     veri = request.get_json()
-    if veri.get('mod') in ('bekleme', 'slayt'):
+    if veri.get('mod') in ('bekleme', 'slayt', 'terminal'):
         ders_durumu['mod']   = veri['mod']
         ders_durumu['dosya'] = veri.get('dosya', '')
+
+        # Hash'i sıfırla (slayt moduna geçildiğinde)
+        if 'slayt_hash' in veri and not veri['slayt_hash']:
+            ders_durumu['slayt_hash'] = ''
 
     return jsonify({'durum': 'ok', 'mod': ders_durumu['mod']})
 

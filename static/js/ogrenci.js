@@ -92,12 +92,15 @@ async function durumKontrol() {
     const veri = await yanit.json();
     const eskiMod = mevcutModu();
     const eskiDosya = document.getElementById('slayt-iframe')?.dataset.dosya || '';
+    const eskiHash = document.getElementById('slayt-iframe')?.dataset.hash || '';
 
-    if (veri.mod !== eskiMod || veri.dosya !== eskiDosya) {
+    // Mod, dosya veya hash değiştiyse güncelle
+    if (veri.mod !== eskiMod || veri.dosya !== eskiDosya || (veri.mod === 'slayt' && veri.slayt_hash !== eskiHash)) {
+      console.log('Durum değişti:', { eski: { mod: eskiMod, dosya: eskiDosya, hash: eskiHash }, yeni: veri });
       modalGoster(veri.mod, veri);
     }
   } catch (e) {
-    // Bağlantı hatası — sessizce geç
+    console.error('Durum kontrol hatası:', e);
   }
 }
 
