@@ -41,13 +41,51 @@ def container_baslat():
     # Eski container varsa temizle
     _docker("rm", "-f", CONTAINER_NAME)
 
-    # Yeni container başlat
+    # Yeni container başlat - DNS filtering + hosts dosyası engelleme ile
+    # CleanBrowsing Family Shield DNS bloke: sosyal medya, haber siteleri, vs.
     rc, cid = _docker(
         "run", "-d",
         "--name", CONTAINER_NAME,
         "--memory", "2g",
         "--cpus", "2",
         "--hostname", "linux-egitim",
+        "--dns", "185.228.168.168",  # CleanBrowsing Family Shield (Primary)
+        "--dns", "185.228.169.168",  # CleanBrowsing Family Shield (Secondary)
+        # Sosyal medya sitelerini engelle
+        "--add-host", "www.facebook.com:127.0.0.1",
+        "--add-host", "facebook.com:127.0.0.1",
+        "--add-host", "www.twitter.com:127.0.0.1",
+        "--add-host", "twitter.com:127.0.0.1",
+        "--add-host", "x.com:127.0.0.1",
+        "--add-host", "www.instagram.com:127.0.0.1",
+        "--add-host", "instagram.com:127.0.0.1",
+        "--add-host", "www.tiktok.com:127.0.0.1",
+        "--add-host", "tiktok.com:127.0.0.1",
+        "--add-host", "www.youtube.com:127.0.0.1",
+        "--add-host", "youtube.com:127.0.0.1",
+        "--add-host", "m.youtube.com:127.0.0.1",
+        "--add-host", "www.linkedin.com:127.0.0.1",
+        "--add-host", "linkedin.com:127.0.0.1",
+        "--add-host", "www.reddit.com:127.0.0.1",
+        "--add-host", "reddit.com:127.0.0.1",
+        # Haber sitelerini engelle
+        "--add-host", "www.cnn.com:127.0.0.1",
+        "--add-host", "cnn.com:127.0.0.1",
+        "--add-host", "www.bbc.com:127.0.0.1",
+        "--add-host", "bbc.com:127.0.0.1",
+        "--add-host", "www.nytimes.com:127.0.0.1",
+        "--add-host", "nytimes.com:127.0.0.1",
+        "--add-host", "www.theguardian.com:127.0.0.1",
+        "--add-host", "theguardian.com:127.0.0.1",
+        # Türkçe haber sitelerini engelle
+        "--add-host", "www.hurriyet.com.tr:127.0.0.1",
+        "--add-host", "hurriyet.com.tr:127.0.0.1",
+        "--add-host", "www.milliyet.com.tr:127.0.0.1",
+        "--add-host", "milliyet.com.tr:127.0.0.1",
+        "--add-host", "www.sozcu.com.tr:127.0.0.1",
+        "--add-host", "sozcu.com.tr:127.0.0.1",
+        "--add-host", "www.ensonhaber.com:127.0.0.1",
+        "--add-host", "ensonhaber.com:127.0.0.1",
         "-p", f"{SSH_PORT}:22",
         IMAGE_NAME,
         "/bin/bash"
@@ -55,6 +93,8 @@ def container_baslat():
 
     if rc == 0:
         log.info("Container başlatıldı: %s", CONTAINER_NAME)
+        log.info("DNS filtering ve hosts dosyası engelleme aktif")
+        log.info("Sosyal medya, haber siteleri ve içerik engellendi")
         return True
     else:
         log.error("Container başlatılamadı!")

@@ -50,4 +50,5 @@ RUN echo 'export PS1="\[\033[01;31m\]ÖĞRETMEN@\h\[\033[00m\]:\[\033[01;34m\]\w
 
 WORKDIR /home/ogrenci
 
-CMD ["/bin/bash"]
+# Container'ı çalışır tut (tail -f /dev/null)
+CMD ["/bin/bash", "-c", "tail -f /dev/null"]

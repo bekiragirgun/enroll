@@ -89,6 +89,10 @@
       🚨 Şüpheli Girişler
       <span id="sahte-rozet" style="display:none;background:#c53030;color:#fff;border-radius:10px;padding:0 6px;font-size:0.72rem;margin-left:4px;">0</span>
     </button>
+    <button class="tab-btn" onclick="tabGec('guvenlik', this); guvenlikLogCek();">
+      🔐 Güvenlik Log
+      <span id="guvenlik-rozet" style="display:none;background:#c53030;color:#fff;border-radius:10px;padding:0 6px;font-size:0.72rem;margin-left:4px;">0</span>
+    </button>
     <button class="tab-btn" onclick="tabGec('arsiv', this)">📁 Arşiv</button>
   </div>
 
@@ -143,6 +147,17 @@
         <strong>Örnek:</strong> 2026-03-01 → 01 Mart 2026 yoklaması<br>
         <strong>Format:</strong> yoklama_202603011235.csv (YılAyGünSaatDakika)
       </div>
+    </div>
+  </div>
+
+  <!-- Güvenlik Log -->
+  <div id="tab-guvenlik" class="panel-bolum" style="margin-top:1rem;">
+    <div class="kutu-baslik">
+      <h3>🔐 Terminal Güvenlik Logu</h3>
+      <span style="color:#4a5568;font-size:0.8rem;">Terminal erişim denemeleri</span>
+    </div>
+    <div id="guvenlik-log-kutu" style="margin-top:0.75rem;">
+      <div style="color:#718096;text-align:center;padding:1rem;">Yükleniyor...</div>
     </div>
   </div>
 

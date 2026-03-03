@@ -372,9 +372,114 @@ async function sahteCek() {
   } catch(e) { console.error('sahte log hatası:', e); }
 }
 
+// ── Güvenlik Uyarıları ───────────────────────────────────────────
+let guvenlikSoketi = null;
+
+function guvenlikSoketBaslat() {
+  try {
+    // Terminal namespace'ine bağlan
+    guvenlikSoketi = io('/terminal', {
+      transports: ['websocket', 'polling']
+    });
+
+    guvenlikSoketi.on('connect', () => {
+      console.log('Güvenlik soketi bağlandı');
+      // Öğretmen olarak kayıt ol
+      guvenlikSoketi.emit('ogretmen_baglan', { ogretmen: true });
+    });
+
+    guvenlikSoketi.on('guvenlik_uyari', (mesaj) => {
+      // Sesli uyarı
+      try {
+        const audio = new Audio('/static/sounds/alert.mp3');
+        audio.play().catch(e => console.log('Ses çalınamadı:', e));
+      } catch(e) {}
+
+      // Ekran uyarısı
+      alert('⚠️ GÜVENLİK UYARISI ⚠️\n\n' + mesaj);
+
+      // Logları yenile
+      guvenlikLogCek();
+    });
+
+    guvenlikSoketi.on('disconnect', () => {
+      console.log('Güvenlik soketi kesildi');
+    });
+
+  } catch(e) {
+    console.error('Güvenlik soketi hatası:', e);
+  }
+}
+
+async function guvenlikLogCek() {
+  try {
+    const yanit = await fetch('/api/terminal/guvenlik_log');
+    const veri = await yanit.json();
+
+    const logDiv = document.getElementById('guvenlik-log-kutu');
+    if (!logDiv) return;
+
+    if (veri.loglar.length === 0) {
+      logDiv.innerHTML = '<div style="color:#718096;text-align:center;padding:1rem;">Güvenlik logu yok</div>';
+      return;
+    }
+
+    let html = '';
+    for (const log of veri.loglar) {
+      const renk = log.durum === 'BASARILI' ? '#48bb78' : '#e53e3e';
+      const ikon = log.durum === 'BASARILI' ? '✅' : '⚠️';
+
+      html += `
+        <div style="
+          background: ${log.durum === 'BASARILI' ? 'rgba(72,187,120,0.1)' : 'rgba(229,62,62,0.1)'};
+          border: 1px solid ${renk};
+          border-left: 4px solid ${renk};
+          border-radius: 6px;
+          padding: 0.75rem 1rem;
+          margin-bottom: 0.5rem;
+          font-size: 0.82rem;
+        ">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.3rem;">
+            <span style="color:${renk};font-weight:600;">${ikon} ${log.durum}</span>
+            <span style="color:#718096;">${log.tarih} ${log.saat.substring(0,5)}</span>
+          </div>
+          <div style="color:#e2e8f0;">
+            <span style="color:#90cdf4;">${log.session_ad}</span>
+            (${log.session_numara})
+          </div>
+          ${log.durum === 'GUVENLIK_IHLALI' ? `
+            <div style="color:#fc8181;">
+              Girmeye çalışan: <strong>${log.girilen_numara}</strong>
+            </div>
+          ` : ''}
+          <div style="color:#718096;font-size:0.75rem;">IP: ${log.ip}</div>
+        </div>
+      `;
+    }
+
+    logDiv.innerHTML = html;
+  } catch(e) {
+    console.error('Güvenlik log hatası:', e);
+  }
+}
+
+// ── Mod değiştirme yardımcı fonksiyonları ───────────────────────────
+function terminalModu() {
+  modDegistir('terminal');
+}
+
+function bekletModu() {
+  modDegistir('bekleme');
+}
+
+function slaytModu() {
+  modDegistir('slayt');
+}
+
 document.addEventListener('DOMContentLoaded', () => {
   yoklamaCek();
   sahteCek();
+  guvenlikSoketBaslat();  // Güvenlik uyarılarını dinle
   setInterval(yoklamaCek, YOKLAMA_ARALIK);
   setInterval(sahteCek, 30_000);   // 30 saniyede bir kontrol
 });

@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Terminal Doğrulama — {{ session_numara }}</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/xterm@5.3.0/css/xterm.min.css">
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body {
+    background: linear-gradient(135deg, #1a202c 0%, #2d3748 100%);
+    color: #e2e8f0;
+    font-family: system-ui, sans-serif;
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .container {
+    background: rgba(26, 31, 46, 0.95);
+    border: 1px solid #4a5568;
+    border-radius: 20px;
+    padding: 3rem;
+    width: 100%;
+    max-width: 500px;
+    box-shadow: 0 25px 80px rgba(0,0,0,0.5);
+  }
+
+  .logo { text-align: center; margin-bottom: 2rem; }
+  .logo h1 {
+    font-size: 1.5rem;
+    color: #90cdf4;
+    margin-bottom: 0.5rem;
+  }
+  .logo p { color: #718096; font-size: 0.9rem; }
+
+  .security-info {
+    background: rgba(66, 153, 225, 0.1);
+    border: 1px solid #4299e1;
+    border-radius: 10px;
+    padding: 1rem;
+    margin-bottom: 1.5rem;
+    font-size: 0.9rem;
+  }
+
+  .security-info .session-user {
+    color: #90cdf4;
+    font-weight: 700;
+    font-size: 1rem;
+  }
+
+  .form-group { margin-bottom: 1.5rem; }
+  .form-group label {
+    display: block;
+    color: #cbd5e0;
+    font-size: 0.9rem;
+    font-weight: 600;
+    margin-bottom: 0.5rem;
+  }
+
+  .form-group input {
+    width: 100%;
+    padding: 0.85rem 1rem;
+    background: #0f1117;
+    border: 1px solid #4a5568;
+    border-radius: 10px;
+    color: #e2e8f0;
+    font-size: 1rem;
+    box-sizing: border-box;
+    transition: border-color 0.2s;
+  }
+
+  .form-group input:focus {
+    outline: none;
+    border-color: #4299e1;
+    box-shadow: 0 0 0 3px rgba(66,153,225,0.2);
+  }
+
+  .btn-submit {
+    width: 100%;
+    padding: 1rem;
+    background: linear-gradient(135deg, #4299e1 0%, #3182ce 100%);
+    color: white;
+    border: none;
+    border-radius: 10px;
+    font-size: 1rem;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+
+  .btn-submit:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 10px 30px rgba(66,153,225,0.3);
+  }
+
+  .warning {
+    background: rgba(229, 62, 62, 0.1);
+    border: 1px solid #e53e3e;
+    border-radius: 10px;
+    padding: 1rem;
+    margin-bottom: 1.5rem;
+    color: #fc8181;
+    font-size: 0.9rem;
+    text-align: center;
+    display: none;
+  }
+
+  .warning.show { display: block; }
+
+  .warning-icon { font-size: 2rem; margin-bottom: 0.5rem; }
+
+  .info-box {
+    background: rgba(236, 201, 75, 0.1);
+    border: 1px solid #ecc94b;
+    border-radius: 10px;
+    padding: 1rem;
+    margin-top: 2rem;
+    font-size: 0.85rem;
+    color: #fbd38d;
+  }
+</style>
+</head>
+<body>
+
+<div class="container">
+  <div class="logo">
+    <h1>🔐 Terminal Doğrulama</h1>
+    <p>Kapadokya Üniversitesi — BGY106</p>
+  </div>
+
+  {% if hata %}
+  <div class="warning show">
+    <div class="warning-icon">⚠️</div>
+    <strong>{{ hata }}</strong>
+  </div>
+  {% endif %}
+
+  <div class="security-info">
+    <div>📱 Oturum açmış kullanıcı:</div>
+    <div class="session-user">{{ session_ad_soyad }} ({{ session_numara }})</div>
+    <div style="margin-top: 0.5rem; font-size: 0.85rem; color: #a0aec0;">
+      Lütfen terminale erişmek için numaranızı doğrulayın
+    </div>
+  </div>
+
+  <form method="POST" action="/terminal/login" id="loginForm">
+    <div class="form-group">
+      <label for="numara-dogrulama">
+        🔑 Öğrenci Numaranızı Girin
+      </label>
+      <input
+        type="text"
+        id="numara-dogrulama"
+        name="numara_dogrulama"
+        required
+        placeholder="{{ session_numara }}"
+        pattern="[0-9]+"
+        autocomplete="off"
+        autofocus
+      >
+    </div>
+
+    <button type="submit" class="btn-submit">
+      🚀 Terminale Bağlan
+    </button>
+  </form>
+
+  <div class="info-box">
+    <strong>ℹ️ Güvenlik Notu:</strong>
+    Sadece {{ session_numara }} numaralı öğrenci bu terminale erişebilir.
+    Farklı bir numara girerseniz sistem alarm üretecektir.
+  </div>
+
+  <div style="text-align: center; margin-top: 1.5rem;">
+    <a href="/" style="color: #718096; text-decoration: none; font-size: 0.9rem;">
+      ← Ana Sayfaya Dön
+    </a>
+  </div>
+</div>
+
+<script>
+// Otomatik olarak session numarasını doldur
+document.getElementById('numara-dogrulama').value = '{{ session_numara }}';
+
+// Uyarı mesajı
+const form = document.getElementById('loginForm');
+const input = document.getElementById('numara-dogrulama');
+
+form.addEventListener('submit', function(e) {
+  const girilen = input.value;
+  const sessionNumara = '{{ session_numara }}';
+
+  if (girilen !== sessionNumara) {
+    if (!confirm('⚠️ DİKKAT!\n\n' +
+                'Oturum numaranız: ' + sessionNumara + '\n' +
+                'Girdiğiniz numara: ' + girilen + '\n\n' +
+                'Farklı bir numara girdiğiniz için:\n' +
+                '• Bu erişim girişimi LOGlanacak\n' +
+                '• Öğretmen bilgilendirilecek\n' +
+                '• Size uyarı e-postası gönderilecek\n\n' +
+                'Devam etmek istiyor musunuz?')) {
+      e.preventDefault();
+      return;
+    }
+  }
+});
+
+// Enter tuşu ile otomatik submit
+input.addEventListener('keypress', function(e) {
+  if (e.key === 'Enter') {
+    form.submit();
+  }
+});
+</script>
+
+</body>
+</html>

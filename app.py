@@ -29,8 +29,8 @@ from flask import (Flask, render_template, request, jsonify,
                    redirect, url_for, send_file, session, abort, Response)
 from flask_socketio import SocketIO, emit, join_room, leave_room, Namespace
 
-from docker_terminal import (konteyner_baslat, konteyner_ip_al,
-                              konteyner_durdur, image_var_mi)
+from docker_terminal import (container_baslat, container_ip_al,
+                              container_durum, image_var_mi)
 
 # ── Yapılandırma ──────────────────────────────────────────────
 BASE_DIR      = Path(__file__).parent
@@ -129,6 +129,21 @@ def db_olustur():
                 denenen_numara TEXT NOT NULL,
                 denenen_ad     TEXT NOT NULL,
                 sinif          TEXT NOT NULL DEFAULT ''
+            )
+        """)
+
+        # Terminal güvenlik logu (yanlış öğrenci terminal erişimi)
+        db.execute("""
+            CREATE TABLE IF NOT EXISTS terminal_guvenlik_log (
+                id             INTEGER PRIMARY KEY AUTOINCREMENT,
+                tarih          TEXT NOT NULL,
+                saat           TEXT NOT NULL,
+                ip             TEXT NOT NULL,
+                session_numara TEXT NOT NULL,
+                session_ad     TEXT NOT NULL,
+                girilen_numara TEXT NOT NULL,
+                durum          TEXT NOT NULL,
+                uyari_gonderildi INTEGER DEFAULT 0
             )
         """)
         db.commit()
@@ -711,46 +726,158 @@ def api_yoklama_sil_tek():
 
     return jsonify({'durum': 'ok', 'silinen': 1})
 
+@app.route('/api/terminal/guvenlik_log')
+@ogretmen_giris_gerekli
+def api_terminal_guvenlik_log():
+    """Terminal güvenlik loglarını getir."""
+    with db_baglantisi() as db:
+        loglar = db.execute("""
+            SELECT * FROM terminal_guvenlik_log
+            ORDER BY id DESC
+            LIMIT 50
+        """).fetchall()
+
+    return jsonify({
+        'loglar': [
+            {
+                'id': l['id'],
+                'tarih': l['tarih'],
+                'saat': l['saat'],
+                'ip': l['ip'],
+                'session_numara': l['session_numara'],
+                'session_ad': l['session_ad'],
+                'girilen_numara': l['girilen_numara'],
+                'durum': l['durum']
+            }
+            for l in loglar
+        ]
+    })
+
 # ── Terminal Rotaları ─────────────────────────────────────────
 @app.route('/terminal')
 def terminal_sayfasi():
-    """Terminal login sayfası."""
-    return render_template('terminal_login.html')
+    """Terminal doğrulama sayfası."""
+    # Ana oturumda numara var mı?
+    if not session.get('numara'):
+        return render_template('terminal_login.html', hata='Önce ana sayfadan giriş yapmalısınız.')
+
+    # Session bilgilerini al
+    session_numara = session['numara']
+    session_ad = session.get('ad', '')
+    session_soyad = session.get('soyad', '')
+    session_ad_soyad = f"{session_ad} {session_soyad}".strip()
+
+    return render_template('terminal_guvenlik.html',
+                           session_numara=session_numara,
+                           session_ad=session_ad,
+                           session_soyad=session_soyad,
+                           session_ad_soyad=session_ad_soyad)
 
 
 @app.route('/terminal/login', methods=['POST'])
 def terminal_login():
-    """Terminal login ve container başlatma."""
-    ad = request.form.get('ad', '').strip()
-    soyad = request.form.get('soyad', '').strip()
-    numara = request.form.get('numara', '').strip()
+    """Terminal login ve güvenlik kontrolü."""
+    # Session bilgileri
+    session_numara = session.get('numara', '')
+    session_ad = session.get('ad', '')
+    session_soyad = session.get('soyad', '')
+
+    # Formdan gelen doğrulama
+    girilen_numara = request.form.get('numara_dogrulama', '').strip()
 
     # Validasyon
-    if not ad or not soyad or not numara:
-        return render_template('terminal_login.html', hata='Tüm alanları doldurun.')
+    if not girilen_numara:
+        return render_template('terminal_guvenlik.html',
+                               session_numara=session_numara,
+                               session_ad=session_ad,
+                               session_soyad=session_soyad,
+                               session_ad_soyad=f"{session_ad} {session_soyad}".strip(),
+                               hata='Lütfen numaranızı girin.')
 
-    # Numara sadece rakam
-    if not numara.isdigit():
-        return render_template('terminal_login.html', hata='Numara sadece rakamlardan oluşmalı.')
+    if not girilen_numara.isdigit():
+        return render_template('terminal_guvenlik.html',
+                               session_numara=session_numara,
+                               session_ad=session_ad,
+                               session_soyad=session_soyad,
+                               session_ad_soyad=f"{session_ad} {session_soyad}".strip(),
+                               hata='Numara sadece rakamlardan oluşmalı.')
 
-    # Container başlat
-    cid = konteyner_baslat(numara)
-    if not cid:
-        return render_template('terminal_login.html', hata='Container başlatılamadı. Docker çalışıyor mu?')
+    # GÜVENLİK KONTROLÜ
+    ip = istemci_ip()
+    session_ad_soyad = f"{session_ad} {session_soyad}".strip()
 
-    # IP adresini al
-    ip = konteyner_ip_al(numara)
-    if not ip:
-        return render_template('terminal_login.html', hata='Container IP adresi alınamadı.')
+    if girilen_numara == session_numara:
+        # ✅ BAŞARILI: Aynı öğrenci
+        durum = 'BASARILI'
 
-    # Session bilgilerini sakla
-    session['terminal_ad'] = ad
-    session['terminal_soyad'] = soyad
-    session['terminal_numara'] = numara
-    session['terminal_ip'] = ip
-    session['terminal_cid'] = cid
+        # Logla (başarılı)
+        with db_baglantisi() as db:
+            db.execute("""
+                INSERT INTO terminal_guvenlik_log
+                (tarih, saat, ip, session_numara, session_ad, girilen_numara, durum)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+            """, (bugun(), simdi(), ip, session_numara, session_ad_soyad, girilen_numara, durum))
+            db.commit()
 
-    return redirect('/terminal/workspace')
+        # Chroot ortamını kontrol et/yarat
+        from chroot_terminal import chroot_var_mi, chroot_olustur, chroot_ip_al
+
+        if not chroot_var_mi(girilen_numara):
+            # Chroot ortamı yok, oluştur
+            log.info(f"Chroot ortamı oluşturuluyor: {girilen_numara}")
+            chroot_olustur(girilen_numara, session_ad, session_soyad)
+
+        # SSH IP adresini al
+        ssh_ip = chroot_ip_al(girilen_numara)
+
+        # Session bilgilerini sakla
+        session['terminal_numara'] = girilen_numara
+        session['terminal_ad'] = session_ad
+        session['terminal_soyad'] = session_soyad
+        session['terminal_ip'] = ssh_ip
+
+        return redirect('/terminal/workspace')
+
+    else:
+        # ❌ GÜVENLİK İHLALİ: Farklı öğrenci!
+        durum = 'GUVENLIK_IHLALI'
+
+        # Logla (başarısız + alarm)
+        with db_baglantisi() as db:
+            log_id = db.execute("""
+                INSERT INTO terminal_guvenlik_log
+                (tarih, saat, ip, session_numara, session_ad, girilen_numara, durum)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+            """, (bugun(), simdi(), ip, session_numara, session_ad_soyad, girilen_numara, durum))
+            db.commit()
+
+        # Öğretmene bildirim gönder (WebSocket)
+        try:
+            mesaj = (
+                f"⚠️ GÜVENLİK UYARISI ⚠️\n\n"
+                f"Terminal Erişim İhlali!\n\n"
+                f"Oturum açan: {session_ad_soyad} ({session_numara})\n"
+                f"Girmeye çalışan: {girilen_numara}\n"
+                f"IP: {ip}\n"
+                f"Tarih: {bugun()} {simdi()}"
+            )
+            socketio.emit('guvenlik_uyari', mesaj, namespace='/terminal')
+        except Exception as e:
+            log.error(f"Öğretmen bildirimi hatası: {e}")
+
+        # Öğrenciye uyarı göster
+        return render_template('terminal_guvenlik.html',
+                               session_numara=session_numara,
+                               session_ad=session_ad,
+                               session_soyad=session_soyad,
+                               session_ad_soyad=session_ad_soyad,
+                               hata=(
+                                   f"⚠️ GÜVENLİK UYARISI!\n\n"
+                                   f"Bu terminal {session_numara} numaralı öğrenci içindir.\n"
+                                   f"Siz {girilen_numara} numarasını girdiniz.\n\n"
+                                   f"Bu erişim girişimi LOGlanmıştır ve öğretmene "
+                                   f"bildirilmiştir."
+                               ))
 
 
 @app.route('/terminal/workspace')
@@ -781,7 +908,7 @@ def api_terminal_durum():
     """Terminal sistemi durum bilgisi."""
     return jsonify({
         'image_hazir': image_var_mi(),
-        'aktif_konteynerler': konteyner_listesi(),
+        'konteyner_calisiyor': container_durum(),
         'bagli_ogrenciler': len(ogrenci_sidleri)
     })
 
@@ -853,9 +980,7 @@ def terminal_kopma():
                 proc.terminate()
             except Exception:
                 pass
-        # Container'ı durdur
-        if numara:
-            threading.Thread(target=konteyner_durdur, args=(numara,), daemon=True).start()
+        # Single container approach - individual container durdurma gerekmez
 
         # Öğrenci sayısını güncelle
         if ogretmen_sid:
@@ -952,12 +1077,12 @@ def ogrenci_baglan_event(veri):
 
         ogrenci_surecleri[sid] = (proc, master_fd)
 
-            socketio.emit('container_hazir', room=sid, namespace='/terminal')
+        socketio.emit('container_hazir', room=sid, namespace='/terminal')
 
-            # Çıktıyı oku ve öğrenciye gönder
-            _pty_oku_ve_yayinla(master_fd, 'terminal_cikti', hedef_room=sid)
+        # Çıktıyı oku ve öğrenciye gönder
+        _pty_oku_ve_yayinla(master_fd, 'terminal_cikti', hedef_room=sid)
 
-        except Exception as e:
+    except Exception as e:
             socketio.emit('hata', f'Terminal bağlantı hatası: {str(e)}',
                           room=sid, namespace='/terminal')
 
@@ -1002,9 +1127,7 @@ if __name__ == '__main__':
     print('=' * 55)
     print()
 
-    # Kapatma sırasında container'ları temizle
-    import atexit
-    atexit.register(konteyner_temizle)
+    # Single container approach - temizleme gerekmez
 
     # SocketIO ile başlat (WebSocket desteği)
     socketio.run(app, host='0.0.0.0', port=3333, debug=False, allow_unsafe_werkzeug=True)
