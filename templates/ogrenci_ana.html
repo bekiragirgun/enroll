@@ -44,6 +44,12 @@
     <iframe id="terminal-iframe" src="" allowfullscreen></iframe>
   </div>
 
+  <script>
+    // API URL config - Production için API proxy
+    window.API_BASE = window.location.hostname === 'enroll.bekiragi.org'
+      ? 'https://api.enroll.bekiragi.org:8080'
+      : '';
+  </script>
   <script src="/static/js/ogrenci.js"></script>
 </body>
 </html>

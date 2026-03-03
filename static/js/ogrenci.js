@@ -88,8 +88,11 @@ function modalGoster(mod, ekstra) {
 
 async function durumKontrol() {
   try {
+    // API URL'i config'den al (production için API proxy)
+    const apiUrl = (window.API_BASE || '') + '/api/durum';
+
     // Cloudflare Access CORS sorunu için same-origin flag
-    const yanit = await fetch('/api/durum', {
+    const yanit = await fetch(apiUrl, {
       credentials: 'same-origin',
       headers: {
         'Cache-Control': 'no-cache'
@@ -113,8 +116,8 @@ async function durumKontrol() {
     }
   } catch (e) {
     console.error('Durum kontrol hatası:', e);
-    console.error('⚠️ Cloudflare Access API endpoint\'ini blokluyor!');
-    console.error('🔧 Çözüm: Cloudflare Access > Applications > Add Policy > Path: /api/durum > Bypass');
+    console.error('⚠️ API erişim hatası!');
+    console.error('🔧 Gelistirme konsolunda test et: fetch("', (window.API_BASE || '') + '/api/durum").then(r=>r.json()).then(console.log)');
   }
 }
 

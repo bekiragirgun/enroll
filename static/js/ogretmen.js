@@ -557,8 +557,12 @@ function slaytHashGonder(hash) {
 
   console.log('📤 Hash gönderiliyor:', hash);
   sonHash = hash;
+
+  // API URL'i config'den al (production için API proxy)
+  const apiUrl = (window.API_BASE || '') + '/api/durum?hash=' + encodeURIComponent(hash);
+
   // GET request ile query parametresi olarak gönder (Cloudflare Access CORS sorunu için)
-  fetch('/api/durum?hash=' + encodeURIComponent(hash))
+  fetch(apiUrl)
     .then(res => {
       console.log('✅ Hash gönderildi:', hash);
       return res.json();
