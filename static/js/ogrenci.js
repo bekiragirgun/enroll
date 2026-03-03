@@ -3,7 +3,8 @@
 const POLLING_ARALIK = 3000;
 
 function mevcutModu() {
-  return document.body.dataset.mod || 'bekleme';
+  // LocalStorage'dan oku, yoksa 'bekleme'
+  return localStorage.getItem('mod') || 'bekleme';
 }
 
 function modalGoster(mod, ekstra) {
@@ -75,6 +76,8 @@ function modalGoster(mod, ekstra) {
     }
   }
 
+  // Mod bilgisini localStorage'a kaydet
+  localStorage.setItem('mod', mod);
   document.body.dataset.mod = mod;
 }
 
