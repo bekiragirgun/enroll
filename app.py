@@ -195,6 +195,9 @@ def ogretmen_giris_gerekli(f):
     @wraps(f)
     def decorated(*args, **kwargs):
         if not session.get('ogretmen'):
+            # JSON API için 401 dön, sayfa için redirect
+            if request.path.startswith('/api/'):
+                return jsonify({'hata': 'Öğretmen girişi gerekli'}), 401
             return redirect(url_for('ogretmen_giris'))
         return f(*args, **kwargs)
     return decorated
