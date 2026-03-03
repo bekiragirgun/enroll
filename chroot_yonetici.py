@@ -191,26 +191,32 @@ echo ""
 
 
 def create_ssh_entry(username):
-    """SSH yapılandırması için PAM entry."""
-    # /etc/passwd'ta giriş shell'i değiştir
-    _run([
-        "usermod", "-s",
-        f"/usr/sbin/chrootlogin",
-        username
-    ])
+    """SSH ve sudoers yapılandırması."""
+    # Sudoers'a chroot yetkisi ekle
+    sudoers_line = f"{username} ALL=(ALL) NOPASSWD: /usr/sbin/chroot\n"
+    sudoers_file = Path("/etc/sudoers.d/chroot-ogrenciler")
 
-    # PAM yapılandırması
-    pam_file = "/etc/pam.d/chroot"
-    if not Path(pam_file).exists():
-        with open(pam_file, 'w') as f:
-            f.write("""# Chroot PAM configuration
-auth required pam_unix.so
-account required pam_unix.so
-session required pam_mkhomedir.so skel=/etc/skel/ umask=0022
-session required pam_chroot.so
-""")
+    # Sudoers dosyasına ekle (tekrarı önle)
+    existing_sudoers = sudoers_file.read_text() if sudoers_file.exists() else ""
+    if sudoers_line not in existing_sudoers:
+        with open(sudoers_file, 'a') as f:
+            f.write(sudoers_line)
+        _run(["chmod", "0440", str(sudoers_file)])
 
-    log.info(f"✅ {username} SSH/PAM yapılandırması tamam")
+    # SSH config'e ForceCommand ekle
+    ssh_config = Path("/etc/ssh/sshd_config")
+    force_command = f"Match User {username}\n    ForceCommand sudo /usr/sbin/chroot {CHROOT_BASE}/{username} /bin/su - {username}\n"
+
+    # SSH config'e ekle (tekrarı önle)
+    ssh_config_text = ssh_config.read_text()
+    if force_command not in ssh_config_text:
+        with open(ssh_config, 'a') as f:
+            f.write(force_command)
+
+    # SSH'yi restart et
+    _run(["systemctl", "restart", "sshd"])
+
+    log.info(f"✅ {username} SSH/Sudoers yapılandırması tamam")
 
 
 def list_student_chroots():
