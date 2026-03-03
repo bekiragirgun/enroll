@@ -22,10 +22,15 @@ function modalGoster(mod, ekstra) {
       slayt.style.display = 'block';
       const iframe = document.getElementById('slayt-iframe');
       if (iframe && ekstra?.dosya) {
-        // dataset ile karşılaştır (iframe.src tam URL döner, karışıklık olur)
-        if (iframe.dataset.dosya !== ekstra.dosya) {
-          iframe.src = '/slayt/' + ekstra.dosya;
+        // Hash ile birlikte URL oluştur
+        const hash = ekstra?.slayt_hash || '';
+        const yeniSrc = '/slayt/' + ekstra.dosya + hash;
+
+        // Dataset ile karşılaştır (iframe.src tam URL döner, karışıklık olur)
+        if (iframe.dataset.dosya !== ekstra.dosya || iframe.dataset.hash !== hash) {
+          iframe.src = yeniSrc;
           iframe.dataset.dosya = ekstra.dosya;
+          iframe.dataset.hash = hash;
         }
       }
     }

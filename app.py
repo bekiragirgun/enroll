@@ -326,9 +326,22 @@ def api_durum():
     # Öğrenci için durum
     response = {
         'mod': ders_durumu['mod'],
-        'dosya': ders_durumu['dosya']
+        'dosya': ders_durumu['dosya'],
+        'slayt_hash': ders_durumu.get('slayt_hash', '')
     }
     return jsonify(response)
+
+@app.route('/api/slayt_hash', methods=['POST'])
+@ogretmen_giris_gerekli
+def api_slayt_hash():
+    """Öğretmen slayt içinde gezindiğinde hash'i kaydet"""
+    veri = request.get_json() or {}
+    hash = veri.get('hash', '')
+
+    if hash:
+        ders_durumu['slayt_hash'] = hash
+
+    return jsonify({'durum': 'ok'})
 
 @app.route('/slayt/<path:dosya_adi>')
 def slayt_goster(dosya_adi):

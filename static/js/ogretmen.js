@@ -89,6 +89,16 @@ function slaytOnizlemeAc() {
   if (modal && iframe) {
     iframe.src = '/slayt/' + dosya;
     modal.style.display = 'flex';
+
+    // İlk yükleme için hash'i gönder
+    iframe.onload = function() {
+      try {
+        const hash = iframe.contentWindow.location.hash;
+        if (hash) slaytHashGonder(hash);
+      } catch(e) {
+        // Cross-origin hatası yok say
+      }
+    };
   }
 }
 
@@ -498,6 +508,43 @@ async function guvenlikLogCek() {
     console.error('Güvenlik log hatası:', e);
   }
 }
+
+// ── Slayt Hash Takibi ─────────────────────────────────────────────
+let sonHash = '';
+
+function slaytHashGonder(hash) {
+  const takipCheckbox = document.getElementById('ogrenci-takip');
+  if (!takipCheckbox || !takipCheckbox.checked) return;
+
+  if (hash === sonHash) return; // Aynı hash'i tekrar gönderme
+
+  sonHash = hash;
+  fetch('/api/slayt_hash', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ hash })
+  }).catch(e => console.error('Hash gönderme hatası:', e));
+}
+
+function slaytHashKontrol() {
+  const iframe = document.getElementById('slayt-onizleme-iframe');
+  const modal = document.getElementById('slayt-onizleme-modal');
+  const takipCheckbox = document.getElementById('ogrenci-takip');
+
+  if (!iframe || !modal || modal.style.display !== 'flex' || !takipCheckbox.checked) return;
+
+  try {
+    const currentHash = iframe.contentWindow.location.hash;
+    if (currentHash && currentHash !== sonHash) {
+      slaytHashGonder(currentHash);
+    }
+  } catch(e) {
+    // Cross-origin hatası yok say
+  }
+}
+
+// Her 500ms'de bir hash kontrol et
+setInterval(slaytHashKontrol, 500);
 
 // ── Mod değiştirme yardımcı fonksiyonları ───────────────────────────
 function terminalModu() {

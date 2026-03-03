@@ -169,10 +169,16 @@
   <div style="position:relative;width:90%;height:90%;max-width:1200px;background:#1a202c;border-radius:12px;padding:1rem;display:flex;flex-direction:column;">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;">
       <h3 style="margin:0;color:#e2e8f0;">👁️ Slayt Önizleme</h3>
-      <button onclick="slaytOnizlemeKapat()" style="background:#e53e3e;border:none;border-radius:6px;padding:0.5rem 1rem;color:#fff;cursor:pointer;font-size:1rem;">✕ Kapat</button>
+      <div style="display:flex;gap:0.5rem;align-items:center;">
+        <label style="color:#e2e8f0;font-size:0.85rem;display:flex;align-items:center;gap:0.3rem;">
+          <input type="checkbox" id="ogrenci-takip" checked style="width:16px;height:16px;">
+          Öğrenciler senkronize olsun
+        </label>
+        <button onclick="slaytOnizlemeKapat()" style="background:#e53e3e;border:none;border-radius:6px;padding:0.5rem 1rem;color:#fff;cursor:pointer;font-size:1rem;">✕ Kapat</button>
+      </div>
     </div>
     <div style="flex:1;overflow:hidden;border-radius:8px;background:#000;">
-      <iframe id="slayt-onizleme-iframe" style="width:100%;height:100%;border:none;" allowfullscreen></iframe>
+      <iframe id="slayt-onizleme-iframe" name="slayt-preview" style="width:100%;height:100%;border:none;" allowfullscreen></iframe>
     </div>
   </div>
 </div>
