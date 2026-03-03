@@ -1,6 +1,6 @@
-// Öğrenci tarafı — mod değişimini 3 sn'de bir kontrol eder
+// Öğrenci tarafı — mod değişimini 500ms'de bir kontrol eder (hızlı senkronizasyon)
 
-const POLLING_ARALIK = 3000;
+const POLLING_ARALIK = 500;
 
 function mevcutModu() {
   // LocalStorage'dan oku, yoksa 'bekleme'
