@@ -29,8 +29,8 @@ from flask import (Flask, render_template, request, jsonify,
                    redirect, url_for, send_file, session, abort, Response)
 from flask_socketio import SocketIO, emit, join_room, leave_room, Namespace
 
-from docker_terminal import (container_baslat, kullanici_olustur,
-                              container_ip_al, container_durum, image_var_mi)
+from docker_terminal import (konteyner_baslat, konteyner_ip_al,
+                              konteyner_durdur, image_var_mi)
 
 # ── Yapılandırma ──────────────────────────────────────────────
 BASE_DIR      = Path(__file__).parent
@@ -714,30 +714,60 @@ def api_yoklama_sil_tek():
 # ── Terminal Rotaları ─────────────────────────────────────────
 @app.route('/terminal')
 def terminal_sayfasi():
-    """Öğrenci terminal sayfası — SSH bilgilerini gösterir."""
-    numara   = session.get('ogrenci_numara')
-    ad_soyad = session.get('ogrenci_ad')
-    if not numara:
-        return redirect(url_for('ana'))
+    """Terminal login sayfası."""
+    return render_template('terminal_login.html')
 
-    # Container'ı başlat
+
+@app.route('/terminal/login', methods=['POST'])
+def terminal_login():
+    """Terminal login ve container başlatma."""
+    ad = request.form.get('ad', '').strip()
+    soyad = request.form.get('soyad', '').strip()
+    numara = request.form.get('numara', '').strip()
+
+    # Validasyon
+    if not ad or not soyad or not numara:
+        return render_template('terminal_login.html', hata='Tüm alanları doldurun.')
+
+    # Numara sadece rakam
+    if not numara.isdigit():
+        return render_template('terminal_login.html', hata='Numara sadece rakamlardan oluşmalı.')
+
+    # Container başlat
     cid = konteyner_baslat(numara)
+    if not cid:
+        return render_template('terminal_login.html', hata='Container başlatılamadı. Docker çalışıyor mu?')
 
     # IP adresini al
-    try:
-        rc, ip_output = subprocess.run(
-            ['docker', 'inspect', '-f', '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}', f'terminal-{numara}'],
-            capture_output=True, text=True, timeout=5
-        ).returncode, subprocess.run(
-            ['docker', 'inspect', '-f', '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}', f'terminal-{numara}'],
-            capture_output=True, text=True, timeout=5
-        ).stdout.strip()
+    ip = konteyner_ip_al(numara)
+    if not ip:
+        return render_template('terminal_login.html', hata='Container IP adresi alınamadı.')
 
-        ip = ip_output if rc == 0 and ip_output else 'Container başlatılıyor...'
-    except:
-        ip = 'Container başlatılıyor...'
+    # Session bilgilerini sakla
+    session['terminal_ad'] = ad
+    session['terminal_soyad'] = soyad
+    session['terminal_numara'] = numara
+    session['terminal_ip'] = ip
+    session['terminal_cid'] = cid
 
-    return render_template('terminal_ssh.html', numara=numara, ad_soyad=ad_soyad, container_ip=ip, container_id=cid)
+    return redirect('/terminal/workspace')
+
+
+@app.route('/terminal/workspace')
+def terminal_workspace():
+    """Terminal çalışma alanı - authentication gerekli."""
+    if not session.get('terminal_numara'):
+        return redirect('/terminal')
+
+    numara = session['terminal_numara']
+    ad = session['terminal_ad']
+    soyad = session['terminal_soyad']
+    ip = session['terminal_ip']
+
+    return render_template('terminal_workspace.html',
+                           numara=numara,
+                           ad_soyad=f"{ad} {soyad}".upper(),
+                           container_ip=ip)
 
 @app.route('/teacher/terminal')
 @ogretmen_giris_gerekli
@@ -889,40 +919,38 @@ def ogretmen_temizle_event():
 
 @socketio.on('ogrenci_baglan', namespace='/terminal')
 def ogrenci_baglan_event(veri):
-    """Öğrenci bağlandığında Docker container başlat."""
+    """Öğrenci bağlandığında username ile Docker container'a bağlan."""
     sid = request.sid
-    numara = veri.get('numara', '')
+    username = veri.get('username', '')
 
-    if not numara:
-        emit('hata', 'Öğrenci numarası gerekli!')
+    if not username:
+        emit('hata', 'Kullanıcı adı gerekli!')
         return
 
-    ogrenci_sidleri[sid] = numara
+    ogrenci_sidleri[sid] = username
 
-    # Öğrenci sayısını öğretmene bildir
-    if ogretmen_sid:
-        socketio.emit('bagli_ogrenci_sayisi', len(ogrenci_sidleri),
-                      room=ogretmen_sid, namespace='/terminal')
-
-    # Docker container başlat (thread'de)
-    def _container_baslat():
-        cid = konteyner_baslat(numara)
-        if not cid:
-            socketio.emit('hata', 'Container başlatılamadı! Docker çalışıyor mu?',
-                          room=sid, namespace='/terminal')
+    # Tek container'ı başlat (ilk öğrenci için)
+    if not container_durum():
+        if not container_baslat():
+            emit('hata', 'Container başlatılamadı! Docker çalışıyor mu?')
             return
 
-        # Container'a docker exec ile bağlan (PTY modunda)
-        try:
-            master_fd, slave_fd = pty.openpty()
-            proc = subprocess.Popen(
-                ['docker', 'exec', '-it', f'terminal-{numara}', '/bin/bash'],
-                stdin=slave_fd, stdout=slave_fd, stderr=slave_fd,
-                preexec_fn=os.setsid
-            )
-            os.close(slave_fd)
+    # Kullanıcıyı container'da oluştur
+    if not kullanici_olustur(username):
+        emit('hata', 'Kullanıcı oluşturulamadı!')
+        return
 
-            ogrenci_surecleri[sid] = (proc, master_fd)
+    # Container'a docker exec ile bağlan (PTY modunda)
+    try:
+        master_fd, slave_fd = pty.openpty()
+        proc = subprocess.Popen(
+            ['docker', 'exec', '-it', 'linux-lab', 'su', '-', username],
+            stdin=slave_fd, stdout=slave_fd, stderr=slave_fd,
+            preexec_fn=os.setsid
+        )
+        os.close(slave_fd)
+
+        ogrenci_surecleri[sid] = (proc, master_fd)
 
             socketio.emit('container_hazir', room=sid, namespace='/terminal')
 
