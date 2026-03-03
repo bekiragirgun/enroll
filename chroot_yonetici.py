@@ -152,14 +152,26 @@ def create_student_chroot(username, real_name=""):
     with open(passwd_file, 'a') as f:
         f.write(f"{username}:x:1000:1000:{real_name}:/home/{username}:/bin/bash\n")
 
-    # Parola (kullanıcı adı ile aynı)
-    hashed_pw = subprocess.run(
-        ["openssl", "passwd", "-1", username],
+    # Parola (kullanıcı adı ile aynı) - host sistemdeki shadow'dan al
+    # Önce host sistemde kullanıcının hash'ini al
+    result = subprocess.run(
+        ["grep", f"^{username}:", "/etc/shadow"],
         capture_output=True, text=True
-    ).stdout.strip()
+    )
 
-    with open(shadow_file, 'a') as f:
-        f.write(f"{username}:{hashed_pw}:18000:0:99999:7:::\n")
+    if result.returncode == 0:
+        # Host sistemdeki hash'i chroot içine kopyala
+        host_shadow_entry = result.stdout.strip()
+        with open(shadow_file, 'a') as f:
+            f.write(host_shadow_entry + '\n')
+    else:
+        # Yedek: openssl ile hash oluştur
+        hashed_pw = subprocess.run(
+            ["openssl", "passwd", "-1", username],
+            capture_output=True, text=True
+        ).stdout.strip()
+        with open(shadow_file, 'a') as f:
+            f.write(f"{username}:{hashed_pw}:18000:0:99999:7:::\n")
 
     # Home dizini oluştur
     student_home = student_path / "home" / username
@@ -192,6 +204,11 @@ echo ""
 
 def create_ssh_entry(username):
     """SSH ve sudoers yapılandırması."""
+    # Kullanıcının shell'i /bin/bash olsun (chrootlogin değil)
+    _run([
+        "usermod", "-s", "/bin/bash", username
+    ])
+
     # Sudoers'a chroot yetkisi ekle
     sudoers_line = f"{username} ALL=(ALL) NOPASSWD: /usr/sbin/chroot\n"
     sudoers_file = Path("/etc/sudoers.d/chroot-ogrenciler")
@@ -212,6 +229,13 @@ def create_ssh_entry(username):
     if force_command not in ssh_config_text:
         with open(ssh_config, 'a') as f:
             f.write(force_command)
+
+    # chrootlogin script'ini chroot içine kopyala
+    chrootlogin_src = Path("/usr/sbin/chrootlogin")
+    chrootlogin_dst = student_path / "usr" / "sbin" / "chrootlogin"
+    if chrootlogin_src.exists():
+        subprocess.run(["cp", str(chrootlogin_src), str(chrootlogin_dst)], check=False)
+        subprocess.run(["chmod", "+x", str(chrootlogin_dst)], check=False)
 
     # SSH'yi restart et
     _run(["systemctl", "restart", "sshd"])
