@@ -29,8 +29,8 @@ from flask import (Flask, render_template, request, jsonify,
                    redirect, url_for, send_file, session, abort, Response)
 from flask_socketio import SocketIO, emit, join_room, leave_room, Namespace
 
-from docker_terminal import (konteyner_baslat, konteyner_ip_al,
-                              konteyner_durdur, image_var_mi)
+from docker_terminal import (container_baslat, container_ip_al,
+                              container_durum, image_var_mi)
 
 # ── Yapılandırma ──────────────────────────────────────────────
 BASE_DIR      = Path(__file__).parent
@@ -734,12 +734,12 @@ def terminal_login():
         return render_template('terminal_login.html', hata='Numara sadece rakamlardan oluşmalı.')
 
     # Container başlat
-    cid = konteyner_baslat(numara)
+    cid = container_baslat(numara)
     if not cid:
         return render_template('terminal_login.html', hata='Container başlatılamadı. Docker çalışıyor mu?')
 
     # IP adresini al
-    ip = konteyner_ip_al(numara)
+    ip = container_ip_al(numara)
     if not ip:
         return render_template('terminal_login.html', hata='Container IP adresi alınamadı.')
 
