@@ -99,8 +99,38 @@ def create_student_chroot(username, real_name=""):
 
     log.info(f"{username} için chroot oluşturuluyor...")
 
-    # Şablondan kopyala
-    shutil.copytree(STUDENT_TEMPLATE, student_path)
+    # Şablondan kopyala (rsync ile, device'leri hariç tutarak)
+    import subprocess
+    result = subprocess.run(
+        ["rsync", "-a", "--exclude=/dev/*", "--exclude=/proc/*",
+               "--exclude=/sys/*", "--exclude=/var/run/*",
+               f"{STUDENT_TEMPLATE}/", f"{student_path}/"],
+        capture_output=True,
+        text=True
+    )
+
+    if result.returncode != 0:
+        log.error(f"Chroot kopyalama hatası: {result.stderr}")
+        return False
+
+    # Gerekli dizinleri manuel oluştur (rsync bunları kopyalamaz)
+    essential_dirs = [
+        student_path / "dev",
+        student_path / "proc",
+        student_path / "sys",
+        student_path / "var/run",
+    ]
+
+    for d in essential_dirs:
+        d.mkdir(parents=True, exist_ok=True)
+
+    # Temel device file'lerini oluştur
+    devices = ["null", "zero", "full", "random", "tty", "urandom"]
+    for device in devices:
+        dev_path = student_path / "dev" / device
+        if not dev_path.exists():
+            subprocess.run(["mknod", "-m", "666", str(dev_path), "c", "1", "5"],
+                           check=False)
 
     # Kullanıcı oluştur (host sistemi)
     try:
