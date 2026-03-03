@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Öğretmen Paneli</title>
+  <link rel="stylesheet" href="/static/css/stil.css">
+  <style>
+    .sinif-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(320px,1fr)); gap:1rem; margin-top:1rem; }
+    .sinif-kart { background:#2d3748; border-radius:12px; padding:1rem 1.25rem; }
+    .sinif-kart h4 { color:#90cdf4; margin:0 0 0.5rem; font-size:0.95rem; display:flex; justify-content:space-between; align-items:center; }
+    .sinif-badge { background:#2b6cb0; color:#bee3f8; border-radius:20px; padding:2px 10px; font-size:0.8rem; font-weight:700; }
+    .sinif-badge.tam { background:#276749; color:#c6f6d5; }
+    .ogrenci-mini { font-size:0.8rem; padding:4px 0; border-bottom:1px solid #3a4a5c; display:flex; gap:8px; align-items:center; }
+    .ogrenci-mini:last-child { border-bottom:none; }
+    .dot-geldi { width:8px; height:8px; border-radius:50%; background:#48bb78; flex-shrink:0; }
+    .dot-gelmedi { width:8px; height:8px; border-radius:50%; background:#718096; flex-shrink:0; }
+    .devamsiz { color:#a0aec0; }
+    .sinif-ozet { color:#718096; font-size:0.8rem; margin-bottom:0.75rem; }
+    .tab-butonlar { display:flex; gap:0.5rem; margin-bottom:1rem; }
+    .tab-btn { padding:0.4rem 1rem; border-radius:8px; border:1px solid #4a5568; background:transparent; color:#a0aec0; cursor:pointer; font-size:0.85rem; transition:all 0.2s; }
+    .tab-btn.aktif { background:#2b6cb0; color:#fff; border-color:#2b6cb0; }
+    .panel-bolum { display:none; }
+    .panel-bolum.goster { display:block; }
+  </style>
+</head>
+<body>
+<div class="panel-kapsayici">
+
+  <!-- Başlık -->
+  <div class="panel-baslik">
+    <div>
+      <h1>🐧 Öğretmen Paneli</h1>
+      <div class="tarih">{{ tarih }}</div>
+    </div>
+    <div style="display:flex;gap:0.5rem;">
+      <a href="/teacher/terminal" class="btn-kucuk" style="text-decoration:none;color:#1a202c;background:#ed8936;border-color:#dd6b20;font-weight:700;">📡 Terminal Yayını</a>
+      <button class="btn-kucuk yeşil" onclick="csvIndir()">📥 CSV İndir</button>
+      <a href="/teacher/logout" class="btn-kucuk" style="text-decoration:none;color:inherit;">🚪 Çıkış</a>
+    </div>
+  </div>
+
+  <!-- İstatistik -->
+  <div class="istatistik-kutu">
+    <div class="ist-item">
+      <div class="sayi" id="ogrenci-sayisi">0</div>
+      <div class="etiket">Katılan Öğrenci</div>
+    </div>
+    <div class="ist-item">
+      <div class="sayi" id="kayitli-sayisi">51</div>
+      <div class="etiket">Kayıtlı Öğrenci</div>
+    </div>
+    <div class="ist-item">
+      <div class="sayi" style="color:#90cdf4;">{{ aktif_mod | upper }}</div>
+      <div class="etiket">Aktif Mod</div>
+    </div>
+  </div>
+
+  <!-- Kontroller -->
+  <div class="kontrol-kutu">
+    <h3>🎛️ Ders Kontrolü</h3>
+    <div class="mod-butonlar" style="margin-bottom:1rem;">
+      <button class="btn-mod {% if aktif_mod == 'bekleme' %}aktif{% endif %}"
+              data-mod="bekleme" onclick="modDegistir('bekleme')">⏸ Beklet</button>
+      <button class="btn-mod {% if aktif_mod == 'slayt' %}aktif{% endif %}"
+              data-mod="slayt" onclick="modDegistir('slayt')">📽 Slayt</button>
+    </div>
+
+    <h3 style="margin-bottom:0.75rem;">📁 Slayt Seçimi</h3>
+    <div class="slayt-secici">
+      <select id="slayt-secici">
+        {% for dosya in slaytlar %}
+        <option value="{{ dosya }}" {% if dosya == aktif_dosya %}selected{% endif %}>
+          {{ dosya | replace('.html','') | replace('_',' ') }}
+        </option>
+        {% endfor %}
+      </select>
+      <button class="btn-kucuk" onclick="slaytDegistir()">▶ Göster</button>
+    </div>
+  </div>
+
+  <!-- Tab Menü -->
+  <div class="tab-butonlar">
+    <button class="tab-btn aktif" onclick="tabGec('yoklama', this)">📋 Yoklama Listesi</button>
+    <button class="tab-btn" onclick="tabGec('siniflar', this)">👥 Sınıf Durumu</button>
+    <button class="tab-btn" onclick="tabGec('sahte', this); sahteCek();">
+      🚨 Şüpheli Girişler
+      <span id="sahte-rozet" style="display:none;background:#c53030;color:#fff;border-radius:10px;padding:0 6px;font-size:0.72rem;margin-left:4px;">0</span>
+    </button>
+    <button class="tab-btn" onclick="tabGec('arsiv', this)">📁 Arşiv</button>
+  </div>
+
+  <!-- Yoklama Listesi -->
+  <div id="tab-yoklama" class="panel-bolum goster yoklama-kutu">
+    <div class="kutu-baslik">
+      <div style="display:flex;justify-content:space-between;align-items:center;">
+        <h3>📋 Yoklama Listesi</h3>
+        <div style="display:flex;gap:0.5rem;align-items:center;">
+          <span style="color:#4a5568; font-size:0.8rem;">Otomatik yenileniyor</span>
+          <button class="btn-kucuk" style="background:#742a2a;border-color:#9b2c2c;color:#feb2b2;"
+                  onclick="yoklamaTemizle()">🗑️ Temizle</button>
+        </div>
+      </div>
+    </div>
+    <div class="ogrenci-listesi" id="ogrenci-listesi">
+      <div class="bos-liste">Henüz kimse bağlanmadı...</div>
+    </div>
+  </div>
+
+  <!-- Sınıf Durumu -->
+  <div id="tab-siniflar" class="panel-bolum kontrol-kutu">
+    <h3>👥 Sınıf Bazlı Durum</h3>
+    <div class="sinif-grid" id="sinif-grid">
+      <div style="color:#718096; font-size:0.9rem;">Yükleniyor...</div>
+    </div>
+  </div>
+
+  <!-- Şüpheli Girişler -->
+  <div id="tab-sahte" class="panel-bolum" style="margin-top:1rem;">
+    <div class="kutu-baslik">
+      <h3>🚨 Şüpheli Giriş Girişimleri</h3>
+      <span style="color:#4a5568;font-size:0.8rem;">30 sn'de bir yenilenir</span>
+    </div>
+    <div id="sahte-kutu" style="margin-top:0.75rem;">
+      <div style="color:#718096;text-align:center;padding:1rem;">Yükleniyor...</div>
+    </div>
+  </div>
+
+  <!-- Arşiv -->
+  <div id="tab-arsiv" class="panel-bolum" style="margin-top:1rem;">
+    <div class="kutu-baslik">
+      <h3>📁 Tarih Bazlı Arşiv</h3>
+      <span style="color:#4a5568;font-size:0.8rem;">Geçmiş yoklamaları CSV olarak indirin</span>
+    </div>
+    <div style="margin-top:1rem;">
+      <div style="display:flex;gap:0.5rem;align-items:center;margin-bottom:1rem;">
+        <input type="date" id="tarih-secici" style="padding:0.4rem 0.6rem;border:1px solid #4a5568;border-radius:6px;background:#1a202c;color:#e2e8f0;font-size:0.85rem;" value="{{ tarih }}">
+        <button class="btn-kucuk" onclick="arsivCSVIndir()">📥 İndir</button>
+      </div>
+      <div style="font-size:0.8rem;color:#718096;line-height:1.5;">
+        <strong>Örnek:</strong> 2026-03-01 → 01 Mart 2026 yoklaması<br>
+        <strong>Format:</strong> yoklama_202603011235.csv (YılAyGünSaatDakika)
+      </div>
+    </div>
+  </div>
+
+</div>
+<script src="/static/js/ogretmen.js"></script>
+</body>
+</html>

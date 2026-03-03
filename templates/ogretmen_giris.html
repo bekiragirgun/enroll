@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Öğretmen Girişi</title>
+  <link rel="stylesheet" href="/static/css/stil.css">
+</head>
+<body>
+  <div class="giris-kapsayici">
+    <div class="giris-kutu">
+      <h1>🔐 Öğretmen Girişi</h1>
+      <p class="alt-baslik">Panele erişmek için şifreyi girin</p>
+
+      {% if hata %}
+      <div style="background:#742a2a; border:1px solid #c53030; border-radius:8px; padding:0.75rem 1rem; margin-bottom:1rem; font-size:0.9rem; color:#fed7d7;">
+        ⚠️ {{ hata }}
+      </div>
+      {% endif %}
+
+      <form method="POST">
+        <div class="form-grup">
+          <label>Şifre</label>
+          <input type="password" name="sifre" placeholder="••••••••" required autofocus>
+        </div>
+        <button type="submit" class="btn-ana">Giriş Yap</button>
+      </form>
+    </div>
+  </div>
+</body>
+</html>

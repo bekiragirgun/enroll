@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Öğretmen Terminal Yayını</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/xterm@5.3.0/css/xterm.min.css">
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { background:#1a202c; color:#e2e8f0; font-family:system-ui,sans-serif; height:100vh; display:flex; flex-direction:column; overflow:hidden; }
+
+  .header { display:flex; align-items:center; justify-content:space-between; padding:10px 16px; background:#2d3748; border-bottom:2px solid #ed8936; flex-shrink:0; flex-wrap:wrap; gap:8px; }
+  .header h1 { font-size:16px; font-weight:700; color:#fbd38d; }
+  .header .info { font-size:13px; color:#a0aec0; display:flex; align-items:center; gap:6px; }
+  .durum { width:8px; height:8px; border-radius:50%; background:#e53e3e; display:inline-block; }
+  .durum.bagli { background:#48bb78; }
+  .ogrenci-sayisi { background:#ed8936; color:#1a202c; padding:2px 10px; border-radius:10px; font-size:12px; font-weight:700; }
+  .btn { padding:5px 14px; border:none; border-radius:4px; cursor:pointer; font-size:13px; font-weight:600; }
+  .btn-temizle { background:#ed8936; color:#1a202c; }
+  .btn-temizle:hover { background:#dd6b20; }
+  .btn-don { background:#4a5568; color:#e2e8f0; }
+  .btn-don:hover { background:#718096; }
+
+  .terminal-area { flex:1; padding:8px; min-height:0; display:flex; flex-direction:column; }
+  .panel-baslik { padding:6px 12px; background:#744210; color:#fefcbf; font-size:13px; font-weight:600; border-radius:6px 6px 0 0; border:1px solid #ed8936; border-bottom:none; flex-shrink:0; }
+  .terminal-wrap { flex:1; border:1px solid #ed8936; border-radius:0 0 6px 6px; min-height:0; }
+
+  .bildirim { position:fixed; bottom:16px; right:16px; background:#2d3748; border:1px solid #4a5568; padding:10px 18px; border-radius:6px; font-size:13px; z-index:99; display:none; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div style="display:flex;align-items:center;gap:12px">
+    <h1>📡 Öğretmen Terminal Yayını</h1>
+    <span class="info"><span class="durum" id="durum-led"></span><span id="durum-yazi">Bağlanıyor…</span></span>
+  </div>
+  <div style="display:flex;align-items:center;gap:10px">
+    <span class="info">Bağlı öğrenci: <span class="ogrenci-sayisi" id="ogrenci-sayisi">0</span></span>
+    <button class="btn btn-temizle" onclick="ekraniTemizle()">Ekranı Temizle</button>
+    <button class="btn btn-don" onclick="location.href='/teacher'">Panele Dön</button>
+  </div>
+</div>
+
+<div class="terminal-area">
+  <div class="panel-baslik">🖥️ Terminal — Yazdığınız her şey öğrencilere canlı yayınlanır</div>
+  <div class="terminal-wrap" id="term-ogretmen"></div>
+</div>
+
+<div class="bildirim" id="bildirim"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/xterm@5.3.0/lib/xterm.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xterm-addon-fit@0.8.0/lib/xterm-addon-fit.min.js"></script>
+<script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+<script>
+const fitAddon = new FitAddon.FitAddon();
+
+const term = new Terminal({
+  cursorBlink: true,
+  scrollback: 2000,
+  theme: { background:'#0d1117', foreground:'#c9d1d9', cursor:'#ed8936' },
+  fontSize: 15
+});
+term.loadAddon(fitAddon);
+term.open(document.getElementById('term-ogretmen'));
+fitAddon.fit();
+window.addEventListener('resize', () => fitAddon.fit());
+
+// ─── Socket.IO ───
+const socket = io('/terminal', { transports:['websocket','polling'] });
+
+socket.on('connect', () => {
+  document.getElementById('durum-led').classList.add('bagli');
+  document.getElementById('durum-yazi').textContent = 'Bağlı';
+  socket.emit('ogretmen_baglan');
+});
+
+socket.on('disconnect', () => {
+  document.getElementById('durum-led').classList.remove('bagli');
+  document.getElementById('durum-yazi').textContent = 'Bağlantı kesildi';
+});
+
+// Kendi çıktımı terminale yaz
+socket.on('ogretmen_cikti', data => term.write(data));
+
+// Bağlı öğrenci sayısı
+socket.on('bagli_ogrenci_sayisi', sayi => {
+  document.getElementById('ogrenci-sayisi').textContent = sayi;
+});
+
+// Tuş girişi → sunucuya
+term.onData(data => socket.emit('ogretmen_girdi', { data: data }));
+
+// Ekranı temizle
+function ekraniTemizle() {
+  term.clear();
+  socket.emit('ogretmen_temizle');
+}
+</script>
+</body>
+</html>

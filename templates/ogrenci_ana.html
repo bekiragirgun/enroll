@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>BGY106 Linux İşletim Sistemi</title>
+  <link rel="stylesheet" href="/static/css/stil.css">
+</head>
+<body data-mod="bekleme">
+
+  <!-- BEKLEME EKRANI -->
+  <div id="bekleme-ekrani" class="bekleme-ekrani" style="display:flex;">
+    <div class="onay-ikonu">✅</div>
+    <h2>Hoş geldin, {{ ad_soyad }}!</h2>
+    <p>Saat <strong>{{ saat }}</strong> kaydedildi.</p>
+    {% if paket and paket != '—' %}
+    <p style="margin-top:0.5rem;">
+      <span style="background:#2d3748;border:1px solid #4a5568;border-radius:6px;padding:0.3rem 0.8rem;font-size:0.85rem;color:#90cdf4;">
+        📦 {{ paket }}
+      </span>
+    </p>
+    {% endif %}
+    {% if tekrar_giris %}
+    <p style="margin-top:0.5rem;color:#68d391;font-size:0.85rem;background:#1a3a2a;border:1px solid #2d6a4a;border-radius:6px;padding:0.3rem 0.8rem;">
+      ✓ Zaten giriş yapmışsınız, tekrar hoş geldiniz!
+    </p>
+    {% endif %}
+    <p style="color:#4a5568; font-size:0.85rem; margin-top:1rem;">
+      Öğretmen derse başlayana kadar bekleyiniz...
+    </p>
+    <a href="/terminal" style="display:inline-block;margin-top:1.2rem;padding:0.6rem 1.5rem;background:#2b6cb0;color:#fff;border-radius:8px;text-decoration:none;font-weight:600;font-size:0.95rem;transition:background 0.2s;">
+      💻 Terminal Aç
+    </a>
+  </div>
+
+  <!-- SLAYT EKRANI -->
+  <div id="slayt-ekrani" class="slayt-ekrani" style="display:none;">
+    <iframe id="slayt-iframe" src="" allowfullscreen></iframe>
+  </div>
+
+  <!-- TERMİNAL EKRANI -->
+  <div id="terminal-ekrani" class="terminal-ekrani" style="display:none;">
+    <div class="ikon">💻</div>
+    <h2>Terminali açabilirsiniz!</h2>
+    <div class="gorev-kutu">
+      <div id="gorev-metni">Görev bekleniyor...</div>
+    </div>
+  </div>
+
+  <script src="/static/js/ogrenci.js"></script>
+</body>
+</html>

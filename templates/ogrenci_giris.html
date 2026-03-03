@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>BGY106 Linux İşletim Sistemi — Yoklama</title>
+  <link rel="stylesheet" href="/static/css/stil.css">
+</head>
+<body>
+  <div class="giris-kapsayici">
+    <div class="giris-kutu">
+      <!-- Tux Logo -->
+      <div style="text-align:center;margin-bottom:0.75rem;">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 120" width="72" height="86" style="display:inline-block;">
+          <!-- Gövde -->
+          <ellipse cx="50" cy="72" rx="30" ry="36" fill="#1a1a1a"/>
+          <!-- Göbek -->
+          <ellipse cx="50" cy="80" rx="18" ry="22" fill="#f5deb3"/>
+          <!-- Kafa -->
+          <ellipse cx="50" cy="30" rx="22" ry="22" fill="#1a1a1a"/>
+          <!-- Sol göz beyazı -->
+          <ellipse cx="41" cy="24" rx="7" ry="8" fill="white"/>
+          <!-- Sağ göz beyazı -->
+          <ellipse cx="59" cy="24" rx="7" ry="8" fill="white"/>
+          <!-- Sol göz -->
+          <circle cx="41" cy="25" r="4" fill="#1a1a1a"/>
+          <!-- Sağ göz -->
+          <circle cx="59" cy="25" r="4" fill="#1a1a1a"/>
+          <!-- Sol göz parlaklık -->
+          <circle cx="43" cy="23" r="1.5" fill="white"/>
+          <!-- Sağ göz parlaklık -->
+          <circle cx="61" cy="23" r="1.5" fill="white"/>
+          <!-- Gaga -->
+          <ellipse cx="50" cy="35" rx="7" ry="4" fill="#f5a623" transform="rotate(-5,50,35)"/>
+          <!-- Sol kanat -->
+          <ellipse cx="22" cy="68" rx="10" ry="22" fill="#1a1a1a" transform="rotate(-15,22,68)"/>
+          <!-- Sağ kanat -->
+          <ellipse cx="78" cy="68" rx="10" ry="22" fill="#1a1a1a" transform="rotate(15,78,68)"/>
+          <!-- Sol ayak -->
+          <ellipse cx="38" cy="108" rx="12" ry="5" fill="#f5a623"/>
+          <!-- Sağ ayak -->
+          <ellipse cx="62" cy="108" rx="12" ry="5" fill="#f5a623"/>
+        </svg>
+      </div>
+      <h1 style="font-size:1.3rem;line-height:1.3;">BGY106<br>Linux İşletim Sistemi</h1>
+      <p class="alt-baslik">Derse katılmak için bilgilerini gir</p>
+
+      {% if hata %}
+      <div style="background:#742a2a; border:1px solid #c53030; border-radius:8px; padding:0.75rem 1rem; margin-bottom:1rem; font-size:0.9rem; color:#fed7d7;">
+        ⚠️ {{ hata }}
+      </div>
+      {% endif %}
+
+      <form method="POST" action="/giris">
+        <div class="form-grup">
+          <label>Sınıf</label>
+          <select name="sinif_id" id="sinif-sec" required
+                  onchange="ogrenciListesiYukle(this.value)"
+                  style="width:100%; padding:0.75rem 1rem; background:#2d3748; color:#e2e8f0; border:1px solid #4a5568; border-radius:8px; font-size:1rem; outline:none;">
+            <option value="" disabled selected>— Sınıfınızı seçin —</option>
+            {% for sinif in siniflar %}
+            <option value="{{ sinif.id }}">{{ sinif.ad }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-grup">
+          <label>Ad Soyad</label>
+          <select name="ad_soyad" id="ogrenci-sec" required disabled
+                  style="width:100%; padding:0.75rem 1rem; background:#2d3748; color:#718096; border:1px solid #4a5568; border-radius:8px; font-size:1rem; outline:none; cursor:not-allowed;">
+            <option value="">— Önce sınıf seçin —</option>
+          </select>
+        </div>
+        <div class="form-grup">
+          <label>Öğrenci Numarası</label>
+          <input type="text" name="numara" placeholder="25905001" required>
+        </div>
+        <div class="form-grup">
+          <label>Ders Saati</label>
+          <select name="paket" required style="width:100%; padding:0.75rem 1rem; background:#2d3748; color:#e2e8f0; border:1px solid #4a5568; border-radius:8px; font-size:1rem; outline:none;">
+            {% for p in paket_secenekleri %}
+            <option value="{{ p }}" {% if p == paket_varsayilan %}selected{% endif %}>{{ p }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <button type="submit" class="btn-ana">✅ Derse Katıl</button>
+      </form>
+
+      <script>
+        async function ogrenciListesiYukle(sinifId) {
+          const sec = document.getElementById('ogrenci-sec');
+
+          // Sıfırla
+          sec.innerHTML = '<option value="">Yükleniyor…</option>';
+          sec.disabled  = true;
+          sec.style.color  = '#718096';
+          sec.style.cursor = 'not-allowed';
+
+          if (!sinifId) return;
+
+          try {
+            const r    = await fetch('/api/ogrenci_listesi/' + sinifId);
+            const veri = await r.json();
+
+            sec.innerHTML = '<option value="">— Adınızı seçin —</option>';
+            veri.ogrenciler.forEach(function(o) {
+              const opt = document.createElement('option');
+              opt.value              = o.ad_soyad;
+              opt.dataset.numara     = o.numara;
+              opt.textContent        = o.ad_soyad;
+              sec.appendChild(opt);
+            });
+            sec.disabled     = false;
+            sec.style.color  = '#e2e8f0';
+            sec.style.cursor = 'default';
+          } catch(e) {
+            sec.innerHTML = '<option value="">Hata — sayfayı yenileyin</option>';
+          }
+        }
+
+      </script>
+    </div>
+  </div>
+</body>
+</html>
