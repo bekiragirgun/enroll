@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Terminal — {{ ad_soyad }}</title>
+<title>Terminal Çalışma Alanı</title>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/xterm@5.3.0/css/xterm.min.css">
 <style>
   * { margin:0; padding:0; box-sizing:border-box; }
@@ -13,9 +13,7 @@
   .header { display:flex; align-items:center; justify-content:space-between; padding:8px 16px; background:#2d3748; border-bottom:1px solid #4a5568; flex-shrink:0; }
   .header h1 { font-size:15px; font-weight:600; }
   .header .info { font-size:13px; color:#a0aec0; }
-  .header .durum { display:inline-block; width:8px; height:8px; border-radius:50%; margin-right:6px; background:#e53e3e; }
-  .header .durum.bagli { background:#48bb78; }
-  .btn-cikis { padding:4px 14px; background:#e53e3e; color:#fff; border:none; border-radius:4px; cursor:pointer; font-size:13px; }
+  .btn-cikis { padding:4px 14px; background:#e53e3e; color:#fff; border:none; border-radius:4px; cursor:pointer; font-size:13px; text-decoration:none; }
   .btn-cikis:hover { background:#c53030; }
 
   /* Panel wrapper */
@@ -23,16 +21,67 @@
 
   /* Panel */
   .panel { display:flex; flex-direction:column; border-radius:6px; overflow:hidden; min-height:0; }
-  .panel.ogretmen { flex:0 0 38%; border:1px solid #48bb78; }
+  .panel.ogretmen { flex:0 0 40%; border:1px solid #48bb78; }
   .panel.ogrenci  { flex:1;      border:1px solid #4299e1; }
+
   .panel-baslik { padding:5px 12px; font-size:13px; font-weight:600; display:flex; align-items:center; gap:8px; flex-shrink:0; }
   .panel.ogretmen .panel-baslik { background:#22543d; color:#c6f6d5; }
   .panel.ogrenci  .panel-baslik { background:#2a4365; color:#bee3f8; }
+
   .badge { font-size:10px; padding:1px 6px; border-radius:3px; background:rgba(255,255,255,0.15); }
-  .terminal-wrap { flex:1; min-height:0; }
+
+  /* Öğrenci giriş formu */
+  .ogrenci-giris {
+    padding: 10px 15px;
+    background: #2a4365;
+    border-bottom: 1px solid #4299e1;
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    flex-shrink: 0;
+  }
+
+  .ogrenci-giris select, .ogrenci-giris input {
+    padding: 6px 10px;
+    background: #0f1117;
+    border: 1px solid #4a5568;
+    border-radius: 4px;
+    color: #e2e8f0;
+    font-size: 13px;
+  }
+
+  .ogrenci-giris select { flex: 1; }
+  .ogrenci-giris input { flex: 1; }
+
+  .btn-baglan {
+    padding: 6px 14px;
+    background: #4299e1;
+    color: #fff;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: 600;
+  }
+
+  .btn-baglan:hover { background: #3182ce; }
+  .btn-baglan:disabled { background: #4a5568; cursor: not-allowed; }
+
+  .terminal-wrap { flex:1; min-height:0; position: relative; }
+
+  /* Loading */
+  .loading {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    text-align: center;
+    color: #90cdf4;
+    font-size: 14px;
+  }
 
   /* Bildirim */
-  .bildirim { position:fixed; top:50px; right:16px; background:#2d3748; border:1px solid #4a5568; padding:10px 18px; border-radius:6px; font-size:13px; z-index:99; display:none; }
+  .bildirim { position:fixed; bottom:16px; right:16px; background:#2d3748; border:1px solid #4a5568; padding:10px 18px; border-radius:6px; font-size:13px; z-index:99; display:none; }
 </style>
 </head>
 <body>
@@ -40,23 +89,31 @@
 <div class="header">
   <div style="display:flex;align-items:center;gap:12px">
     <h1>💻 Terminal Çalışma Alanı</h1>
-    <span class="info"><span class="durum" id="durum-led"></span><span id="durum-yazi">Bağlanıyor…</span></span>
   </div>
-  <div style="display:flex;align-items:center;gap:12px">
-    <span class="info">{{ ad_soyad }}</span>
-    <button class="btn-cikis" onclick="location.href='/'">Çıkış</button>
-  </div>
+  <a href="/" class="btn-cikis">Çıkış</a>
 </div>
 
 <div class="panels">
   <!-- Öğretmen paneli (salt okunur) -->
   <div class="panel ogretmen">
-    <div class="panel-baslik">👨‍🏫 Öğretmen Terminali <span class="badge">Salt Okunur</span></div>
+    <div class="panel-baslik">👨‍🏫 Öğretmen Terminali <span class="badge">Salt Okunur Yayın</span></div>
     <div class="terminal-wrap" id="term-ogretmen"></div>
   </div>
+
   <!-- Öğrenci paneli (kendi terminali) -->
   <div class="panel ogrenci">
     <div class="panel-baslik">🖥️ Senin Terminalin</div>
+
+    <!-- Öğrenci giriş formu -->
+    <div class="ogrenci-giris" id="ogrenci-giris-formu">
+      <select id="ogrenci-sec">
+        <option value="">— Kendini seç —</option>
+        <!-- Öğrenciler JS ile yüklenecek -->
+      </select>
+      <input type="text" id="ogrenci-numara" placeholder="Numaranızı girin" pattern="[0-9]+" style="display:none;">
+      <button class="btn-baglan" onclick="ogrenciBaglan()" id="btn-baglan">Bağlan</button>
+    </div>
+
     <div class="terminal-wrap" id="term-ogrenci"></div>
   </div>
 </div>
@@ -67,7 +124,27 @@
 <script src="https://cdn.jsdelivr.net/npm/xterm-addon-fit@0.8.0/lib/xterm-addon-fit.min.js"></script>
 <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
 <script>
-const NUMARA = "{{ numara }}";
+// ─── Öğrenci listesi ───
+const OGRENCILER = [
+  { ad: 'Ahmet Yılmaz', username: 'ahmetyilmaz220001001' },
+  { ad: 'Ayşe Demir', username: 'ayseedemir220001002' },
+  { ad: 'Mehmet Kaya', username: 'mehmetkaya220001003' },
+  { ad: 'Fatma Çelik', username: 'fatmcelik220001004' },
+  { ad: 'Ali Aksoy', username: 'aliaksoy220001005' },
+  { ad: 'Zeynep Arslan', username: 'zeyneparslan220001006' },
+  { ad: 'Mustafa Koç', username: 'mustafakoc220001007' },
+  { ad: 'Elif Şahin', username: 'elifsahin220001008' },
+  // Buraya öğrencileri ekleyin...
+];
+
+// Dropdown'ı doldur
+const ogrenciSec = document.getElementById('ogrenci-sec');
+OGRENCILER.forEach(o => {
+  const opt = document.createElement('option');
+  opt.value = o.username;
+  opt.textContent = o.ad;
+  ogrenciSec.appendChild(opt);
+});
 
 // ─── Terminaller ───
 const fitAddon1 = new FitAddon.FitAddon();
@@ -97,17 +174,15 @@ fitAddon2.fit();
 window.addEventListener('resize', () => { fitAddon1.fit(); fitAddon2.fit(); });
 
 // ─── Socket.IO ───
+let seciliUsername = null;
 const socket = io('/terminal', { transports:['websocket','polling'] });
 
 socket.on('connect', () => {
-  document.getElementById('durum-led').classList.add('bagli');
-  document.getElementById('durum-yazi').textContent = 'Bağlı';
-  socket.emit('ogrenci_baglan', { numara: NUMARA });
+  console.log('Bağlandı');
 });
 
 socket.on('disconnect', () => {
-  document.getElementById('durum-led').classList.remove('bagli');
-  document.getElementById('durum-yazi').textContent = 'Bağlantı kesildi';
+  console.log('Bağlantı kesildi');
 });
 
 // Öğretmen yayını
@@ -116,13 +191,31 @@ socket.on('ogretmen_temizle', () => termOgretmen.clear());
 
 // Kendi terminalim
 socket.on('terminal_cikti', data => termOgrenci.write(data));
-socket.on('container_hazir', () => bildirimGoster('✅ Container hazır, çalışmaya başlayabilirsin!'));
+socket.on('container_hazir', () => bildirimGoster('✅ Bağlandınız! Çalışmaya başlayabilirsiniz.'));
 socket.on('hata', msg => bildirimGoster('❌ ' + msg));
 
-// Tuş girişi → kendi container'ıma
-termOgrenci.onData(data => socket.emit('terminal_girdi', { data: data }));
+// Tuş girişi → kendi terminalime
+termOgrenci.onData(data => {
+  if (seciliUsername) {
+    socket.emit('terminal_girdi', { username: seciliUsername, data: data });
+  }
+});
 
-// Bildirim
+// ─── Fonksiyonlar ───
+function ogrenciBaglan() {
+  const secim = ogrenciSec.value;
+  if (!secim) {
+    bildirimGoster('⚠️ Lütfen kendinizi seçin!');
+    return;
+  }
+
+  seciliUsername = secim;
+  document.getElementById('btn-baglan').disabled = true;
+  document.getElementById('btn-baglan').textContent = 'Bağlanıyor...';
+
+  socket.emit('ogrenci_baglan', { username: seciliUsername });
+}
+
 function bildirimGoster(msg) {
   const el = document.getElementById('bildirim');
   el.textContent = msg;

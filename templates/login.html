@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>BGY106 Linux İşletim Sistemi — Terminal</title>
+  <link rel="stylesheet" href="/static/css/stil.css">
+  <style>
+    body {
+      background: linear-gradient(135deg, #0f1117 0%, #1a1f2e 100%);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 1rem;
+    }
+
+    .login-container {
+      background: rgba(26, 31, 46, 0.95);
+      border: 1px solid #2d3748;
+      border-radius: 20px;
+      padding: 3rem;
+      width: 100%;
+      max-width: 450px;
+      box-shadow: 0 25px 80px rgba(0,0,0,0.5);
+      backdrop-filter: blur(10px);
+    }
+
+    .logo {
+      text-align: center;
+      margin-bottom: 2rem;
+    }
+
+    .logo h1 {
+      font-size: 1.5rem;
+      color: #90cdf4;
+      margin-bottom: 0.5rem;
+      font-weight: 700;
+    }
+
+    .logo p {
+      color: #718096;
+      font-size: 0.9rem;
+    }
+
+    .form-group {
+      margin-bottom: 1.5rem;
+    }
+
+    .form-group label {
+      display: block;
+      color: #cbd5e0;
+      font-size: 0.9rem;
+      font-weight: 600;
+      margin-bottom: 0.5rem;
+    }
+
+    .form-group input {
+      width: 100%;
+      padding: 0.85rem 1rem;
+      background: #0f1117;
+      border: 1px solid #4a5568;
+      border-radius: 10px;
+      color: #e2e8f0;
+      font-size: 1rem;
+      transition: all 0.2s;
+      box-sizing: border-box;
+    }
+
+    .form-group input:focus {
+      outline: none;
+      border-color: #4299e1;
+      box-shadow: 0 0 0 3px rgba(66, 153, 225, 0.2);
+    }
+
+    .form-group .hint {
+      font-size: 0.8rem;
+      color: #718096;
+      margin-top: 0.5rem;
+      display: block;
+    }
+
+    .username-preview {
+      background: #0f1117;
+      border: 1px dashed #4299e1;
+      border-radius: 8px;
+      padding: 1rem;
+      margin: 1rem 0;
+      text-align: center;
+    }
+
+    .username-preview .label {
+      font-size: 0.8rem;
+      color: #718096;
+      margin-bottom: 0.5rem;
+    }
+
+    .username-preview .value {
+      font-size: 1.1rem;
+      color: #48bb78;
+      font-family: 'Courier New', monospace;
+      font-weight: 600;
+    }
+
+    .btn-submit {
+      width: 100%;
+      padding: 1rem;
+      background: linear-gradient(135deg, #4299e1 0%, #3182ce 100%);
+      color: white;
+      border: none;
+      border-radius: 10px;
+      font-size: 1rem;
+      font-weight: 700;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .btn-submit:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 10px 30px rgba(66, 153, 225, 0.3);
+    }
+
+    .info-box {
+      background: rgba(66, 153, 225, 0.1);
+      border: 1px solid #4299e1;
+      border-radius: 10px;
+      padding: 1rem;
+      margin-top: 2rem;
+      font-size: 0.85rem;
+      color: #90cdf4;
+    }
+
+    .info-box strong {
+      color: #fff;
+    }
+
+    {% if hata %}
+    .error {
+      background: rgba(229, 62, 62, 0.1);
+      border: 1px solid #e53e3e;
+      border-radius: 10px;
+      padding: 1rem;
+      margin-bottom: 1.5rem;
+      color: #fc8181;
+      font-size: 0.9rem;
+      text-align: center;
+    }
+    {% endif %}
+  </style>
+</head>
+<body>
+
+<div class="login-container">
+  <div class="logo">
+    <h1>💻 Linux Terminal</h1>
+    <p>Kapadokya Üniversitesi — BGY106</p>
+  </div>
+
+  {% if hata %}
+  <div class="error">
+    ⚠️ {{ hata }}
+  </div>
+  {% endif %}
+
+  <form method="POST" action="/giris">
+    <div class="form-group">
+      <label for="ad">Ad</label>
+      <input type="text" id="ad" name="ad" required
+             placeholder="Örn: Bekir"
+             oninput="updateUsernamePreview()"
+             autocomplete="off">
+    </div>
+
+    <div class="form-group">
+      <label for="soyad">Soyad</label>
+      <input type="text" id="soyad" name="soyad" required
+             placeholder="Örn: Ağırğün"
+             oninput="updateUsernamePreview()"
+             autocomplete="off">
+    </div>
+
+    <div class="form-group">
+      <label for="numara">Öğrenci Numarası</label>
+      <input type="text" id="numara" name="numara" required
+             placeholder="Örn: 220001001"
+             pattern="[0-9]+"
+             oninput="updateUsernamePreview()"
+             autocomplete="off">
+      <small class="hint">Sadece rakamlar</small>
+    </div>
+
+    <div class="username-preview">
+      <div class="label">🔑 SSH Kullanıcı Adınız:</div>
+      <div class="value" id="username-preview">adinizsoyadiniznumaraniz</div>
+    </div>
+
+    <button type="submit" class="btn-submit">
+      🚀 Terminal Bağlantısı Al
+    </button>
+  </form>
+
+  <div class="info-box">
+    <strong>ℹ️ Bilgi:</strong> Sistem otomatik olarak size özel bir SSH hesabı oluşturacaktır.
+    Terminal bilgilerini bir sonraki sayfada göreceksiniz.
+  </div>
+</div>
+
+<script>
+function updateUsernamePreview() {
+  const ad = document.getElementById('ad').value.trim().toLowerCase();
+  const soyad = document.getElementById('soyad').value.trim().toLowerCase();
+  const numara = document.getElementById('numara').value.trim();
+
+  let username = '';
+
+  if (ad && soyad && numara) {
+    // Türkçe karakterleri dönüştür
+    const trToEn = {
+      'ç': 'c', 'ğ': 'g', 'ı': 'i', 'ö': 'o', 'ş': 's', 'ü': 'u'
+    };
+
+    const normalize = (str) => {
+      return str.toLowerCase().replace(/[çğıöşü]/g, c => trToEn[c] || c);
+    };
+
+    username = `${normalize(ad)}${normalize(soyad)}${numara}`;
+  } else {
+    username = 'adinizsoyadiniznumaraniz';
+  }
+
+  document.getElementById('username-preview').textContent = username;
+}
+
+// Sayfa yüklendiğinde önizlemeyi güncelle
+document.addEventListener('DOMContentLoaded', updateUsernamePreview);
+</script>
+
+</body>
+</html>

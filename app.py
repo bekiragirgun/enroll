@@ -29,8 +29,8 @@ from flask import (Flask, render_template, request, jsonify,
                    redirect, url_for, send_file, session, abort, Response)
 from flask_socketio import SocketIO, emit, join_room, leave_room, Namespace
 
-from docker_terminal import (konteyner_baslat, konteyner_durdur,
-                              konteyner_temizle, konteyner_listesi, image_var_mi)
+from docker_terminal import (container_baslat, kullanici_olustur,
+                              container_ip_al, container_durum, image_var_mi)
 
 # ── Yapılandırma ──────────────────────────────────────────────
 BASE_DIR      = Path(__file__).parent
@@ -193,12 +193,8 @@ PAKET_SECENEKLERI = [
 
 @app.route('/')
 def ana():
-    siniflar = sinif_listesi()
-    paket_varsayilan = paket_hesapla()   # Saate göre ön seçim
-    return render_template('ogrenci_giris.html',
-                           siniflar=siniflar,
-                           paket_secenekleri=PAKET_SECENEKLERI,
-                           paket_varsayilan=paket_varsayilan)
+    """Ana sayfa - Giriş formu."""
+    return render_template('login.html')
 
 @app.route('/giris', methods=['POST'])
 def giris():
