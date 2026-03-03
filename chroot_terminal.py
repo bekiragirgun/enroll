@@ -1,23 +1,37 @@
 """
 Chroot Terminal Yöneticisi
-Her öğrenci için izole chroot ortamı
+CT 991 (ogrenci-vm) üzerindeki chroot ortamlarını yönetir
 """
 
 import subprocess
 import os
 from pathlib import Path
 import logging
+import requests
 
 log = logging.getLogger("chroot_terminal")
 
-CHROOT_BASE = Path("/home/chroot")
-SSH_PORT = 2222
+# CT 991 (ogrenci-vm) bilgileri
+CT_991_HOST = "192.168.111.51"  # CT 991 IP adresi
+CT_991_SSH_PORT = 2222
+CHROOT_MANAGE_SCRIPT = "/root/enroll/chroot_yonetici.py"
+
+
+def _ct991_exec(command: list) -> subprocess.CompletedProcess:
+    """CT 991 üzerinde komut çalıştır."""
+    full_command = ["pct", "exec", "991"] + command
+    return subprocess.run(full_command, capture_output=True, text=True)
 
 
 def chroot_var_mi(username: str) -> bool:
     """Öğrenci chroot ortamı var mı?"""
-    chroot_path = CHROOT_BASE / username
-    return chroot_path.exists() and chroot_path.is_dir()
+    result = _ct991_exec(["python3", CHROOT_MANAGE_SCRIPT, "list"])
+    if result.returncode != 0:
+        log.error(f"Chroot listesi alınamadı: {result.stderr}")
+        return False
+
+    chroots = result.stdout.strip().split('\n')
+    return username in chroots
 
 
 def chroot_olustur(username: str, ad: str = "", soyad: str = "") -> bool:
@@ -25,12 +39,9 @@ def chroot_olustur(username: str, ad: str = "", soyad: str = "") -> bool:
     try:
         log.info(f"Chroot oluşturuluyor: {username}")
 
-        # Yönetici script'ini çalıştır
-        result = subprocess.run(
-            ["python3", "chroot_yonetici.py", "create", username],
-            capture_output=True,
-            text=True,
-            timeout=120
+        # CT 991 üzerinde yönetici script'ini çalıştır
+        result = _ct991_exec(
+            ["python3", CHROOT_MANAGE_SCRIPT, "create", username]
         )
 
         if result.returncode == 0:
@@ -46,41 +57,32 @@ def chroot_olustur(username: str, ad: str = "", soyad: str = "") -> bool:
 
 
 def chroot_ip_al(username: str) -> str:
-    """SSH IP adresini döndür (host IP)."""
-    # Chroot'ta ayrı IP yok, host IP döndür
-    import socket
-    try:
-        hostname = socket.gethostname()
-        ip = socket.gethostbyname(hostname)
-        return ip
-    except:
-        return "127.0.0.1"
+    """SSH IP adresini döndür (CT 991 IP)."""
+    return CT_991_HOST
 
 
 def chroot_durum(username: str) -> bool:
     """Chroot durumu kontrol et."""
-    chroot_path = CHROOT_BASE / username
-    if not chroot_path.exists():
-        return False
-
-    # /bin/bash var mı?
-    bash_path = chroot_path / "bin" / "bash"
-    return bash_path.exists()
+    return chroot_var_mi(username)
 
 
 def chroot_listesi() -> list:
     """Tüm chroot ortamlarını listele."""
-    if not CHROOT_BASE.exists():
+    result = _ct991_exec(["python3", CHROOT_MANAGE_SCRIPT, "list"])
+
+    if result.returncode != 0:
+        log.error(f"Chroot listesi alınamadı: {result.stderr}")
         return []
 
     chroots = []
-    for d in CHROOT_BASE.iterdir():
-        if d.is_dir() and d.name != "template":
-            chroots.append({
-                "username": d.name,
-                "path": str(d),
-                "active": chroot_durum(d.name)
-            })
+    for line in result.stdout.strip().split('\n'):
+        if line.strip() and line.strip() != "Öğrenci Chroot'ları:":
+            username = line.strip().replace("- ", "").strip()
+            if username:
+                chroots.append({
+                    "username": username,
+                    "active": True
+                })
 
     return chroots
 
@@ -88,11 +90,11 @@ def chroot_listesi() -> list:
 def ssh_bilgi(username: str) -> dict:
     """SSH bağlantı bilgileri."""
     return {
-        "host": chroot_ip_al(username),
-        "port": SSH_PORT,
+        "host": CT_991_HOST,
+        "port": CT_991_SSH_PORT,
         "username": username,
         "password": username,  # Kullanıcı adı ile aynı
-        "command": f"ssh -p {SSH_PORT} {username}@<server_ip>"
+        "command": f"ssh -p {CT_991_SSH_PORT} {username}@{CT_991_HOST}"
     }
 
 
