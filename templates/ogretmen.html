@@ -34,9 +34,11 @@
       <div class="tarih">{{ tarih }}</div>
     </div>
     <div style="display:flex;gap:0.5rem;">
-      <a href="/teacher/terminal" class="btn-kucuk" style="text-decoration:none;color:#1a202c;background:#ed8936;border-color:#dd6b20;font-weight:700;">📡 Terminal Yayını</a>
-      <button class="btn-kucuk yeşil" onclick="csvIndir()">📥 CSV İndir</button>
-      <a href="/teacher/logout" class="btn-kucuk" style="text-decoration:none;color:inherit;">🚪 Çıkış</a>
+      <button onclick="bekletModu()" class="btn-kucuk" style="background:#48bb78;">⏸️ Beklet</button>
+      <button onclick="slaytModu()" class="btn-kucuk" style="background:#ed8936;">📊 Slayt</button>
+      <button onclick="terminalModu()" class="btn-kucuk" style="background:#e53e3e;">💻 Terminal</button>
+      <button class="btn-kucuk yeşil" onclick="csvIndir()">📥 CSV</button>
+      <a href="/teacher/logout" class="btn-kucuk" style="text-decoration:none;color:inherit;">🚪</a>
     </div>
   </div>
 
