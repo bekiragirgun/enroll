@@ -130,8 +130,11 @@
   <div class="workspace">
     <!-- ÖĞRETMEN TERMİNALİ (ÜST %30) -->
     <div class="terminal-panel" style="flex: 0 0 30%;">
-      <div class="terminal-panel-header" style="background: #744210; color: #fbd38d;">
-        👨‍🏫 ÖĞRETMEN EKRANI (İzleme)
+      <div class="terminal-panel-header"
+        style="background: #744210; color: #fbd38d; display: flex; justify-content: space-between;">
+        <span>👨‍🏫 ÖĞRETMEN EKRANI (İzleme)</span>
+        <span id="teacher-command"
+          style="font-family: 'Menlo', monospace; color: #68d391; font-weight: normal; margin-left: 10px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 50%;"></span>
       </div>
       <div class="terminal-wrap" id="terminal-teacher"></div>
     </div>
@@ -190,9 +193,22 @@
     // Çıktıları yönlendir
     socket.on('terminal_cikti', data => termStudent.write(data));
     socket.on('ogretmen_cikti', data => termTeacher.write(data));
-    socket.on('ogretmen_temizle', () => termTeacher.clear());
-
     socket.on('hata', msg => termStudent.write('\r\n\x1b[31m' + msg + '\x1b[0m\r\n'));
+
+    // Son komutu başlıkta göster
+    socket.on('ogretmen_komut', cmd => {
+      const el = document.getElementById('teacher-command');
+      if (el) {
+        el.textContent = '> ' + cmd;
+        // 5 saniye sonra veya yeni bir komut gelmeden önce hafifçe silikleşebilir vs.
+      }
+    });
+
+    socket.on('ogretmen_temizle', () => {
+      termTeacher.clear();
+      const el = document.getElementById('teacher-command');
+      if (el) el.textContent = '';
+    });
 
     // Girdileri gönder
     termStudent.onData(data => {

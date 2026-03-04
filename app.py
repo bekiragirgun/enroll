@@ -1032,6 +1032,7 @@ ogretmen_pty_fd   = None
 ogretmen_pty_pid  = None
 ogretmen_pty_lock = threading.Lock()
 ogretmen_sid = None
+ogretmen_komut_tampon = ""
 
 # Öğrenci Docker exec süreçleri: {sid: (subprocess.Popen, fd)}
 ogrenci_surecleri = {}
@@ -1146,14 +1147,27 @@ def ogretmen_baglan_event():
 
 @socketio.on('ogretmen_girdi', namespace='/terminal')
 def ogretmen_girdi_event(veri):
-    """Öğretmenin tuş vuruşlarını PTY'ye gönder."""
-    global ogretmen_pty_fd
+    """Öğretmenin tuş vuruşlarını PTY'ye gönder ve komutları tamponla."""
+    global ogretmen_pty_fd, ogretmen_komut_tampon
+    char = veri.get('data', '')
+    
     if ogretmen_pty_fd is not None:
         with ogretmen_pty_lock:
             try:
-                os.write(ogretmen_pty_fd, veri['data'].encode('utf-8'))
+                os.write(ogretmen_pty_fd, char.encode('utf-8'))
             except OSError:
                 pass
+
+    # Komut yakalama mantığı (Enter tuşuna kadar tamponla)
+    if char == '\r' or char == '\n':
+        if ogretmen_komut_tampon.strip():
+            # Tamamlanmış komutu tüm öğrencilere yayınla
+            socketio.emit('ogretmen_komut', ogretmen_komut_tampon.strip(), namespace='/terminal')
+        ogretmen_komut_tampon = ""
+    elif char == '\x7f' or char == '\x08': # Backspace
+        ogretmen_komut_tampon = ogretmen_komut_tampon[:-1]
+    elif len(char) == 1 and char.isprintable():
+        ogretmen_komut_tampon += char
 
 
 @socketio.on('ogretmen_temizle', namespace='/terminal')
