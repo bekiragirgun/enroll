@@ -1067,7 +1067,7 @@ def terminal_baglan():
 
 
 @socketio.on('disconnect', namespace='/terminal')
-def terminal_kopma():
+def terminal_kopma(*args):
     global ogretmen_sid, ogretmen_pty_fd, ogretmen_pty_pid
     sid = request.sid
 
@@ -1096,7 +1096,6 @@ def terminal_kopma():
                 pass
             try:
                 # Süreci tamamen temizle
-                import signal
                 os.killpg(os.getpgid(proc.pid), signal.SIGTERM)
             except Exception:
                 try:
@@ -1120,6 +1119,18 @@ def ogretmen_baglan_event(veri=None):
 
     ogretmen_sid = request.sid
     ogretmen_numara = 'ogretmen'
+
+    # Mevcut süreci temizle (Reconnect durumunda)
+    if ogretmen_pty_pid:
+        try:
+            os.killpg(os.getpgid(ogretmen_pty_pid), signal.SIGTERM)
+        except:
+            pass
+    if ogretmen_pty_fd:
+        try:
+            os.close(ogretmen_pty_fd)
+        except:
+            pass
 
     # Chroot ortamını kontrol et/yarat (PCT 991 üzerinde)
     from chroot_terminal import chroot_var_mi, chroot_olustur, CT_991_HOST, CT_991_REAL_SSH_PORT, CHROOT_BASE, _slugify
@@ -1216,6 +1227,18 @@ def ogrenci_baglan_event(veri):
     if not username:
         emit('hata', 'Kullanıcı adı gerekli!')
         return
+
+    # Mevcut süreci temizle (Reconnect durumunda)
+    if sid in ogrenci_surecleri:
+        proc, fd = ogrenci_surecleri.pop(sid)
+        try:
+            os.close(fd)
+        except:
+            pass
+        try:
+            os.killpg(os.getpgid(proc.pid), signal.SIGTERM)
+        except:
+            pass
 
     ogrenci_sidleri[sid] = username
 
