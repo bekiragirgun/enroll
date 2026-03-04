@@ -1109,7 +1109,10 @@ def ogretmen_baglan_event(veri=None):
     ogretmen_numara = 'ogretmen'
 
     # Chroot ortamını kontrol et/yarat (PCT 991 üzerinde)
-    from chroot_terminal import chroot_var_mi, chroot_olustur, CT_991_HOST, CT_991_REAL_SSH_PORT, CHROOT_BASE
+    from chroot_terminal import chroot_var_mi, chroot_olustur, CT_991_HOST, CT_991_REAL_SSH_PORT, CHROOT_BASE, _slugify
+    
+    # Username'i normalize et
+    ogretmen_numara = _slugify(ogretmen_numara)
     
     try:
         if not chroot_var_mi(ogretmen_numara):
@@ -1119,11 +1122,16 @@ def ogretmen_baglan_event(veri=None):
         # PCT 991'e ROOT olarak bağlan ve komutla chroot'a gir
         # Bu yöntem öğrenci/öğretmen için ayrı SSH anahtarı gereksinimini ortadan kaldırır
         master_fd, slave_fd = pty.openpty()
+        
+        # Kullanıcı adını ve yolu tırnak içine al (boşluklu kullanıcı adları için)
+        safe_username = ogretmen_numara.replace("'", "'\\''")
+        safe_chroot_path = f"{CHROOT_BASE}/{safe_username}".replace("'", "'\\''")
+        
         ssh_cmd = [
             'ssh', '-t', '-o', 'StrictHostKeyChecking=no', 
             '-p', str(CT_991_REAL_SSH_PORT), 
             f'root@{CT_991_HOST}',
-            f'chroot {CHROOT_BASE}/{ogretmen_numara} /bin/su - {ogretmen_numara}'
+            f"chroot '{safe_chroot_path}' /bin/su - '{safe_username}'"
         ]
         
         proc = subprocess.Popen(ssh_cmd, stdin=slave_fd, stdout=slave_fd, stderr=slave_fd, preexec_fn=os.setsid)
@@ -1140,6 +1148,7 @@ def ogretmen_baglan_event(veri=None):
         log.info("Öğretmen terminali PCT 991 üzerinden bağlandı.")
         
         # OTOMATİK MOD DEĞİŞİMİ: Öğretmen terminale bağlandığında öğrencileri de terminale yönlendir
+        global ders_durumu
         if ders_durumu['mod'] != 'terminal':
             log.info(f"Otomatik mod değişimi tetiklendi: {ders_durumu['mod']} -> terminal")
             ders_durumu['mod'] = 'terminal'
@@ -1201,13 +1210,20 @@ def ogrenci_baglan_event(veri):
     # ROOT üzerinden bağlanıp chroot'a geçiyoruz (auth sorunlarını çözmek için)
     try:
         master_fd, slave_fd = pty.openpty()
-        from chroot_terminal import CT_991_HOST, CT_991_REAL_SSH_PORT, CHROOT_BASE
+        from chroot_terminal import CT_991_HOST, CT_991_REAL_SSH_PORT, CHROOT_BASE, _slugify
         
+        # Username'i normalize et
+        username = _slugify(username)
+        
+        # Kullanıcı adını ve yolu tırnak içine al (boşluklu kullanıcı adları için)
+        safe_username = username.replace("'", "'\\''")
+        safe_chroot_path = f"{CHROOT_BASE}/{safe_username}".replace("'", "'\\''")
+
         ssh_cmd = [
             'ssh', '-t', '-o', 'StrictHostKeyChecking=no', 
             '-p', str(CT_991_REAL_SSH_PORT), 
             f'root@{CT_991_HOST}',
-            f'chroot {CHROOT_BASE}/{username} /bin/su - {username}'
+            f"chroot '{safe_chroot_path}' /bin/su - '{safe_username}'"
         ]
         
         proc = subprocess.Popen(ssh_cmd, stdin=slave_fd, stdout=slave_fd, stderr=slave_fd, preexec_fn=os.setsid)
@@ -1224,9 +1240,9 @@ def ogrenci_baglan_event(veri):
         t.start()
 
     except Exception as e:
-            log.error(f"[Socket] Terminal bağlantı hatası (User: {username}): {str(e)}")
-            socketio.emit('hata', f'Terminal bağlantı hatası: {str(e)}',
-                          room=sid, namespace='/terminal')
+        log.error(f"[Socket] Terminal bağlantı hatası (User: {username}): {str(e)}")
+        socketio.emit('hata', f'Terminal bağlantı hatası: {str(e)}',
+                      room=sid, namespace='/terminal')
 
 
 @socketio.on('terminal_girdi', namespace='/terminal')

@@ -44,8 +44,7 @@ function modalGoster(mod, ekstra) {
 
       if (iframe && ekstra?.terminal_url) {
         let url = ekstra.terminal_url;
-        // Nginx uyumu için trailing slash ekle (404'ü önlemek için)
-        if (!url.endsWith('/')) url += '/';
+        // Backend artık hem /terminal hem /terminal/ destekliyor, zorlamaya gerek yok
 
         if (iframe.dataset.lastUrl !== url) {
           console.log('[Terminal] URL yükleniyor:', url);

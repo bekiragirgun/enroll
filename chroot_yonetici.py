@@ -175,8 +175,28 @@ def sync_chroot_configs(username, real_name=""):
     return True
 
 
+def _slugify(text):
+    """Kullanıcı adını Linux dostu hale getir (küçük harf, rakam ve alt çizgi)."""
+    import re
+    import unicodedata
+    text = unicodedata.normalize('NFKD', text).encode('ascii', 'ignore').decode('ascii')
+    text = re.sub(r'[^\w\s-]', '', text).strip().lower()
+    return re.sub(r'[-\s]+', '_', text)
+
+
+def sync_chroot_configs(username, real_name=""):
+    """Chroot içindeki konfigürasyon dosyalarını host ile senkronize et."""
+    username = _slugify(username)
+    student_path = CHROOT_BASE / username
+    if not student_path.exists():
+        log.error(f"Chroot dizini yok: {student_path}")
+        return False
+...
 def create_student_chroot(username, real_name=""):
     """Öğrenci için chroot ortamı oluştur."""
+    # Username'i normalize et
+    raw_username = username
+    username = _slugify(username)
     student_path = CHROOT_BASE / username
 
     if student_path.exists():
@@ -205,12 +225,17 @@ def create_student_chroot(username, real_name=""):
             pwd.getpwnam(username)
         except KeyError:
             # --badname: Sayısal kullanıcı adlarına (örn: 123) izin ver
-            _run(["useradd", "--badname", "-m", "-s", "/bin/bash", "-G", STUDENT_GROUP, "-c", real_name, username])
+            # real_name parametresini -c olarak ekliyoruz
+            display_name = real_name if real_name else raw_username
+            _run(["useradd", "--badname", "-m", "-s", "/bin/bash", "-G", STUDENT_GROUP, "-c", display_name, username])
     except Exception as e:
         log.error(f"Kullanıcı oluşturma hatası: {e}")
+        # Kritik hata değilse devam et (belki sync düzeltebilir)
 
     # Konfigürasyonları senkronize et
-    sync_chroot_configs(username, real_name)
+    if not sync_chroot_configs(username, real_name):
+        log.error("Konfigürasyon senkronizasyonu başarısız!")
+        # Burada durmuyoruz ama hata logu kritik
 
     # Home dizini ve Shell ortamı (ilk kez ise)
     student_home = student_path / "home" / username
@@ -245,6 +270,7 @@ fi
 
 def create_ssh_entry(username):
     """SSH ve sudoers yapılandırması."""
+    username = _slugify(username)
     # Kullanıcının shell'i /bin/bash olsun (chrootlogin değil)
     _run([
         "usermod", "-s", "/bin/bash", username
@@ -294,6 +320,7 @@ def list_student_chroots():
 
 def delete_student_chroot(username):
     """Öğrenci chroot'unu sil."""
+    username = _slugify(username)
     student_path = CHROOT_BASE / username
 
     if not student_path.exists():
@@ -313,6 +340,7 @@ def delete_student_chroot(username):
 
 def mount_student_chroot(username):
     """Chroot için gerekli filesystem'leri mount et ve konfigürasyonları tazele."""
+    username = _slugify(username)
     student_path = CHROOT_BASE / username
 
     if not student_path.exists():

@@ -20,6 +20,17 @@ PYTHON_PATH = "/root/enroll/venv/bin/python3" # PCT 991'deki venv yolu
 CHROOT_BASE = "/home/chroot"
 
 
+def _slugify(text):
+    """Kullanıcı adını Linux dostu hale getir (küçük harf, rakam ve alt çizgi)."""
+    import re
+    import unicodedata
+    if not text: return ""
+    text = str(text) # Sayısal numara gelirse stringe çevir
+    text = unicodedata.normalize('NFKD', text).encode('ascii', 'ignore').decode('ascii')
+    text = re.sub(r'[^\w\s-]', '', text).strip().lower()
+    return re.sub(r'[-\s]+', '_', text)
+
+
 def _ct991_exec(command: list) -> subprocess.CompletedProcess:
     """CT 991 üzerinde komut çalıştır (SSH üzerinden)."""
     # PCT 990 üzerinden PCT 991'e SSH ile bağlanıp komut çalıştırır
@@ -41,6 +52,7 @@ def _ct991_exec(command: list) -> subprocess.CompletedProcess:
 
 def chroot_var_mi(username: str) -> bool:
     """Öğrenci chroot ortamı var mı?"""
+    username = _slugify(username)
     result = _ct991_exec([PYTHON_PATH, CHROOT_MANAGE_SCRIPT, "list"])
     if result.returncode != 0:
         log.error(f"Chroot listesi alınamadı: {result.stderr}")
@@ -55,6 +67,7 @@ def chroot_var_mi(username: str) -> bool:
 def chroot_olustur(username: str, ad: str = "", soyad: str = "") -> bool:
     """Yeni chroot ortamı oluştur."""
     try:
+        username = _slugify(username)
         log.info(f"Chroot oluşturuluyor: {username}")
 
         # CT 991 üzerinde yönetici script'ini çalıştır
@@ -109,6 +122,7 @@ def chroot_listesi() -> list:
 
 def ssh_bilgi(username: str) -> dict:
     """SSH bağlantı bilgileri."""
+    username = _slugify(username)
     return {
         "host": CT_991_HOST,
         "port": CT_991_SSH_PORT,
