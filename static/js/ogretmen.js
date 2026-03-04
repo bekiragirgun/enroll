@@ -18,9 +18,9 @@ async function modDegistir(mod) {
 
   // Terminal modu için URL'i ekle
   if (mod === 'terminal') {
-    const terminalInput = document.getElementById('terminal-url');
-    if (terminalInput) {
-      veri.terminal_url = terminalInput.value;
+    const configTtyd = document.getElementById('config-ttyd-url');
+    if (configTtyd) {
+      veri.terminal_url = configTtyd.value;
     }
   }
 
@@ -40,6 +40,24 @@ async function modDegistir(mod) {
   document.querySelectorAll('.btn-mod').forEach(btn => {
     btn.classList.toggle('aktif', btn.dataset.mod === mod);
   });
+}
+
+async function ayarlariKaydet() {
+  const chrootIp = document.getElementById('config-chroot-ip').value;
+  const ttydUrl = document.getElementById('config-ttyd-url').value;
+
+  const yanit = await fetch('/api/config', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ chroot_host: chrootIp, ttyd_url: ttydUrl })
+  });
+
+  const veri = await yanit.json();
+  if (veri.durum === 'ok') {
+    alert('Ayarlar başarıyla kaydedildi!');
+  } else {
+    alert('Ayarlar kaydedilirken hata oluştu!');
+  }
 }
 
 async function terminalUrlAyarla() {
@@ -98,11 +116,11 @@ function slaytOnizlemeAc() {
     modal.style.display = 'flex';
 
     // İlk yükleme için hash'i gönder
-    iframe.onload = function() {
+    iframe.onload = function () {
       try {
         const hash = iframe.contentWindow.location.hash;
         if (hash) slaytHashGonder(hash);
-      } catch(e) {
+      } catch (e) {
         // Cross-origin hatası yok say
       }
     };
@@ -134,7 +152,7 @@ function hashGonder() {
     } else {
       alert('⚠️ Hash yok! Slaytta ileri/geri gitmeyi deneyin.');
     }
-  } catch(e) {
+  } catch (e) {
     console.error('❌ Cross-origin hatası:', e);
     alert('❌ Cross-Origin hatası!\n\niframe içeriği okunamıyor.\n\nConsolu kontrol et (F12)');
   }
@@ -172,7 +190,7 @@ async function yoklamaCek() {
         <div class="isim">${o.ad_soyad}</div>
         <div class="numara">${o.numara}</div>
         <div class="sinif-etiket" style="font-size:0.75rem;color:#90cdf4;margin-left:auto;">${o.sinif || ''}</div>
-        ${o.paket && o.paket !== '—' ? `<div class="paket-etiket" style="font-size:0.7rem;color:#68d391;background:#1a3a2a;border:1px solid #2d6a4a;border-radius:4px;padding:0.1rem 0.4rem;margin-left:0.4rem;">📦 ${o.paket.split(' ')[0]+' '+o.paket.split(' ')[1]}</div>` : ''}
+        ${o.paket && o.paket !== '—' ? `<div class="paket-etiket" style="font-size:0.7rem;color:#68d391;background:#1a3a2a;border:1px solid #2d6a4a;border-radius:4px;padding:0.1rem 0.4rem;margin-left:0.4rem;">📦 ${o.paket.split(' ')[0] + ' ' + o.paket.split(' ')[1]}</div>` : ''}
         ${o.kaynak === 'manuel' ? `<span title="Manuel giriş" style="font-size:0.7rem;color:#f6c90e;background:#2d2a00;border:1px solid #6b5900;border-radius:4px;padding:0.1rem 0.4rem;margin-left:0.4rem;">👨‍🏫 M</span>` : ''}
         <div class="saat">${o.saat}</div>
         <button
@@ -183,7 +201,7 @@ async function yoklamaCek() {
         </button>
       </div>
     `).join('');
-  } catch(e) { /* sessiz */ }
+  } catch (e) { /* sessiz */ }
 }
 
 async function sinifDurumCek() {
@@ -219,7 +237,7 @@ async function sinifDurumCek() {
             <div class="ogrenci-mini ${o.geldi ? '' : 'devamsiz'}" id="ogrenci-${o.numara}">
               <div class="${o.geldi ? 'dot-geldi' : 'dot-gelmedi'}"></div>
               <span>${o.ad_soyad}</span>
-              ${o.geldi && o.paket && o.paket !== '—' ? `<span style="font-size:0.65rem;color:#68d391;background:#1a3a2a;border-radius:3px;padding:0 0.3rem;margin-left:0.3rem;">${o.paket.split(' ')[0]+' '+o.paket.split(' ')[1]}</span>` : ''}
+              ${o.geldi && o.paket && o.paket !== '—' ? `<span style="font-size:0.65rem;color:#68d391;background:#1a3a2a;border-radius:3px;padding:0 0.3rem;margin-left:0.3rem;">${o.paket.split(' ')[0] + ' ' + o.paket.split(' ')[1]}</span>` : ''}
               ${o.geldi && o.paket === 'manuel' ? `<span style="font-size:0.65rem;color:#f6c90e;margin-left:0.2rem;" title="Manuel giriş">👨‍🏫</span>` : ''}
               <span style="margin-left:auto;color:#718096;font-size:0.75rem;">${o.numara}</span>
               ${!o.geldi ? `<button
@@ -234,7 +252,7 @@ async function sinifDurumCek() {
       `;
     }
     grid.innerHTML = html;
-  } catch(e) { console.error(e); }
+  } catch (e) { console.error(e); }
 }
 
 async function manuelGiris(sinifId, numara, adSoyad) {
@@ -254,7 +272,7 @@ async function manuelGiris(sinifId, numara, adSoyad) {
     } else {
       alert('Hata: ' + veri.mesaj);
     }
-  } catch(e) {
+  } catch (e) {
     alert('Bağlantı hatası: ' + e.message);
   }
 }
@@ -289,7 +307,7 @@ async function arsivCSVIndir() {
     document.body.removeChild(a);
     window.URL.revokeObjectURL(url);
 
-  } catch(e) {
+  } catch (e) {
     if (e.status === 404) {
       alert('Bu tarihte kayıt bulunamadı.');
     } else {
@@ -328,7 +346,7 @@ async function yoklamaTemizle() {
     } else {
       alert('Hata: ' + veri.mesaj);
     }
-  } catch(e) {
+  } catch (e) {
     alert('Bağlantı hatası: ' + e.message);
   }
 }
@@ -353,7 +371,7 @@ async function tekSil(numara, adSoyad) {
     } else {
       alert('Hata: ' + veri.mesaj);
     }
-  } catch(e) {
+  } catch (e) {
     alert('Bağlantı hatası: ' + e.message);
   }
 }
@@ -377,7 +395,7 @@ async function sahteLogSil(kayitId) {
     } else {
       alert('Hata: ' + veri.mesaj);
     }
-  } catch(e) {
+  } catch (e) {
     alert('Bağlantı hatası: ' + e.message);
   }
 }
@@ -386,8 +404,8 @@ async function sahteLogSil(kayitId) {
 async function sahteCek() {
   try {
     const yanit = await fetch('/api/sahte_log');
-    const veri  = await yanit.json();
-    const kutu  = document.getElementById('sahte-kutu');
+    const veri = await yanit.json();
+    const kutu = document.getElementById('sahte-kutu');
     if (!kutu) return;
 
     const kayitlar = veri.kayitlar || [];
@@ -421,7 +439,7 @@ async function sahteCek() {
           <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.3rem;">
             <span style="color:#f6ad55;font-weight:600;">⚠️ Sahte Giriş Girişimi</span>
             <div style="display:flex;align-items:center;gap:0.5rem;">
-              <span style="color:#718096;">${k.tarih} ${k.saat.substring(0,5)} · ${k.sinif}</span>
+              <span style="color:#718096;">${k.tarih} ${k.saat.substring(0, 5)} · ${k.sinif}</span>
               <button
                 onclick="sahteLogSil(${k.id})"
                 style="padding:0.15rem 0.5rem;font-size:0.7rem;background:#742a2a;border:1px solid #9b2c2c;border-radius:4px;color:#feb2b2;cursor:pointer;"
@@ -446,7 +464,7 @@ async function sahteCek() {
         </div>`;
     }
     kutu.innerHTML = html;
-  } catch(e) { console.error('sahte log hatası:', e); }
+  } catch (e) { console.error('sahte log hatası:', e); }
 }
 
 // ── Güvenlik Uyarıları ───────────────────────────────────────────
@@ -470,7 +488,7 @@ function guvenlikSoketBaslat() {
       try {
         const audio = new Audio('/static/sounds/alert.mp3');
         audio.play().catch(e => console.log('Ses çalınamadı:', e));
-      } catch(e) {}
+      } catch (e) { }
 
       // Ekran uyarısı
       alert('⚠️ GÜVENLİK UYARISI ⚠️\n\n' + mesaj);
@@ -483,7 +501,7 @@ function guvenlikSoketBaslat() {
       console.log('Güvenlik soketi kesildi');
     });
 
-  } catch(e) {
+  } catch (e) {
     console.error('Güvenlik soketi hatası:', e);
   }
 }
@@ -518,7 +536,7 @@ async function guvenlikLogCek() {
         ">
           <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.3rem;">
             <span style="color:${renk};font-weight:600;">${ikon} ${log.durum}</span>
-            <span style="color:#718096;">${log.tarih} ${log.saat.substring(0,5)}</span>
+            <span style="color:#718096;">${log.tarih} ${log.saat.substring(0, 5)}</span>
           </div>
           <div style="color:#e2e8f0;">
             <span style="color:#90cdf4;">${log.session_ad}</span>
@@ -535,7 +553,7 @@ async function guvenlikLogCek() {
     }
 
     logDiv.innerHTML = html;
-  } catch(e) {
+  } catch (e) {
     console.error('Güvenlik log hatası:', e);
   }
 }
@@ -587,7 +605,7 @@ function slaytHashKontrol() {
     if (currentHash && currentHash !== sonHash) {
       slaytHashGonder(currentHash);
     }
-  } catch(e) {
+  } catch (e) {
     console.error('⚠️ Cross-origin hash okuma hatası:', e);
     // Cross-origin hatası yok say
   }

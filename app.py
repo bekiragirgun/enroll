@@ -319,6 +319,15 @@ def giris():
     session['ogrenci_numara'] = numara
     session['ogrenci_ad'] = ad_soyad
 
+    # Chroot ortamını login sırasında otomatik oluştur (hız için)
+    try:
+        from chroot_terminal import chroot_olustur, chroot_var_mi
+        if not chroot_var_mi(numara):
+            log.info(f"Oturum açıldı, chroot otomatik oluşturuluyor: {numara}")
+            threading.Thread(target=chroot_olustur, args=(numara,)).start()
+    except Exception as e:
+        log.error(f"Otomatik chroot oluşturma hatası: {e}")
+
     return render_template('ogrenci_ana.html', ad_soyad=ad_soyad, saat=saat, paket=ders_paketi)
 
 @app.route('/api/durum')
@@ -332,7 +341,8 @@ def api_durum():
     response = {
         'mod': ders_durumu['mod'],
         'dosya': ders_durumu['dosya'],
-        'slayt_hash': ders_durumu.get('slayt_hash', '')
+        'slayt_hash': ders_durumu.get('slayt_hash', ''),
+        'terminal_url': ders_durumu.get('terminal_url', '')
     }
     return jsonify(response)
 
@@ -397,12 +407,31 @@ def api_mod_degistir():
     if veri.get('mod') in ('bekleme', 'slayt', 'terminal'):
         ders_durumu['mod']   = veri['mod']
         ders_durumu['dosya'] = veri.get('dosya', '')
+        ders_durumu['terminal_url'] = veri.get('terminal_url', '')
 
         # Hash'i sıfırla (slayt moduna geçildiğinde)
         if 'slayt_hash' in veri and not veri['slayt_hash']:
             ders_durumu['slayt_hash'] = ''
 
     return jsonify({'durum': 'ok', 'mod': ders_durumu['mod']})
+
+@app.route('/api/config', methods=['POST'])
+@ogretmen_giris_gerekli
+def api_config():
+    veri = request.get_json()
+    if 'chroot_host' in veri:
+        ders_durumu['chroot_host'] = veri['chroot_host']
+        # chroot_terminal modülündeki IP'yi güncelle
+        try:
+            import chroot_terminal
+            chroot_terminal.CT_991_HOST = veri['chroot_host']
+        except:
+            pass
+            
+    if 'ttyd_url' in veri:
+        ders_durumu['ttyd_url'] = veri['ttyd_url']
+        
+    return jsonify({'durum': 'ok'})
 
 @app.route('/api/yoklama')
 @ogretmen_giris_gerekli
@@ -1091,11 +1120,12 @@ def ogrenci_baglan_event(veri):
         emit('hata', 'Kullanıcı oluşturulamadı!')
         return
 
-    # Container'a docker exec ile bağlan (PTY modunda)
+    # Container'a (PCT 991) SSH ile bağlan (PTY modunda)
     try:
         master_fd, slave_fd = pty.openpty()
+        from chroot_terminal import CT_991_HOST, CT_991_SSH_PORT
         proc = subprocess.Popen(
-            ['docker', 'exec', '-it', 'linux-lab', 'su', '-', username],
+            ['ssh', '-o', 'StrictHostKeyChecking=no', '-p', str(CT_991_SSH_PORT), f'{username}@{CT_991_HOST}'],
             stdin=slave_fd, stdout=slave_fd, stderr=slave_fd,
             preexec_fn=os.setsid
         )
@@ -1106,7 +1136,9 @@ def ogrenci_baglan_event(veri):
         socketio.emit('container_hazir', room=sid, namespace='/terminal')
 
         # Çıktıyı oku ve öğrenciye gönder
-        _pty_oku_ve_yayinla(master_fd, 'terminal_cikti', hedef_room=sid)
+        t = threading.Thread(target=_pty_oku_ve_yayinla,
+                             args=(master_fd, 'terminal_cikti', sid), daemon=True)
+        t.start()
 
     except Exception as e:
             socketio.emit('hata', f'Terminal bağlantı hatası: {str(e)}',

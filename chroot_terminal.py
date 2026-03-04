@@ -13,14 +13,20 @@ log = logging.getLogger("chroot_terminal")
 
 # CT 991 (ogrenci-vm) bilgileri
 CT_991_HOST = "192.168.111.51"  # CT 991 IP adresi
-CT_991_SSH_PORT = 2222
-CHROOT_MANAGE_SCRIPT = "/root/enroll/chroot_yonetici.py"
+CT_991_SSH_PORT = 2222          # Chroot içindeki SSH portu
+CT_991_REAL_SSH_PORT = 22       # CT 991 ana sistem SSH portu
+CHROOT_MANAGE_SCRIPT = "/root/ders-takip/chroot_yonetici.py" # PCT 991'deki tam yol
 
 
 def _ct991_exec(command: list) -> subprocess.CompletedProcess:
-    """CT 991 üzerinde komut çalıştır."""
-    full_command = ["pct", "exec", "991"] + command
-    return subprocess.run(full_command, capture_output=True, text=True)
+    """CT 991 üzerinde komut çalıştır (SSH üzerinden)."""
+    # PCT 990 üzerinden PCT 991'e SSH ile bağlanıp komut çalıştırır
+    ssh_cmd = [
+        "ssh", "-o", "ConnectTimeout=5", "-o", "BatchMode=yes",
+        "-p", str(CT_991_REAL_SSH_PORT),
+        f"root@{CT_991_HOST}"
+    ] + command
+    return subprocess.run(ssh_cmd, capture_output=True, text=True)
 
 
 def chroot_var_mi(username: str) -> bool:

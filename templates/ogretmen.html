@@ -157,6 +157,8 @@
           onclick="modDegistir('bekleme')">⏸ Beklet</button>
         <button class="btn-mod {% if aktif_mod == 'slayt' %}aktif{% endif %}" data-mod="slayt"
           onclick="modDegistir('slayt')">📽 Slayt</button>
+        <button class="btn-mod {% if aktif_mod == 'terminal' %}aktif{% endif %}" data-mod="terminal"
+          onclick="modDegistir('terminal')">💻 Terminal</button>
       </div>
 
       <h3 style="margin-bottom:0.75rem;">📁 Slayt Seçimi</h3>
@@ -188,6 +190,7 @@
           style="display:none;background:#c53030;color:#fff;border-radius:10px;padding:0 6px;font-size:0.72rem;margin-left:4px;">0</span>
       </button>
       <button class="tab-btn" onclick="tabGec('arsiv', this)">📁 Arşiv</button>
+      <button class="tab-btn" onclick="tabGec('ayarlar', this)">⚙️ Ayarlar</button>
     </div>
 
     <!-- Yoklama Listesi -->
@@ -254,6 +257,34 @@
       </div>
       <div id="guvenlik-log-kutu" style="margin-top:0.75rem;">
         <div style="color:#718096;text-align:center;padding:1rem;">Yükleniyor...</div>
+      </div>
+    </div>
+
+    <!-- Ayarlar -->
+    <div id="tab-ayarlar" class="panel-bolum" style="margin-top:1rem;">
+      <div class="kutu-baslik">
+        <h3>⚙️ Sistem Ayarları</h3>
+        <span style="color:#4a5568;font-size:0.8rem;">Sistem IP ve Terminal yapılandırması</span>
+      </div>
+      <div class="kontrol-kutu" style="margin-top:1rem; background:#1a202c;">
+        <div style="display:grid; gap:1.5rem;">
+          <div>
+            <label style="display:block; color:#90cdf4; font-size:0.9rem; margin-bottom:0.5rem;">🖥️ Chroot Host IP (PCT
+              991)</label>
+            <input type="text" id="config-chroot-ip" value="192.168.111.51"
+              style="width:100%; padding:0.6rem; background:#2d3748; border:1px solid #4a5568; border-radius:6px; color:#fff;">
+            <small style="color:#718096;">Öğrenci chroot ortamlarının oluşturulduğu sunucu.</small>
+          </div>
+          <div>
+            <label style="display:block; color:#90cdf4; font-size:0.9rem; margin-bottom:0.5rem;">📡 Terminal (TTYD)
+              Yayını URL</label>
+            <input type="text" id="config-ttyd-url" value="https://enroll.bekiragi.org/terminal-yayin"
+              style="width:100%; padding:0.6rem; background:#2d3748; border:1px solid #4a5568; border-radius:6px; color:#fff;">
+            <small style="color:#718096;">Öğrenci ekranında gösterilecek ortak terminal adresi.</small>
+          </div>
+          <button class="btn-kucuk" style="background:#48bb78; align-self:start;" onclick="ayarlariKaydet()">💾 Ayarları
+            Kaydet</button>
+        </div>
       </div>
     </div>
 
