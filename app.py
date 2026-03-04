@@ -227,6 +227,13 @@ def ana():
             ).fetchone()
             
             if yoklama:
+                # Session'da ad/soyad eksikse (eski oturum), veritabanından tamamla
+                if not session.get('ad') or not session.get('soyad'):
+                    ogrenci = db.execute('SELECT ad, soyad FROM ogrenciler WHERE numara=?', (session['numara'],)).fetchone()
+                    if ogrenci:
+                        session['ad'] = ogrenci['ad']
+                        session['soyad'] = ogrenci['soyad']
+
                 return render_template('ogrenci_ana.html', 
                                        ad_soyad=yoklama['ad_soyad'], 
                                        saat=yoklama['saat'], 
@@ -321,7 +328,8 @@ def giris():
         if var_mi:
             # Öğrenci zaten giriş yapmış
             session['numara'] = numara
-            session['ad'] = ad_soyad
+            session['ad'] = ogrenci['ad']
+            session['soyad'] = ogrenci['soyad']
             return redirect(url_for('ana'))
 
         # ── 3. YENİ KAYIT ──────────────────────────────────────────
@@ -334,7 +342,8 @@ def giris():
 
     # Öğrenci session bilgileri (terminal sayfası için gerekli)
     session['numara'] = numara
-    session['ad'] = ad_soyad
+    session['ad'] = ogrenci['ad']
+    session['soyad'] = ogrenci['soyad']
 
     # Chroot ortamını login sırasında otomatik oluştur (hız için)
     try:
