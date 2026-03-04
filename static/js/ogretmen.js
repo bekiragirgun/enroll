@@ -323,13 +323,7 @@ async function yoklamaTemizle() {
     return;
   }
 
-  if (!confirm(
-    `⚠️ DİKKAT!\n\n` +
-    `Bugünkü yoklamayı tamamen silmek istediğinize emin misiniz?\n` +
-    `• ${sayi} öğrenci kaydı silinecek\n` +
-    `• Bu işlem geri alınamaz\n\n` +
-    `Onaylıyor musunuz?`
-  )) return;
+  // Kullanıcı isteği: Onay sormadan direkt sil
 
   try {
     const yanit = await fetch('/api/yoklama/sil', {
@@ -340,7 +334,7 @@ async function yoklamaTemizle() {
     const veri = await yanit.json();
 
     if (veri.durum === 'ok') {
-      alert(`✅ ${veri.silinen} kayıt silindi.`);
+      console.log(`✅ ${veri.silinen} kayıt silindi.`);
       await yoklamaCek();
       await sinifDurumCek();
     } else {
@@ -352,10 +346,7 @@ async function yoklamaTemizle() {
 }
 
 async function tekSil(numara, adSoyad) {
-  if (!confirm(
-    `"${adSoyad}" (${numara})\n\n` +
-    `Bu öğrenci kaydını silmek istediğinize emin misiniz?`
-  )) return;
+  // Kullanıcı isteği: Onay sormadan direkt sil
 
   try {
     const yanit = await fetch('/api/yoklama/sil_tek', {
@@ -377,10 +368,7 @@ async function tekSil(numara, adSoyad) {
 }
 
 async function sahteLogSil(kayitId) {
-  if (!confirm(
-    `Bu şüpheli giriş kaydını silmek istediğinize emin misiniz?\n\n` +
-    `ID: ${kayitId}`
-  )) return;
+  // Kullanıcı isteği: Onay sormadan direkt sil
 
   try {
     const yanit = await fetch('/api/sahte_log/sil_tek', {
