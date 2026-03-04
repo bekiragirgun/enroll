@@ -1062,9 +1062,10 @@ def ogretmen_baglan_event():
             chroot_olustur(ogretmen_numara, "Öğretmen", "Paneli")
 
         # Container'a (PCT 991) SSH ile bağlan (PTY modunda)
+        # -t: PTY tahsisi için gerekli (terminal etkileşimi için kritik)
         master_fd, slave_fd = pty.openpty()
         proc = subprocess.Popen(
-            ['ssh', '-o', 'StrictHostKeyChecking=no', '-p', str(CT_991_SSH_PORT), f'{ogretmen_numara}@{CT_991_HOST}'],
+            ['ssh', '-t', '-o', 'StrictHostKeyChecking=no', '-p', str(CT_991_SSH_PORT), f'{ogretmen_numara}@{CT_991_HOST}'],
             stdin=slave_fd, stdout=slave_fd, stderr=slave_fd,
             preexec_fn=os.setsid
         )
@@ -1117,11 +1118,12 @@ def ogrenci_baglan_event(veri):
 
     # Container'a (PCT 991) SSH ile bağlan (PTY modunda)
     # NOT: Chroot ortamı login sırasında (terminal_login) otomatik oluşturuluyor.
+    # -t: PTY tahsisi için gerekli
     try:
         master_fd, slave_fd = pty.openpty()
         from chroot_terminal import CT_991_HOST, CT_991_SSH_PORT
         proc = subprocess.Popen(
-            ['ssh', '-o', 'StrictHostKeyChecking=no', '-p', str(CT_991_SSH_PORT), f'{username}@{CT_991_HOST}'],
+            ['ssh', '-t', '-o', 'StrictHostKeyChecking=no', '-p', str(CT_991_SSH_PORT), f'{username}@{CT_991_HOST}'],
             stdin=slave_fd, stdout=slave_fd, stderr=slave_fd,
             preexec_fn=os.setsid
         )
