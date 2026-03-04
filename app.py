@@ -8,6 +8,9 @@ Başlatmak için:
 Öğretmen paneli: http://localhost:3333/teacher
 """
 
+import eventlet
+eventlet.monkey_patch()
+
 import os
 import csv
 import sqlite3
@@ -30,7 +33,7 @@ from flask import (Flask, render_template, request, jsonify,
 from flask_socketio import SocketIO, emit, join_room, leave_room, Namespace
 
 from docker_terminal import (container_baslat, container_ip_al,
-                              container_durum, image_var_mi)
+                               container_durum, image_var_mi)
 
 # ── Yapılandırma ──────────────────────────────────────────────
 BASE_DIR      = Path(__file__).parent
@@ -47,7 +50,8 @@ app.config['SEND_FILE_MAX_AGE_DEFAULT'] = 0  # Static dosyaları cache'leme
 log = app.logger
 
 # ── SocketIO ─────────────────────────────────────────────────
-socketio = SocketIO(app, cors_allowed_origins="*", async_mode='threading')
+# eventlet ile daha performanslı ve stabil WebSocket desteği
+socketio = SocketIO(app, cors_allowed_origins="*", async_mode='eventlet')
 
 # Ders durumu (bellek içi)
 ders_durumu = {
@@ -1191,4 +1195,4 @@ if __name__ == '__main__':
     # Single container approach - temizleme gerekmez
 
     # SocketIO ile başlat (WebSocket desteği)
-    socketio.run(app, host='0.0.0.0', port=3333, debug=False, allow_unsafe_werkzeug=True)
+    socketio.run(app, host='0.0.0.0', port=3333, debug=False)
