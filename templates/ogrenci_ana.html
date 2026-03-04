@@ -46,8 +46,9 @@
 
   <script>
     // API URL config - Production için API proxy
+    // Geçici çözüm: DNS eklenene kadar ana domain'in 8080 portunu kullan
     window.API_BASE = window.location.hostname === 'enroll.bekiragi.org'
-      ? 'https://api.enroll.bekiragi.org:8080'
+      ? 'https://enroll.bekiragi.org:8080'
       : '';
   </script>
   <script src="/static/js/ogrenci.js"></script>
