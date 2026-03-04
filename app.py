@@ -841,7 +841,7 @@ def api_terminal_guvenlik_log():
     })
 
 # ── Terminal Rotaları ─────────────────────────────────────────
-@app.route('/terminal')
+@app.route('/terminal', strict_slashes=False)
 def terminal_sayfasi():
     """Terminal doğrulama ve otomatik yönlendirme sayfası."""
     # Ana oturumda numara var mı?
@@ -1103,7 +1103,7 @@ def terminal_kopma():
 @socketio.on('ogretmen_baglan', namespace='/terminal')
 def ogretmen_baglan_event(veri=None):
     """Öğretmen bağlandığında Docker container başlat."""
-    global ogretmen_sid, ogretmen_pty_fd, ogretmen_pty_pid
+    global ogretmen_sid, ogretmen_pty_fd, ogretmen_pty_pid, ders_durumu
 
     ogretmen_sid = request.sid
     ogretmen_numara = 'ogretmen'
@@ -1138,6 +1138,15 @@ def ogretmen_baglan_event(veri=None):
         t.start()
         
         log.info("Öğretmen terminali PCT 991 üzerinden bağlandı.")
+        
+        # OTOMATİK MOD DEĞİŞİMİ: Öğretmen terminale bağlandığında öğrencileri de terminale yönlendir
+        if ders_durumu['mod'] != 'terminal':
+            log.info(f"Otomatik mod değişimi tetiklendi: {ders_durumu['mod']} -> terminal")
+            ders_durumu['mod'] = 'terminal'
+            # URL'in de doğru olduğundan emin ol
+            if not ders_durumu.get('terminal_url'):
+                ders_durumu['terminal_url'] = '/terminal'
+            
         emit('bagli_ogrenci_sayisi', len(ogrenci_sidleri))
 
     except Exception as e:
