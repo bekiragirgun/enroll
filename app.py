@@ -1101,7 +1101,7 @@ def terminal_kopma():
 
 
 @socketio.on('ogretmen_baglan', namespace='/terminal')
-def ogretmen_baglan_event():
+def ogretmen_baglan_event(veri=None):
     """Öğretmen bağlandığında Docker container başlat."""
     global ogretmen_sid, ogretmen_pty_fd, ogretmen_pty_pid
 
