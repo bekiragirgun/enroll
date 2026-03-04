@@ -16,7 +16,7 @@ CT_991_HOST = "192.168.111.51"  # CT 991 IP adresi
 CT_991_SSH_PORT = 2222          # Chroot içindeki SSH portu
 CT_991_REAL_SSH_PORT = 2222       # CT 991 ana sistem SSH portu
 CHROOT_MANAGE_SCRIPT = "/root/enroll/chroot_yonetici.py" # PCT 991'deki tam yol
-PYTHON_PATH = "/root/enroll/venv/bin/python3" # PCT 991'deki venv yolu
+PYTHON_PATH = "python3" # PCT 991'deki python yolu (Venv yerine sistem python kullanıyoruz)
 CHROOT_BASE = "/home/chroot"
 
 
@@ -69,12 +69,12 @@ def sync_manager_script():
             
         content = local_path.read_text()
         
-        # Dosyayı SSH üzerinden pipe ile gönder
+        # Dizin varlığından emin ol ve dosyayı SSH üzerinden pipe ile gönder
         ssh_cmd = [
             "ssh", "-o", "ConnectTimeout=5", "-o", "BatchMode=yes",
             "-p", str(CT_991_REAL_SSH_PORT),
             f"root@{CT_991_HOST}",
-            f"cat > {CHROOT_MANAGE_SCRIPT} && chmod +x {CHROOT_MANAGE_SCRIPT}"
+            f"mkdir -p /root/enroll && cat > {CHROOT_MANAGE_SCRIPT} && chmod +x {CHROOT_MANAGE_SCRIPT}"
         ]
         
         subprocess.run(ssh_cmd, input=content, text=True, check=True)

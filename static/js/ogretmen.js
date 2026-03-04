@@ -256,7 +256,7 @@ async function sinifDurumCek() {
 }
 
 async function manuelGiris(sinifId, numara, adSoyad) {
-  if (!confirm(`"${adSoyad}" öğrencisini manuel giriş yapmış sayılsın mı?\n(Notebook bozuk / cihaz arızası vs.)`)) return;
+  // Kullanıcı isteği: Onay sormadan direkt işlem yap
 
   try {
     const yanit = await fetch('/api/manuel_giris', {
