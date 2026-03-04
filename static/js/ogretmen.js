@@ -471,6 +471,10 @@ async function sahteCek() {
 let guvenlikSoketi = null;
 
 function guvenlikSoketBaslat() {
+  if (typeof io === 'undefined') {
+    console.warn('⚠️ Socket.IO yüklenemedi, güvenlik uyarıları pasif.');
+    return;
+  }
   try {
     // Terminal namespace'ine bağlan
     guvenlikSoketi = io('/terminal', {
@@ -641,15 +645,11 @@ document.addEventListener('DOMContentLoaded', () => {
   sahteCek();
   guvenlikSoketBaslat();  // Güvenlik uyarılarını dinle
 
-  // Eski URL kontrolü ve otomatik düzeltme uyarısı
+  // Eski URL kontrolü ve otomatik düzeltme (Eskiden /terminal-yayin kullanılıyordu)
   const ttydUrlInput = document.getElementById('config-ttyd-url');
   if (ttydUrlInput && ttydUrlInput.value.includes('terminal-yayin')) {
-    console.warn('⚠️ Eski terminal URL algılandı! Güncelleniyor...');
+    console.log('🔄 Eski terminal URL düzeltiliyor...');
     ttydUrlInput.value = '/terminal';
-    // Kullanıcıya bilgi ver
-    setTimeout(() => {
-      alert('Dikkat: Eski terminal yayın adresi (/terminal-yayin) algılandı.\nSistem artık "/terminal" kullanıyor. Lütfen ayarları kaydedin.');
-    }, 1000);
   }
 
   setInterval(yoklamaCek, YOKLAMA_ARALIK);

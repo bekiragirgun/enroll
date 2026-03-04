@@ -45,29 +45,9 @@ server {
         proxy_set_header X-Forwarded-Proto \$scheme;
     }
 
-    # TTYD Terminal Yayını
-    location /terminal-yayin {
-        # Trailing slash redirect
-        rewrite ^/terminal-yayin$ /terminal-yayin/ permanent;
-    }
+    # TTYD Terminal Yayını için ana dizine yönlendirme (İsteğe bağlı)
+    # location /terminal-yayin { rewrite ^/terminal-yayin(.*)$ /terminal$1 permanent; }
 
-    location /terminal-yayin/ {
-        proxy_pass http://127.0.0.1:7681/;
-        proxy_http_version 1.1;
-        proxy_set_header Upgrade \$http_upgrade;
-        proxy_set_header Connection "upgrade";
-        proxy_set_header Host \$host;
-        proxy_set_header X-Real-IP \$remote_addr;
-        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto \$scheme;
-        
-        # WebSocket için gerekli timeout'lar
-        proxy_read_timeout 86400;
-        proxy_send_timeout 86400;
-        
-        # Buffer kapatma (terminal hızı için)
-        proxy_buffering off;
-    }
 }
 EOF
 
@@ -83,4 +63,4 @@ systemctl restart nginx
 
 echo -e "${GREEN}✨ Nginx başarıyla yapılandırıldı!${NC}"
 echo -e "Şu an şuradan erişebilirsiniz: http://$DOMAIN"
-echo -e "Terminal yayını: http://$DOMAIN/terminal-yayin/"
+echo -e "Terminal yayını: http://$DOMAIN/terminal"

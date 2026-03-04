@@ -843,22 +843,43 @@ def api_terminal_guvenlik_log():
 # ── Terminal Rotaları ─────────────────────────────────────────
 @app.route('/terminal')
 def terminal_sayfasi():
-    """Terminal doğrulama sayfası."""
+    """Terminal doğrulama ve otomatik yönlendirme sayfası."""
     # Ana oturumda numara var mı?
     if not session.get('numara'):
         return render_template('terminal_login.html', hata='Önce ana sayfadan giriş yapmalısınız.')
 
-    # Session bilgilerini al
+    # OTOMATİK GİRİŞ (User request: Student terminal should open automatically)
+    # Eğer terminal oturumu yoksa veya farklıysa, otomatik oluştur
     session_numara = session['numara']
     session_ad = session.get('ad', '')
     session_soyad = session.get('soyad', '')
-    session_ad_soyad = f"{session_ad} {session_soyad}".strip()
 
-    return render_template('terminal_guvenlik.html',
-                           session_numara=session_numara,
-                           session_ad=session_ad,
-                           session_soyad=session_soyad,
-                           session_ad_soyad=session_ad_soyad)
+    if session.get('terminal_numara') != session_numara:
+        # Chroot kontrol/yarat
+        from chroot_terminal import chroot_var_mi, chroot_olustur, chroot_ip_al
+        if not chroot_var_mi(session_numara):
+            log.info(f"Otomatik terminal girişi için chroot oluşturuluyor: {session_numara}")
+            chroot_olustur(session_numara, session_ad, session_soyad)
+            
+        ssh_ip = chroot_ip_al(session_numara)
+        session['terminal_numara'] = session_numara
+        session['terminal_ad'] = session_ad
+        session['terminal_soyad'] = session_soyad
+        session['terminal_ip'] = ssh_ip
+        
+        # Logla (başarılı otomatik giriş)
+        try:
+            with db_baglantisi() as db:
+                db.execute("""
+                    INSERT INTO terminal_guvenlik_log
+                    (tarih, saat, ip, session_numara, session_ad, girilen_numara, durum)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                """, (bugun(), simdi(), istemci_ip(), session_numara, f"{session_ad} {session_soyad}".strip(), session_numara, 'OTOMATIK_GIRIS'))
+                db.commit()
+        except Exception as e:
+            log.error(f"Terminal loglama hatası: {e}")
+
+    return redirect('/terminal/workspace')
 
 
 @app.route('/terminal/login', methods=['POST'])

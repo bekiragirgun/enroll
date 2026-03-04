@@ -1,87 +1,205 @@
 <!DOCTYPE html>
 <html lang="tr">
+
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Terminal — {{ ad_soyad }}</title>
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/xterm@5.3.0/css/xterm.min.css">
-<style>
-  * { margin:0; padding:0; box-sizing:border-box; }
-  body { background:#1a202c; color:#e2e8f0; font-family:system-ui,sans-serif; height:100vh; display:flex; flex-direction:column; overflow:hidden; }
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Terminal — {{ ad_soyad }}</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/xterm@5.3.0/css/xterm.min.css">
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
 
-  .header { display:flex; align-items:center; justify-content:space-between; padding:10px 16px; background:#2d3748; border-bottom:2px solid #ed8936; flex-shrink:0; }
-  .header h1 { font-size:16px; font-weight:700; color:#fbd38d; }
-  .header .info { font-size:13px; color:#a0aec0; }
-  .btn-cikis { padding:4px 14px; background:#e53e3e; color:#fff; border:none; border-radius:4px; cursor:pointer; font-size:13px; text-decoration:none; }
-  .btn-cikis:hover { background:#c53030; }
+    body {
+      background: #1a202c;
+      color: #e2e8f0;
+      font-family: system-ui, sans-serif;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
 
-  .workspace { flex:1; display:flex; flex-direction:column; padding:8px; gap:8px; min-height:0; }
+    .header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 10px 16px;
+      background: #2d3748;
+      border-bottom: 2px solid #ed8936;
+      flex-shrink: 0;
+    }
 
-  .terminal-panel { flex:1; border-radius:8px; overflow:hidden; border:1px solid #4299e1; min-height:0; }
-  .terminal-panel-header { padding:6px 12px; background:#2a4365; color:#bee3f8; font-size:13px; font-weight:600; display:flex; align-items:center; gap:8px; }
-  .terminal-wrap { flex:1; }
+    .header h1 {
+      font-size: 16px;
+      font-weight: 700;
+      color: #fbd38d;
+    }
 
-  .ssh-info { background:#0f1117; border:1px solid #48bb78; border-radius:8px; padding:12px; font-family:'Courier New',monospace; font-size:13px; }
-  .ssh-info .command { color:#48bb78; font-weight:600; }
-  .ssh-info .hint { color:#a0aec0; font-size:12px; margin-top:4px; }
-</style>
+    .header .info {
+      font-size: 13px;
+      color: #a0aec0;
+    }
+
+    .btn-cikis {
+      padding: 4px 14px;
+      background: #e53e3e;
+      color: #fff;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 13px;
+      text-decoration: none;
+    }
+
+    .btn-cikis:hover {
+      background: #c53030;
+    }
+
+    .workspace {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      padding: 8px;
+      gap: 8px;
+      min-height: 0;
+    }
+
+    .terminal-panel {
+      display: flex;
+      flex-direction: column;
+      border-radius: 8px;
+      overflow: hidden;
+      border: 1px solid #4299e1;
+      min-height: 0;
+    }
+
+    .terminal-panel-header {
+      padding: 6px 12px;
+      background: #2a4365;
+      color: #bee3f8;
+      font-size: 13px;
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-shrink: 0;
+    }
+
+    .terminal-wrap {
+      flex: 1;
+      min-height: 0;
+      background: #000;
+    }
+
+    .ssh-info {
+      background: #0f1117;
+      border: 1px solid #48bb78;
+      border-radius: 8px;
+      padding: 12px;
+      font-family: 'Courier New', monospace;
+      font-size: 13px;
+    }
+
+    .ssh-info .command {
+      color: #48bb78;
+      font-weight: 600;
+    }
+
+    .ssh-info .hint {
+      color: #a0aec0;
+      font-size: 12px;
+      margin-top: 4px;
+    }
+  </style>
 </head>
+
 <body>
 
-<div class="header">
-  <div>
-    <h1>💻 {{ ad_soyad }} — Linux Container</h1>
-    <div class="info">Numara: {{ numara }} | Container IP: {{ container_ip }}</div>
-  </div>
-  <a href="/terminal/logout" class="btn-cikis">Çıkış</a>
-</div>
-
-<div class="workspace">
-  <div class="ssh-info">
-    <div>🔗 SSH Bağlantı Komutu:</div>
-    <div class="command">ssh -p 2222 ogrenci@{{ container_ip }}</div>
-    <div class="hint">Şifre: ogrenci | Root olmak için: sudo su -</div>
+  <div class="header">
+    <div>
+      <h1>💻 {{ ad_soyad }} — Terminal</h1>
+      <div class="info">Numara: {{ numara }} | IP: {{ container_ip }}</div>
+    </div>
+    <a href="/" class="btn-cikis">Geri Dön</a>
   </div>
 
-  <div class="terminal-panel">
-    <div class="terminal-panel-header">🖥️ Terminal Çalışma Alanı</div>
-    <div class="terminal-wrap" id="terminal"></div>
+  <div class="workspace">
+    <!-- ÖĞRETMEN TERMİNALİ (ÜST %30) -->
+    <div class="terminal-panel" style="flex: 0 0 30%;">
+      <div class="terminal-panel-header" style="background: #744210; color: #fbd38d;">
+        👨‍🏫 ÖĞRETMEN EKRANI (İzleme)
+      </div>
+      <div class="terminal-wrap" id="terminal-teacher"></div>
+    </div>
+
+    <!-- ÖĞRENCİ TERMİNALİ (ALT %70) -->
+    <div class="terminal-panel" style="flex: 1;">
+      <div class="terminal-panel-header">
+        💻 SİZİN TERMİNALİNİZ
+      </div>
+      <div class="terminal-wrap" id="terminal-student"></div>
+    </div>
   </div>
-</div>
 
-<script src="https://cdn.jsdelivr.net/npm/xterm@5.3.0/lib/xterm.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/xterm-addon-fit@0.8.0/lib/xterm-addon-fit.min.js"></script>
-<script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
-<script>
-const fitAddon = new FitAddon.FitAddon();
+  <script src="https://cdn.jsdelivr.net/npm/xterm@5.3.0/lib/xterm.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/xterm-addon-fit@0.8.0/lib/xterm-addon-fit.min.js"></script>
+  <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+  <script>
+    // --- Öğrenci Terminali ---
+    const fitStudent = new FitAddon.FitAddon();
+    const termStudent = new Terminal({
+      cursorBlink: true,
+      theme: { background: '#0d1117', foreground: '#c9d1d9', cursor: '#4299e1' },
+      fontSize: 14,
+      fontFamily: 'Menlo, Monaco, "Courier New", monospace'
+    });
+    termStudent.loadAddon(fitStudent);
+    termStudent.open(document.getElementById('terminal-student'));
+    fitStudent.fit();
 
-const term = new Terminal({
-  cursorBlink: true,
-  scrollback: 1000,
-  theme: { background:'#0d1117', foreground:'#c9d1d9', cursor:'#4299e1' },
-  fontSize: 14
-});
-term.loadAddon(fitAddon);
-term.open(document.getElementById('terminal'));
-fitAddon.fit();
+    // --- Öğretmen Terminali (Sadece İzleme) ---
+    const fitTeacher = new FitAddon.FitAddon();
+    const termTeacher = new Terminal({
+      cursorBlink: false,
+      disableStdin: true,
+      theme: { background: '#1a1c23', foreground: '#cbd5e0' },
+      fontSize: 12,
+      fontFamily: 'Menlo, Monaco, "Courier New", monospace'
+    });
+    termTeacher.loadAddon(fitTeacher);
+    termTeacher.open(document.getElementById('terminal-teacher'));
+    fitTeacher.fit();
 
-window.addEventListener('resize', () => fitAddon.fit());
+    window.addEventListener('resize', () => {
+      fitStudent.fit();
+      fitTeacher.fit();
+    });
 
-// Socket.IO bağlantısı
-const socket = io('/terminal', { transports:['websocket','polling'] });
+    // Socket.IO bağlantısı
+    const socket = io('/terminal', { transports: ['websocket', 'polling'] });
 
-socket.on('connect', () => {
-  console.log('Bağlandı');
-  socket.emit('ogrenci_baglan', { numara: '{{ numara }}' });
-});
+    socket.on('connect', () => {
+      console.log('Terminal bağlı');
+      socket.emit('ogrenci_baglan', { username: '{{ numara }}' });
+    });
 
-socket.on('terminal_cikti', data => term.write(data));
-socket.on('hata', msg => term.write('\r\n\x1b[31m' + msg + '\x1b[0m\r\n'));
+    // Çıktıları yönlendir
+    socket.on('terminal_cikti', data => termStudent.write(data));
+    socket.on('ogretmen_cikti', data => termTeacher.write(data));
+    socket.on('ogretmen_temizle', () => termTeacher.clear());
 
-term.onData(data => {
-  socket.emit('terminal_girdi', { numara: '{{ numara }}', data: data });
-});
-</script>
+    socket.on('hata', msg => termStudent.write('\r\n\x1b[31m' + msg + '\x1b[0m\r\n'));
+
+    // Girdileri gönder
+    termStudent.onData(data => {
+      socket.emit('terminal_girdi', { data: data });
+    });
+  </script>
 
 </body>
+
 </html>

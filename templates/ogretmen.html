@@ -6,6 +6,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Öğretmen Paneli</title>
   <link rel="stylesheet" href="/static/css/stil.css">
+  <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
   <style>
     .sinif-grid {
       display: grid;
@@ -277,9 +278,10 @@
           <div>
             <label style="display:block; color:#90cdf4; font-size:0.9rem; margin-bottom:0.5rem;">📡 Terminal (TTYD)
               Yayını URL</label>
-            <input type="text" id="config-ttyd-url" value="https://enroll.bekiragi.org/terminal-yayin"
+            <input type="text" id="config-ttyd-url" value="/terminal"
               style="width:100%; padding:0.6rem; background:#2d3748; border:1px solid #4a5568; border-radius:6px; color:#fff;">
-            <small style="color:#718096;">Öğrenci ekranında gösterilecek ortak terminal adresi.</small>
+            <small style="color:#718096;">Öğrenci ekranında gösterilecek terminal adresi (Kendi terminal için /terminal
+              bırakın).</small>
           </div>
           <button class="btn-kucuk" style="background:#48bb78; align-self:start;" onclick="ayarlariKaydet()">💾 Ayarları
             Kaydet</button>
