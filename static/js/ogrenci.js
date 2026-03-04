@@ -1,11 +1,13 @@
-// Öğrenci tarafı — mod değişimini 500ms'de bir kontrol eder (hızlı senkronizasyon)
+// Öğrenci tarafı — mod değişimini 500ms'de bir kontrol eder
+const POLLING_ARALIK = 1000; // 1 saniyeye düşürelim (sunucu yükü için)
 
-const POLLING_ARALIK = 500;
-
-function mevcutModu() {
-  // LocalStorage'dan oku, yoksa 'bekleme'
-  return localStorage.getItem('mod') || 'bekleme';
-}
+// Mevcut durumu bellekte tut (Loop'u engellemek için en güvenli yol)
+let suAnkiDurum = {
+  mod: '',
+  dosya: '',
+  slayt_hash: '',
+  terminal_url: ''
+};
 
 function modalGoster(mod, ekstra) {
   const bekleme = document.getElementById('bekleme-ekrani');
@@ -17,141 +19,90 @@ function modalGoster(mod, ekstra) {
 
   if (mod === 'bekleme') {
     if (bekleme) bekleme.style.display = 'flex';
-  } else if (mod === 'slayt') {
+  }
+  else if (mod === 'slayt') {
     if (slayt) {
       slayt.style.display = 'block';
       const iframe = document.getElementById('slayt-iframe');
       if (iframe && ekstra?.dosya) {
-        // Hash ile birlikte URL oluştur
         const hash = ekstra?.slayt_hash || '';
         const yeniSrc = '/slayt/' + ekstra.dosya + hash;
 
-        // Dataset ile karşılaştır (iframe.src tam URL döner, karışıklık olur)
-        if (iframe.dataset.dosya !== ekstra.dosya || iframe.dataset.hash !== hash) {
+        // Iframe URL'i gerçekten farklıysa yükle
+        if (iframe.dataset.lastSrc !== yeniSrc) {
           iframe.src = yeniSrc;
-          iframe.dataset.dosya = ekstra.dosya;
-          iframe.dataset.hash = hash;
+          iframe.dataset.lastSrc = yeniSrc;
         }
       }
     }
-  } else if (mod === 'terminal') {
+  }
+  else if (mod === 'terminal') {
     if (terminal) {
       terminal.style.display = 'flex';
       const iframe = document.getElementById('terminal-iframe');
       const loading = document.getElementById('terminal-loading');
-      console.log('Terminal modu aktif, ekstra:', ekstra);
 
-      if (loading) loading.style.display = 'block';
+      if (iframe && ekstra?.terminal_url) {
+        let url = ekstra.terminal_url;
+        // Nginx uyumu için trailing slash ekle (404'ü önlemek için)
+        if (!url.endsWith('/')) url += '/';
 
-      if (iframe) {
-        if (ekstra?.terminal_url) {
-          console.log('Terminal URL ayarlanıyor:', ekstra.terminal_url);
-          const url = ekstra.terminal_url;
+        if (iframe.dataset.lastUrl !== url) {
+          console.log('[Terminal] URL yükleniyor:', url);
+          if (loading) loading.style.display = 'block';
+          iframe.src = url;
+          iframe.dataset.lastUrl = url;
 
-          if (iframe.dataset.url !== url) {
-            iframe.src = url;
-            iframe.dataset.url = url;
-
-            // Loading'i gizle (iframe yüklenince veya timeout)
-            iframe.onload = () => {
-              console.log('Terminal yüklendi!');
-              if (loading) loading.style.display = 'none';
-            };
-
-            iframe.onerror = () => {
-              console.error('Terminal yüklenemedi!');
-              if (loading) loading.style.display = 'none';
-              alert('Terminal yüklenemedi. TTYD çalışmıyor olabilir.');
-            };
-          }
-        } else {
-          console.warn('Terminal URL bulunamadı! Ekstra veri:', ekstra);
-          iframe.src = 'about:blank';
-          if (loading) loading.style.display = 'none';
+          iframe.onload = () => { if (loading) loading.style.display = 'none'; };
+          iframe.onerror = () => {
+            if (loading) loading.style.display = 'none';
+            alert('Terminal yüklenemedi. TTYD çalışmıyor olabilir.');
+          };
         }
-      } else {
-        console.error('Terminal iframe bulunamadı!');
-        if (loading) loading.style.display = 'none';
       }
-
-      // Timeout: 10 saniye sonra loading'i gizle
-      setTimeout(() => {
-        if (loading) loading.style.display = 'none';
-      }, 10000);
     }
   }
 
-  // Mod bilgisini localStorage'a kaydet
-  localStorage.setItem('mod', mod);
   document.body.dataset.mod = mod;
 }
 
 async function durumKontrol() {
   try {
-    // API URL'i config'den al (production için API proxy)
-    const apiUrl = (window.API_BASE || '') + '/api/durum';
-
-    // Cloudflare Access CORS sorunu için same-origin flag
+    const apiUrl = '/api/durum';
     const yanit = await fetch(apiUrl, {
       credentials: 'same-origin',
-      headers: {
-        'Cache-Control': 'no-cache'
-      }
+      headers: { 'Cache-Control': 'no-cache' }
     });
 
-    if (!yanit.ok) {
-      console.warn('API yanıtı başarısız:', yanit.status, yanit.statusText);
-      return;
-    }
+    if (!yanit.ok) return;
 
     const veri = await yanit.json();
-    const eskiMod = mevcutModu();
-    const slaytIframe = document.getElementById('slayt-iframe');
-    const eskiDosya = slaytIframe?.dataset.dosya || '';
-    const eskiHash = slaytIframe?.dataset.hash || '';
-    const terminalIframe = document.getElementById('terminal-iframe');
-    const eskiTerminalUrl = terminalIframe?.dataset.url || '';
 
-    // Terminal URL için trailing slash kontrolü yapalım (Nginx uyumu için)
-    if (veri.mod === 'terminal' && veri.terminal_url && !veri.terminal_url.endsWith('/')) {
-      veri.terminal_url += '/';
-    }
-
-    // Durum değişti mi kontrolü
-    let degisti = false;
-    if (veri.mod !== eskiMod) {
-      console.log(`[Polling] Mod değişti: ${eskiMod} -> ${veri.mod}`);
-      degisti = true;
-    }
-    if (veri.dosya !== eskiDosya) {
-      console.log(`[Polling] Dosya değişti: ${eskiDosya} -> ${veri.dosya}`);
-      degisti = true;
-    }
-    if (veri.mod === 'slayt' && veri.slayt_hash !== eskiHash) {
-      console.log(`[Polling] Slayt hash değişti: ${eskiHash} -> ${veri.slayt_hash}`);
-      degisti = true;
-    }
-    if (veri.mod === 'terminal' && veri.terminal_url !== eskiTerminalUrl) {
-      console.log(`[Polling] Terminal URL değişti: ${eskiTerminalUrl} -> ${veri.terminal_url}`);
-      degisti = true;
-    }
+    // Derin karşılaştırma (Loop'u durduran asıl yer)
+    const degisti =
+      veri.mod !== suAnkiDurum.mod ||
+      veri.dosya !== suAnkiDurum.dosya ||
+      veri.slayt_hash !== suAnkiDurum.slayt_hash ||
+      veri.terminal_url !== suAnkiDurum.terminal_url;
 
     if (degisti) {
-      console.log('[Polling] Yeni durum uygulanıyor:', veri);
+      console.log('[Polling] Durum değişti:', suAnkiDurum, '->', veri);
 
-      if (slaytIframe) {
-        slaytIframe.dataset.dosya = veri.dosya || '';
-        if (veri.mod === 'slayt') slaytIframe.dataset.hash = veri.slayt_hash || '';
-      }
+      // Bellekteki durumu güncelle
+      suAnkiDurum = { ...veri };
 
+      // Arayüzü güncelle
       modalGoster(veri.mod, veri);
     }
   } catch (e) {
-    console.error('[Polling] Kritik hata:', e);
+    console.error('[Polling] Hata:', e);
   }
 }
 
-// Sayfa yüklendikten sonra polling başlat
+// Polling başlat
 document.addEventListener('DOMContentLoaded', () => {
+  // İlk yüklemede çalıştır
+  durumKontrol();
+  // Sonra periyodik
   setInterval(durumKontrol, POLLING_ARALIK);
 });
