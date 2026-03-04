@@ -115,11 +115,21 @@ def create_student_chroot(username, real_name=""):
         (student_path / d).mkdir(parents=True, exist_ok=True)
 
     # Temel device file'larını oluştur
-    devices = ["null", "zero", "full", "random", "tty", "urandom"]
-    for device in devices:
+    # null (1,3), zero (1,5), full (1,7), random (1,8), urandom (1,9), tty (5,0)
+    device_map = {
+        "null": ("c", "1", "3"),
+        "zero": ("c", "1", "5"),
+        "full": ("c", "1", "7"),
+        "random": ("c", "1", "8"),
+        "urandom": ("c", "1", "9"),
+        "tty": ("c", "5", "0")
+    }
+    for device, (dev_type, major, minor) in device_map.items():
         dev_path = student_path / "dev" / device
         if not dev_path.exists():
-            subprocess.run(["mknod", "-m", "666", str(dev_path), "c", "1", "5"], check=False)
+            # Not: mknod yetki hatası alabilir (container içinde ise), hata vermeden devam et
+            subprocess.run(["mknod", "-m", "666", str(dev_path), dev_type, major, minor], 
+                           capture_output=True, check=False)
 
     # Host sistemde kullanıcıyı oluştur (SSH için)
     try:
@@ -129,7 +139,8 @@ def create_student_chroot(username, real_name=""):
             _run(["groupadd", STUDENT_GROUP])
         pwd.getpwnam(username)
     except KeyError:
-        _run(["useradd", "-m", "-s", "/bin/bash", "-G", STUDENT_GROUP, "-c", real_name, username])
+        # --badname: Sayısal kullanıcı adlarına (örn: 123) izin ver
+        _run(["useradd", "--badname", "-m", "-s", "/bin/bash", "-G", STUDENT_GROUP, "-c", real_name, username])
 
     # Chroot içinde konfigürasyon dosyaları
     passwd_file = student_path / "etc" / "passwd"
