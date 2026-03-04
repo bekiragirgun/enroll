@@ -89,90 +89,6 @@ def setup_template():
     log.info("✅ Şablon chroot hazır!")
 
 
-def sync_chroot_configs(username, real_name=""):
-    """Chroot içindeki konfigürasyon dosyalarını host ile senkronize et."""
-    student_path = CHROOT_BASE / username
-    if not student_path.exists():
-        return False
-
-    # Host üzerindeki gerçek UID ve GID'leri al
-    try:
-        user_info = pwd.getpwnam(username)
-        group_info = grp.getgrnam(STUDENT_GROUP)
-        REAL_UID = user_info.pw_uid
-        REAL_GID = group_info.gr_gid
-    except KeyError as e:
-        log.error(f"Host sistemde kullanıcı/grup bulunamadı: {e}")
-        return False
-
-    # Chroot içinde konfigürasyon dosyaları
-    passwd_file = student_path / "etc" / "passwd"
-    shadow_file = student_path / "etc" / "shadow"
-    group_file = student_path / "etc" / "group"
-    hosts_file = student_path / "etc" / "hosts"
-
-    # 1. Grup Senkronizasyonu
-    try:
-        group_content = group_file.read_text() if group_file.exists() else ""
-        if f"{STUDENT_GROUP}:x:{REAL_GID}:" not in group_content:
-            # Mevcut satırı bul ve güncelle veya ekle
-            lines = [l for l in group_content.splitlines() if not l.startswith(f"{STUDENT_GROUP}:")]
-            lines.append(f"{STUDENT_GROUP}:x:{REAL_GID}:{username}")
-            group_file.write_text("\n".join(lines) + "\n")
-    except Exception as e:
-        log.error(f"Grup dosyası güncelleme hatası: {e}")
-
-    # 2. Passwd Senkronizasyonu
-    try:
-        passwd_content = passwd_file.read_text() if passwd_file.exists() else ""
-        if f"{username}:x:{REAL_UID}:{REAL_GID}:" not in passwd_content:
-            lines = [l for l in passwd_content.splitlines() if not l.startswith(f"{username}:")]
-            lines.append(f"{username}:x:{REAL_UID}:{REAL_GID}:{real_name}:/home/{username}:/bin/bash")
-            passwd_file.write_text("\n".join(lines) + "\n")
-    except Exception as e:
-        log.error(f"Passwd dosyası güncelleme hatası: {e}")
-
-    # 3. Shadow Senkronizasyonu (Şifrelerin çalışması için)
-    try:
-        if not shadow_file.exists(): shadow_file.write_text("")
-        result = subprocess.run(["grep", f"^{username}:", "/etc/shadow"], capture_output=True, text=True)
-        if result.returncode == 0:
-            shadow_content = shadow_file.read_text()
-            if result.stdout.strip() not in shadow_content:
-                lines = [l for l in shadow_content.splitlines() if not l.startswith(f"{username}:")]
-                lines.append(result.stdout.strip())
-                shadow_file.write_text("\n".join(lines) + "\n")
-        _run(["chmod", "0600", str(shadow_file)], check=False)
-    except Exception as e:
-        log.error(f"Shadow senkronizasyon hatası: {e}")
-
-    # 4. Hostname ve /etc/hosts (Sudo hatası için)
-    try:
-        hosts_content = "127.0.0.1\tlocalhost\n127.0.1.1\togrenci-vm\n"
-        hosts_file.write_text(hosts_content)
-        (student_path / "etc" / "hostname").write_text("ogrenci-vm\n")
-    except Exception as e:
-        log.error(f"Hosts/Hostname güncelleme hatası: {e}")
-
-    # 5. Sudoers
-    try:
-        sudoers = student_path / "etc" / "sudoers"
-        sudoers_line = f"{username} ALL=(ALL:ALL) NOPASSWD:ALL"
-        if not sudoers.exists() or sudoers_line not in sudoers.read_text():
-            sudoers.write_text(sudoers_line + "\n")
-            _run(["chmod", "0440", str(sudoers)], check=False)
-    except Exception as e:
-        log.error(f"Sudoers güncelleme hatası: {e}")
-
-    # 6. Home Dizin Yetkileri
-    try:
-        student_home = student_path / "home" / username
-        if student_home.exists():
-            _run(["chown", "-R", f"{REAL_UID}:{REAL_GID}", str(student_home)], check=False)
-    except Exception as e:
-        log.error(f"Home dizin yetki hatası: {e}")
-
-    return True
 
 
 def _slugify(text):
@@ -271,14 +187,24 @@ def sync_chroot_configs(username, real_name=""):
                     shadow_file.write_text("\n".join(lines) + "\n")
                     log.info(f"📝 {shadow_file} için placeholder eklendi")
 
-        # Sudoers dosyasını kopyala
-        sudo_src = Path("/etc/sudoers.d/chroot-ogrenciler")
+        # /etc/hosts ve /etc/hostname senkronizasyonu (Sudo fix)
+        try:
+            hosts_file = student_path / "etc" / "hosts"
+            hosts_content = "127.0.0.1\tlocalhost\n127.0.1.1\togrenci-vm\n"
+            hosts_file.write_text(hosts_content)
+            (student_path / "etc" / "hostname").write_text("ogrenci-vm\n")
+            log.info(f"📝 {hosts_file} ve hostname güncellendi")
+        except Exception as e:
+            log.warning(f"⚠️ Hosts güncelleme hatası: {e}")
+
+        # Sudoers dosyasını kopyala ve içeriği doğrula
         sudo_dst = student_path / "etc" / "sudoers.d" / "chroot-ogrenciler"
-        if sudo_src.exists():
-            sudo_dst.parent.mkdir(parents=True, exist_ok=True)
-            subprocess.run(["cp", str(sudo_src), str(sudo_dst)], check=False)
-            subprocess.run(["chmod", "0440", str(sudo_dst)], check=False)
-            log.info(f"📝 Sudoers kopyalandı: {sudo_dst}")
+        sudo_dst.parent.mkdir(parents=True, exist_ok=True)
+        # Doğrudan içeriği yaz (Host'a güvenmek yerine)
+        sudo_content = f"%{STUDENT_GROUP} ALL=(ALL) NOPASSWD: ALL\n{username} ALL=(ALL) NOPASSWD: ALL\n"
+        sudo_dst.write_text(sudo_content)
+        _run(["chmod", "0440", str(sudo_dst)], check=False)
+        log.info(f"📝 Sudoers yapılandırıldı: {sudo_dst}")
 
         return True
     except Exception as e:
