@@ -157,13 +157,13 @@ def sync_chroot_configs(username, real_name=""):
             lines = group_file.read_text().splitlines()
             # Mevcut grubu temizle
             lines = [l for l in lines if not l.startswith(f"{STUDENT_GROUP}:")]
-            # Yeni satırı ekle
+            # Yeni satırı ekle (Host'taki gerçek GID'yi kullan)
             lines.append(f"{STUDENT_GROUP}:x:{user_info.pw_gid}:{username}")
-            # tty grubunu da ekle (PTY için)
-            if not any(l.startswith("tty:x:5:") for l in lines):
+            # tty grubunu da ekle (PTY ve sudo için önemli)
+            if not any(l.startswith("tty:") for l in lines):
                 lines.append("tty:x:5:")
-            group_file.write_text("\n".join(lines) + "\n")
-            log.info(f"📝 {group_file} güncellendi")
+            group_file.write_text("\n".join([l for l in lines if l.strip()]) + "\n")
+            log.info(f"📝 {group_file} güncellendi (GID: {user_info.pw_gid})")
 
         # /etc/shadow senkronizasyonu (Authentication failure çözümü)
         shadow_file = student_path / "etc" / "shadow"
@@ -385,17 +385,23 @@ def mount_student_chroot(username):
     sys_path.mkdir(exist_ok=True)
     pts_path.mkdir(exist_ok=True)
 
-    # Mount durumunu kontrol et (zaten mount edilmişse tekrar etme)
+    # Mount durumunu kontrol et
     check_mount = subprocess.run(["mountpoint", "-q", str(dev_path)])
     if check_mount.returncode != 0:
+        # 1. Önce /dev bind mount
         subprocess.run(["mount", "-o", "bind", "/dev", str(dev_path)], check=False)
-        # PTY allocation hatası için özel mount seçenekleri
-        subprocess.run(["mount", "-t", "devpts", "devpts", str(pts_path), "-o", "gid=5,mode=620"], check=False)
+        
+        # 2. /dev/pts'i temiz bir şekilde mount et (newinstance ile izolasyon arttırılır)
+        # Önce varsa unmount et (bind mount'tan gelen kırıntıları temizle)
+        subprocess.run(["umount", "-l", str(pts_path)], check=False)
+        subprocess.run(["mount", "-t", "devpts", "devpts", str(pts_path), "-o", "gid=5,mode=620,newinstance,ptmxmode=666"], check=False)
+        
+        # 3. /dev/ptmx linkini tazele (newinstance ptmx'i pts/ptmx'dedir)
+        subprocess.run(["ln", "-snf", "/dev/pts/ptmx", str(dev_path / "ptmx")], check=False)
+        
+        # 4. Diğer fs'ler
         subprocess.run(["mount", "-t", "proc", "proc", str(proc_path)], check=False)
         subprocess.run(["mount", "-t", "sysfs", "sysfs", str(sys_path)], check=False)
-        # /dev/ptmx linki önemli
-        if not (dev_path / "ptmx").exists():
-            subprocess.run(["ln", "-s", "/dev/pts/ptmx", str(dev_path / "ptmx")], check=False)
     
     # Resolv.conf kopyala (İnternet erişimi için - her seferinde tazele)
     subprocess.run(["cp", "/etc/resolv.conf", str(student_path / "etc" / "resolv.conf")], check=False)
