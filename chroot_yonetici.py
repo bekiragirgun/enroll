@@ -17,7 +17,7 @@ import logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 log = logging.getLogger(__name__)
 
-VERSION = "2026-03-04-PTY-FIX-V3"
+VERSION = "2026-03-04-PTY-FIX-V4"
 log.info(f"🚀 Chroot Manager Script Version: {VERSION}")
 
 # Yapılandırma
@@ -365,6 +365,9 @@ def delete_student_chroot(username):
     return True
 
 
+VERSION = "2026-03-04-PTY-FIX-V4"
+log.info(f"🚀 Chroot Manager Script Version: {VERSION}")
+
 def mount_student_chroot(username):
     """Chroot için gerekli filesystem'leri mount et ve konfigürasyonları tazele."""
     username = _slugify(username)
@@ -388,38 +391,46 @@ def mount_student_chroot(username):
     sys_path.mkdir(exist_ok=True)
     pts_path.mkdir(exist_ok=True)
 
-    # Mount durumunu kontrol et
-    check_mount = subprocess.run(["mountpoint", "-q", str(dev_path)])
-    if check_mount.returncode != 0:
-        # 1. Önce /dev bind mount
-        subprocess.run(["mount", "-o", "bind", "/dev", str(dev_path)], check=False)
-        
-        # 2. /dev/pts'i temiz bir şekilde mount et
-        # Önce varsa unmount et
-        subprocess.run(["umount", "-l", str(pts_path)], check=False)
-        
-        # 'newinstance' bazı container kernel'larında 'Invalid argument' hatası verebilir.
-        # Önce en güvenli (standard) yöntemle dene, başarısız olursa bind-mount'a düş.
-        res = subprocess.run(["mount", "-t", "devpts", "devpts", str(pts_path), "-o", "gid=5,mode=620,ptmxmode=666"], capture_output=True)
-        if res.returncode != 0:
-            log.warning(f"⚠️ Standard devpts mount failed ({res.stderr.strip()}), falling back to bind-mount...")
-            subprocess.run(["mount", "-o", "bind", "/dev/pts", str(pts_path)], check=False)
-        
-        # 3. /dev/ptmx linkini tazele
-        subprocess.run(["ln", "-snf", "/dev/pts/ptmx", str(dev_path / "ptmx")], check=False)
-        # Bazen ptmx karakter cihazı olarak kalmış olabilir, onu temizle ve link yap
-        if (dev_path / "ptmx").is_file() and not (dev_path / "ptmx").is_symlink():
-            subprocess.run(["rm", "-f", str(dev_path / "ptmx")], check=False)
-            subprocess.run(["ln", "-s", "/dev/pts/ptmx", str(dev_path / "ptmx")], check=False)
-        
-        # 4. Diğer fs'ler
+    # 1. /proc ve /sys mount
+    if subprocess.run(["mountpoint", "-q", str(proc_path)]).returncode != 0:
         subprocess.run(["mount", "-t", "proc", "proc", str(proc_path)], check=False)
+    if subprocess.run(["mountpoint", "-q", str(sys_path)]).returncode != 0:
         subprocess.run(["mount", "-t", "sysfs", "sysfs", str(sys_path)], check=False)
+
+    # 2. /dev konfigürasyonu
+    # TÜM /dev'i bind mount etmek yerine kritik cihazları bağlayalım veya kernel dev'ini kullanalım
+    # Ancak en kolayı bind-mount /dev ama pts'i sonradan üzerine mount etmek
+    if subprocess.run(["mountpoint", "-q", str(dev_path)]).returncode != 0:
+        subprocess.run(["mount", "-o", "bind", "/dev", str(dev_path)], check=False)
     
-    # Resolv.conf kopyala (İnternet erişimi için - her seferinde tazele)
+    # 3. /dev/pts - ASIL ÖNEMLİ NOKTA
+    # Önce unmount et (bind mount'tan gelenleri temizle)
+    subprocess.run(["umount", "-l", str(pts_path)], check=False)
+    
+    # LXC içinde 'newinstance' bazen hata verir. Önce standart deniyoruz.
+    # gid=5 (tty), mode=620
+    res = subprocess.run(["mount", "-t", "devpts", "devpts", str(pts_path), "-o", "gid=5,mode=620,ptmxmode=666"], capture_output=True)
+    if res.returncode != 0:
+        # Alternatif: newinstance dene
+        res2 = subprocess.run(["mount", "-t", "devpts", "devpts", str(pts_path), "-o", "gid=5,mode=620,newinstance,ptmxmode=666"], capture_output=True)
+        if res2.returncode != 0:
+            log.warning(f"⚠️ devpts mount failed, falling back to bind-mount for /dev/pts...")
+            subprocess.run(["mount", "-o", "bind", "/dev/pts", str(pts_path)], check=False)
+    
+    # 4. /dev/ptmx linkini tazele
+    # PTY allocation hatası (Invalid argument) genelde ptmx <-> pts/ptmx uyumsuzluğundan çıkar.
+    ptmx_node = dev_path / "ptmx"
+    if ptmx_node.exists() and not ptmx_node.is_symlink():
+        # Dosya veya character device ise linke çevirmeyi dene (bind-mount altındaysa hata verebilir)
+        subprocess.run(["rm", "-f", str(ptmx_node)], check=False)
+    
+    if not ptmx_node.exists() or not ptmx_node.is_symlink():
+        subprocess.run(["ln", "-snf", "pts/ptmx", str(ptmx_node)], check=False)
+    
+    # Resolv.conf kopyala
     subprocess.run(["cp", "/etc/resolv.conf", str(student_path / "etc" / "resolv.conf")], check=False)
 
-    log.info(f"✅ {username} chroot hazır ve mount edildi.")
+    log.info(f"✅ {username} chroot (V4) hazır ve mount edildi.")
     return True
 
 
