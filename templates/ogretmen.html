@@ -127,7 +127,6 @@
       <div style="display:flex;gap:0.5rem;">
         <button onclick="bekletModu()" class="btn-kucuk" style="background:#48bb78;">⏸️ Beklet</button>
         <button onclick="slaytModu()" class="btn-kucuk" style="background:#ed8936;">📊 Slayt</button>
-        <button onclick="terminalModu()" class="btn-kucuk" style="background:#e53e3e;">💻 Terminal</button>
         <button class="btn-kucuk yeşil" onclick="csvIndir()">📥 CSV</button>
         <a href="/teacher/logout" class="btn-kucuk" style="text-decoration:none;color:inherit;">🚪</a>
       </div>
@@ -158,7 +157,7 @@
         <button class="btn-mod {% if aktif_mod == 'slayt' %}aktif{% endif %}" data-mod="slayt"
           onclick="modDegistir('slayt')">📽 Slayt</button>
         <button class="btn-mod {% if aktif_mod == 'terminal' %}aktif{% endif %}" data-mod="terminal"
-          onclick="modDegistir('terminal')">💻 Terminal</button>
+          onclick="terminalModu()">💻 Terminal</button>
       </div>
 
       <h3 style="margin-bottom:0.75rem;">📁 Slayt Seçimi</h3>

@@ -1051,19 +1051,20 @@ def ogretmen_baglan_event():
     global ogretmen_sid, ogretmen_pty_fd, ogretmen_pty_pid
 
     ogretmen_sid = request.sid
-    ogretmen_numara = 'ogretmen'  # Öğretmen için özel numara
+    ogretmen_numara = 'ogretmen'
 
-    # Docker container başlat
-    cid = container_baslat(ogretmen_numara)
-    if not cid:
-        emit('hata', 'Öğretmen container başlatılamadı!')
-        return
-
-    # Container'a docker exec ile bağlan (PTY modunda)
+    # Chroot ortamını kontrol et/yarat (PCT 991 üzerinde)
+    from chroot_terminal import chroot_var_mi, chroot_olustur, CT_991_HOST, CT_991_SSH_PORT
+    
     try:
+        if not chroot_var_mi(ogretmen_numara):
+            log.info(f"Öğretmen chroot ortamı oluşturuluyor...")
+            chroot_olustur(ogretmen_numara, "Öğretmen", "Paneli")
+
+        # Container'a (PCT 991) SSH ile bağlan (PTY modunda)
         master_fd, slave_fd = pty.openpty()
         proc = subprocess.Popen(
-            ['docker', 'exec', '-it', f'terminal-{ogretmen_numara}', '/bin/bash'],
+            ['ssh', '-o', 'StrictHostKeyChecking=no', '-p', str(CT_991_SSH_PORT), f'{ogretmen_numara}@{CT_991_HOST}'],
             stdin=slave_fd, stdout=slave_fd, stderr=slave_fd,
             preexec_fn=os.setsid
         )
@@ -1072,14 +1073,17 @@ def ogretmen_baglan_event():
         ogretmen_pty_fd = master_fd
         ogretmen_pty_pid = proc.pid
 
-        # PTY çıktısını oku ve tüm öğrencilere yayınla
+        # PTY çıktısını oku ve yayınla
         t = threading.Thread(target=_pty_oku_ve_yayinla,
                              args=(master_fd, 'ogretmen_cikti', None, True), daemon=True)
         t.start()
-
+        
+        log.info("Öğretmen terminali PCT 991 üzerinden bağlandı.")
         emit('bagli_ogrenci_sayisi', len(ogrenci_sidleri))
+
     except Exception as e:
-        emit('hata', f'Container bağlantı hatası: {str(e)}')
+        log.error(f"Öğretmen terminal bağlantı hatası: {str(e)}")
+        emit('hata', f'Terminal bağlantı hatası: {str(e)}')
 
 
 @socketio.on('ogretmen_girdi', namespace='/terminal')
@@ -1111,18 +1115,8 @@ def ogrenci_baglan_event(veri):
 
     ogrenci_sidleri[sid] = username
 
-    # Tek container'ı başlat (ilk öğrenci için)
-    if not container_durum():
-        if not container_baslat():
-            emit('hata', 'Container başlatılamadı! Docker çalışıyor mu?')
-            return
-
-    # Kullanıcıyı container'da oluştur
-    if not kullanici_olustur(username):
-        emit('hata', 'Kullanıcı oluşturulamadı!')
-        return
-
     # Container'a (PCT 991) SSH ile bağlan (PTY modunda)
+    # NOT: Chroot ortamı login sırasında (terminal_login) otomatik oluşturuluyor.
     try:
         master_fd, slave_fd = pty.openpty()
         from chroot_terminal import CT_991_HOST, CT_991_SSH_PORT
@@ -1146,8 +1140,6 @@ def ogrenci_baglan_event(veri):
             log.error(f"[Socket] Terminal bağlantı hatası (User: {username}): {str(e)}")
             socketio.emit('hata', f'Terminal bağlantı hatası: {str(e)}',
                           room=sid, namespace='/terminal')
-
-    threading.Thread(target=_container_baslat, daemon=True).start()
 
 
 @socketio.on('terminal_girdi', namespace='/terminal')
