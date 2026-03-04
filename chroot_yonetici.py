@@ -95,116 +95,104 @@ def create_student_chroot(username, real_name=""):
 
     if student_path.exists():
         log.warning(f"{username} için chroot zaten var")
-        return False
+        # Mevcut chroot'u tamir etmeyi deneyelim (grup ve profile eksikse)
+    else:
+        log.info(f"{username} için chroot oluşturuluyor...")
+        # Şablondan kopyala
+        import subprocess
+        result = subprocess.run(
+            ["rsync", "-a", "--exclude=/dev/*", "--exclude=/proc/*",
+                   "--exclude=/sys/*", "--exclude=/var/run/*",
+                   f"{STUDENT_TEMPLATE}/", f"{student_path}/"],
+            capture_output=True, text=True
+        )
+        if result.returncode != 0:
+            log.error(f"Chroot kopyalama hatası: {result.stderr}")
+            return False
 
-    log.info(f"{username} için chroot oluşturuluyor...")
+    # Gerekli dizinleri manuel oluştur
+    for d in ["dev", "proc", "sys", "var/run"]:
+        (student_path / d).mkdir(parents=True, exist_ok=True)
 
-    # Şablondan kopyala (rsync ile, device'leri hariç tutarak)
-    import subprocess
-    result = subprocess.run(
-        ["rsync", "-a", "--exclude=/dev/*", "--exclude=/proc/*",
-               "--exclude=/sys/*", "--exclude=/var/run/*",
-               f"{STUDENT_TEMPLATE}/", f"{student_path}/"],
-        capture_output=True,
-        text=True
-    )
-
-    if result.returncode != 0:
-        log.error(f"Chroot kopyalama hatası: {result.stderr}")
-        return False
-
-    # Gerekli dizinleri manuel oluştur (rsync bunları kopyalamaz)
-    essential_dirs = [
-        student_path / "dev",
-        student_path / "proc",
-        student_path / "sys",
-        student_path / "var/run",
-    ]
-
-    for d in essential_dirs:
-        d.mkdir(parents=True, exist_ok=True)
-
-    # Temel device file'lerini oluştur
+    # Temel device file'larını oluştur
     devices = ["null", "zero", "full", "random", "tty", "urandom"]
     for device in devices:
         dev_path = student_path / "dev" / device
         if not dev_path.exists():
-            subprocess.run(["mknod", "-m", "666", str(dev_path), "c", "1", "5"],
-                           check=False)
+            subprocess.run(["mknod", "-m", "666", str(dev_path), "c", "1", "5"], check=False)
 
-    # Kullanıcı oluştur (host sistemi)
+    # Host sistemde kullanıcıyı oluştur (SSH için)
     try:
-        # Grubun varlığından emin ol
         try:
             grp.getgrnam(STUDENT_GROUP)
         except KeyError:
             _run(["groupadd", STUDENT_GROUP])
-            
         pwd.getpwnam(username)
     except KeyError:
-        _run([
-            "useradd", "-m", "-s", "/bin/bash",
-            "-G", STUDENT_GROUP,
-            "-c", real_name,
-            username
-        ])
+        _run(["useradd", "-m", "-s", "/bin/bash", "-G", STUDENT_GROUP, "-c", real_name, username])
 
-    # Chroot içinde kullanıcı oluştur
+    # Chroot içinde konfigürasyon dosyaları
     passwd_file = student_path / "etc" / "passwd"
     shadow_file = student_path / "etc" / "shadow"
     group_file = student_path / "etc" / "group"
 
-    # Kullanıcı ekle (chroot içinde)
-    with open(passwd_file, 'a') as f:
-        f.write(f"{username}:x:1000:1000:{real_name}:/home/{username}:/bin/bash\n")
+    # Chroot içinde grubun varlığından emin ol (cannot find name for group ID 1000 hatası için)
+    try:
+        group_content = group_file.read_text() if group_file.exists() else ""
+        if f"{STUDENT_GROUP}:x:1000:" not in group_content:
+            with open(group_file, 'a') as f:
+                f.write(f"{STUDENT_GROUP}:x:1000:{username}\n")
+    except Exception as e:
+        log.error(f"Grup dosyası güncelleme hatası: {e}")
 
-    # Parola (kullanıcı adı ile aynı) - host sistemdeki shadow'dan al
-    # Önce host sistemde kullanıcının hash'ini al
-    result = subprocess.run(
-        ["grep", f"^{username}:", "/etc/shadow"],
-        capture_output=True, text=True
-    )
+    # Chroot içinde kullanıcı girişi
+    try:
+        passwd_content = passwd_file.read_text()
+        if f"{username}:x:1000:1000:" not in passwd_content:
+            with open(passwd_file, 'a') as f:
+                f.write(f"{username}:x:1000:1000:{real_name}:/home/{username}:/bin/bash\n")
+    except Exception as e:
+        log.error(f"Passwd dosyası güncelleme hatası: {e}")
 
+    # Host sistemdeki shadow hash'ini kopyala
+    result = subprocess.run(["grep", f"^{username}:", "/etc/shadow"], capture_output=True, text=True)
     if result.returncode == 0:
-        # Host sistemdeki hash'i chroot içine kopyala
-        host_shadow_entry = result.stdout.strip()
         with open(shadow_file, 'a') as f:
-            f.write(host_shadow_entry + '\n')
-    else:
-        # Yedek: openssl ile hash oluştur
-        hashed_pw = subprocess.run(
-            ["openssl", "passwd", "-1", username],
-            capture_output=True, text=True
-        ).stdout.strip()
-        with open(shadow_file, 'a') as f:
-            f.write(f"{username}:{hashed_pw}:18000:0:99999:7:::\n")
+            f.write(result.stdout.strip() + '\n')
 
-    # Home dizini oluştur
+    # Home dizini ve Shell ortamı
     student_home = student_path / "home" / username
     student_home.mkdir(mode=0o755, exist_ok=True)
-    _run(["chown", f"{username}:{username}", str(student_home)])
-
-    # .bashrc yapılandırması
-    bashrc = student_home / ".bashrc"
-    bashrc.write_text("""
+    
+    # .bashrc
+    (student_home / ".bashrc").write_text(f"""
 export PS1="\\[\\033[01;32m\\]\\u@\\h\\[\\033[00m\\]:\\[\\033[01;34m\\]\\w\\[\\033[00m\\]\\$ "
 alias ll='ls -la'
 alias ..='cd ..'
 alias root='sudo su -'
-echo "Özel Linux Ortamı - sudo su - ile root olabilirsiniz"
+echo "Kapadokya Üniversitesi Linux Laboratuvarı"
+echo "Kullanıcı: {username} | Yetki: sudo su - ile root olabilirsiniz"
 echo ""
 """)
 
-    # Sudoers yapılandırması (chroot içinde)
-    sudoers = student_path / "etc" / "sudoers"
-    sudoers.write_text(f"""
-# Öğrenci kendi chroot'unda root olabilir
-{username} ALL=(ALL:ALL) NOPASSWD:ALL
+    # .profile (Login shell desteği için)
+    (student_home / ".profile").write_text("""
+if [ -n "$BASH_VERSION" ]; then
+    if [ -f "$HOME/.bashrc" ]; then
+        . "$HOME/.bashrc"
+    fi
+fi
 """)
 
+    # Chown 1000:1000 (Chroot içindeki kullanıcı id'si)
+    _run(["chown", "-R", "1000:1000", str(student_home)])
+
+    # Sudoers
+    sudoers = student_path / "etc" / "sudoers"
+    sudoers.write_text(f"{username} ALL=(ALL:ALL) NOPASSWD:ALL\n")
     _run(["chmod", "0440", str(sudoers)])
 
-    log.info(f"✅ {username} için chroot oluşturuldu!")
+    log.info(f"✅ {username} chroot ortamı yapılandırıldı.")
     return True
 
 
