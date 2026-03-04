@@ -1210,11 +1210,12 @@ def ogrenci_baglan_event(veri):
     # ROOT üzerinden bağlanıp chroot'a geçiyoruz (auth sorunlarını çözmek için)
     try:
         master_fd, slave_fd = pty.openpty()
-        # Username'i normalize et
-        username = _slugify(username)
         
         # Chroot ortamını kontrol et/yarat/senkronize et (Her bağlantıda zorla ki fixler yansısın)
         from chroot_terminal import CT_991_HOST, CT_991_REAL_SSH_PORT, CHROOT_BASE, _slugify, chroot_var_mi, chroot_olustur
+
+        # Username'i normalize et
+        username = _slugify(username)
         
         # Öğrencinin adını soyadını DB'den al (Log ve passwd için)
         ad_soyad = "Ogrenci"
