@@ -15,8 +15,8 @@ log = logging.getLogger("chroot_terminal")
 CT_991_HOST = "192.168.111.51"  # CT 991 IP adresi
 CT_991_SSH_PORT = 2222          # Chroot içindeki SSH portu
 CT_991_REAL_SSH_PORT = 2222       # CT 991 ana sistem SSH portu
-CHROOT_MANAGE_SCRIPT = "/root/ders-takip/chroot_yonetici.py" # PCT 991'deki tam yol
-PYTHON_PATH = "/root/ders-takip/venv/bin/python3" # PCT 991'deki venv yolu
+CHROOT_MANAGE_SCRIPT = "/root/enroll/chroot_yonetici.py" # PCT 991'deki tam yol
+PYTHON_PATH = "/root/enroll/venv/bin/python3" # PCT 991'deki venv yolu
 CHROOT_BASE = "/home/chroot"
 
 
@@ -46,7 +46,9 @@ def chroot_var_mi(username: str) -> bool:
         log.error(f"Chroot listesi alınamadı: {result.stderr}")
         return False
 
-    chroots = result.stdout.strip().split('\n')
+    output = result.stdout.strip()
+    # "  - ogrenci1" formatını temizle
+    chroots = [line.strip().replace("- ", "").strip() for line in output.split('\n')]
     return username in chroots
 
 
