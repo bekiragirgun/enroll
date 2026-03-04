@@ -27,7 +27,15 @@ def _ct991_exec(command: list) -> subprocess.CompletedProcess:
         "-p", str(CT_991_REAL_SSH_PORT),
         f"root@{CT_991_HOST}"
     ] + command
-    return subprocess.run(ssh_cmd, capture_output=True, text=True)
+    
+    log.debug(f"Remoting (PCT 991): {' '.join(ssh_cmd)}")
+    result = subprocess.run(ssh_cmd, capture_output=True, text=True)
+    
+    if result.returncode != 0:
+        log.error(f"Remote command failed: {' '.join(command)}")
+        if result.stderr: log.error(f"Stderr: {result.stderr.strip()}")
+    
+    return result
 
 
 def chroot_var_mi(username: str) -> bool:

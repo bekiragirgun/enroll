@@ -109,7 +109,8 @@ async function durumKontrol() {
     const slaytIframe = document.getElementById('slayt-iframe');
     const eskiDosya = slaytIframe?.dataset.dosya || '';
     const eskiHash = slaytIframe?.dataset.hash || '';
-    const eskiTerminalUrl = document.getElementById('terminal-iframe')?.dataset.url || '';
+    const terminalIframe = document.getElementById('terminal-iframe');
+    const eskiTerminalUrl = terminalIframe?.dataset.url || '';
 
     // Terminal URL için trailing slash kontrolü yapalım (Nginx uyumu için)
     if (veri.mod === 'terminal' && veri.terminal_url && !veri.terminal_url.endsWith('/')) {
@@ -118,15 +119,26 @@ async function durumKontrol() {
 
     // Durum değişti mi kontrolü
     let degisti = false;
-    if (veri.mod !== eskiMod) degisti = true;
-    if (veri.dosya !== eskiDosya) degisti = true; // Dosya bilgisi her zaman takip edilmeli
-    if (veri.mod === 'slayt' && veri.slayt_hash !== eskiHash) degisti = true;
-    if (veri.mod === 'terminal' && veri.terminal_url !== eskiTerminalUrl) degisti = true;
+    if (veri.mod !== eskiMod) {
+      console.log(`[Polling] Mod değişti: ${eskiMod} -> ${veri.mod}`);
+      degisti = true;
+    }
+    if (veri.dosya !== eskiDosya) {
+      console.log(`[Polling] Dosya değişti: ${eskiDosya} -> ${veri.dosya}`);
+      degisti = true;
+    }
+    if (veri.mod === 'slayt' && veri.slayt_hash !== eskiHash) {
+      console.log(`[Polling] Slayt hash değişti: ${eskiHash} -> ${veri.slayt_hash}`);
+      degisti = true;
+    }
+    if (veri.mod === 'terminal' && veri.terminal_url !== eskiTerminalUrl) {
+      console.log(`[Polling] Terminal URL değişti: ${eskiTerminalUrl} -> ${veri.terminal_url}`);
+      degisti = true;
+    }
 
     if (degisti) {
-      console.log('Durum değişti:', { eski: { mod: eskiMod, dosya: eskiDosya, hash: eskiHash, term: eskiTerminalUrl }, yeni: veri });
+      console.log('[Polling] Yeni durum uygulanıyor:', veri);
 
-      // Iframe dataset'lerini hemen güncelle ki bir sonraki poll'da "degisti" olmasın
       if (slaytIframe) {
         slaytIframe.dataset.dosya = veri.dosya || '';
         if (veri.mod === 'slayt') slaytIframe.dataset.hash = veri.slayt_hash || '';
@@ -135,9 +147,7 @@ async function durumKontrol() {
       modalGoster(veri.mod, veri);
     }
   } catch (e) {
-    console.error('Durum kontrol hatası:', e);
-    console.error('⚠️ API erişim hatası!');
-    console.error('🔧 Gelistirme konsolunda test et: fetch("', (window.API_BASE || '') + '/api/durum").then(r=>r.json()).then(console.log)');
+    console.error('[Polling] Kritik hata:', e);
   }
 }
 

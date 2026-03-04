@@ -400,11 +400,8 @@ def ogretmen_panel():
         aktif_dosya=ders_durumu['dosya']
     )
 
-@app.route('/api/mod', methods=['POST'])
-@ogretmen_giris_gerekli
-def api_mod_degistir():
-    veri = request.get_json()
     if veri.get('mod') in ('bekleme', 'slayt', 'terminal'):
+        log.info(f"Mod Değişimi: {ders_durumu['mod']} -> {veri.get('mod')} (Dosya: {veri.get('dosya')}, Terminal URL: {veri.get('terminal_url')})")
         ders_durumu['mod']   = veri['mod']
         ders_durumu['dosya'] = veri.get('dosya', '')
         ders_durumu['terminal_url'] = veri.get('terminal_url', '')
@@ -1141,6 +1138,7 @@ def ogrenci_baglan_event(veri):
         t.start()
 
     except Exception as e:
+            log.error(f"[Socket] Terminal bağlantı hatası (User: {username}): {str(e)}")
             socketio.emit('hata', f'Terminal bağlantı hatası: {str(e)}',
                           room=sid, namespace='/terminal')
 
