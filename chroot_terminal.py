@@ -14,7 +14,7 @@ log = logging.getLogger("chroot_terminal")
 # CT 991 (ogrenci-vm) bilgileri
 CT_991_HOST = "192.168.111.51"  # CT 991 IP adresi
 CT_991_SSH_PORT = 2222          # Chroot içindeki SSH portu
-CT_991_REAL_SSH_PORT = 22       # CT 991 ana sistem SSH portu
+CT_991_REAL_SSH_PORT = 2222       # CT 991 ana sistem SSH portu
 CHROOT_MANAGE_SCRIPT = "/root/ders-takip/chroot_yonetici.py" # PCT 991'deki tam yol
 PYTHON_PATH = "/root/ders-takip/venv/bin/python3" # PCT 991'deki venv yolu
 CHROOT_BASE = "/home/chroot"
