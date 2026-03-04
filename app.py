@@ -1040,19 +1040,24 @@ ogrenci_surecleri = {}
 
 def _pty_oku_ve_yayinla(fd, hedef_event, hedef_room=None, broadcast=False):
     """PTY'den oku ve SocketIO ile yayınla (thread içinde çalışır)."""
+    # Eventlet uyumlu: select.select yerine doğrudan os.read kullanıyoruz.
+    # Eventlet os.read'i green-thread dostu (non-blocking) yapar.
     while True:
         try:
-            r, _, _ = select.select([fd], [], [], 0.1)
-            if r:
-                data = os.read(fd, 4096)
-                if not data:
-                    break
-                text = data.decode('utf-8', errors='replace')
-                if broadcast:
-                    socketio.emit(hedef_event, text, namespace='/terminal')
-                elif hedef_room:
-                    socketio.emit(hedef_event, text, room=hedef_room, namespace='/terminal')
-        except (OSError, IOError):
+            # Doğrudan oku (Eventlet hub bunu yönetir)
+            data = os.read(fd, 4096)
+            if not data:
+                break
+            text = data.decode('utf-8', errors='replace')
+            if broadcast:
+                socketio.emit(hedef_event, text, namespace='/terminal')
+            elif hedef_room:
+                socketio.emit(hedef_event, text, room=hedef_room, namespace='/terminal')
+        except (OSError, IOError, EOFError) as e:
+            # 8 (EBADF) - Bad file descriptor hatasını önlemek için log atma
+            break
+        except Exception as e:
+            log.error(f"PTY Okuma hatası: {e}")
             break
 
 
@@ -1085,14 +1090,22 @@ def terminal_kopma():
         if sid in ogrenci_surecleri:
             proc, fd = ogrenci_surecleri.pop(sid)
             try:
+                # Önce FD'yi kapat ki thread okumayı bıraksın
                 os.close(fd)
             except OSError:
                 pass
             try:
-                proc.terminate()
+                # Süreci tamamen temizle
+                import signal
+                os.killpg(os.getpgid(proc.pid), signal.SIGTERM)
             except Exception:
-                pass
-        # Single container approach - individual container durdurma gerekmez
+                try:
+                    proc.terminate()
+                except:
+                    pass
+        # Lockları temizle
+        to_delete = [k for k, v in ogrenci_pty_locks.items() if k == fd]
+        for k in to_delete: ogrenci_pty_locks.pop(k, None)
 
         # Öğrenci sayısını güncelle
         if ogretmen_sid:
