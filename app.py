@@ -44,6 +44,7 @@ SECRET_KEY = 'kapadokya-linux-2024'
 app = Flask(__name__)
 app.secret_key = SECRET_KEY
 app.config['SEND_FILE_MAX_AGE_DEFAULT'] = 0  # Static dosyaları cache'leme
+log = app.logger
 
 # ── SocketIO ─────────────────────────────────────────────────
 socketio = SocketIO(app, cors_allowed_origins="*", async_mode='threading')
@@ -1053,7 +1054,7 @@ def ogretmen_baglan_event():
     ogretmen_numara = 'ogretmen'  # Öğretmen için özel numara
 
     # Docker container başlat
-    cid = konteyner_baslat(ogretmen_numara)
+    cid = container_baslat(ogretmen_numara)
     if not cid:
         emit('hata', 'Öğretmen container başlatılamadı!')
         return
