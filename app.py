@@ -400,6 +400,10 @@ def ogretmen_panel():
         aktif_dosya=ders_durumu['dosya']
     )
 
+@app.route('/api/mod', methods=['POST'])
+@ogretmen_giris_gerekli
+def api_mod_degistir():
+    veri = request.get_json()
     if veri.get('mod') in ('bekleme', 'slayt', 'terminal'):
         log.info(f"Mod Değişimi: {ders_durumu['mod']} -> {veri.get('mod')} (Dosya: {veri.get('dosya')}, Terminal URL: {veri.get('terminal_url')})")
         ders_durumu['mod']   = veri['mod']
