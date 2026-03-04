@@ -25,7 +25,7 @@ def _docker(*args, timeout=30):
         log.error("Docker komutu zaman aşımı: %s", args)
         return -1, ""
     except FileNotFoundError:
-        log.error("Docker bulunamadı!")
+        log.debug("Docker CLI bulunamadı, muhtemelen Chroot modu kullanılıyor.")
         return -1, ""
 
 

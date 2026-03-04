@@ -1186,9 +1186,10 @@ if __name__ == '__main__':
     print('=' * 55)
     print(f'  Öğrenciler için    : http://{yerel_ip}:3333')
     print(f'  Öğretmen paneli    : http://localhost:3333/teacher')
+    from chroot_terminal import CT_991_HOST, CT_991_REAL_SSH_PORT
     print(f'  Öğretmen terminal  : http://localhost:3333/teacher/terminal')
     print(f'  Şifre              : {OGRETMEN_SIFRE}')
-    print(f'  Docker imaj durumu : {"✅ Hazır" if image_var_mi() else "❌ Yok — ./build_image.sh çalıştırın"}')
+    print(f'  Chroot Host (991)  : ✅ {CT_991_HOST}:{CT_991_REAL_SSH_PORT}')
     print('=' * 55)
     print()
 
