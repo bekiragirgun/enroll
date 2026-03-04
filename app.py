@@ -988,13 +988,15 @@ def api_terminal_durum():
 
 
 # ── SocketIO Terminal Olayları ────────────────────────────────
-# Öğretmenin PTY dosya tanımlayıcıları
-ogretmen_pty_fd = None
-ogretmen_pty_pid = None
-ogretmen_sid = None
+# Global terminal süreçleri takibi
+ogrenci_surecleri = {}  # {sid: (process, master_fd)}
+ogrenci_sidleri   = {}  # {sid: username}
+ogrenci_pty_locks = {}  # {fd: threading.Lock()} - Eventlet çakışmasını önlemek için
 
-# Bağlı öğrenciler: {sid: numara}
-ogrenci_sidleri = {}
+ogretmen_pty_fd   = None
+ogretmen_pty_pid  = None
+ogretmen_pty_lock = threading.Lock()
+ogretmen_sid = None
 
 # Öğrenci Docker exec süreçleri: {sid: (subprocess.Popen, fd)}
 ogrenci_surecleri = {}
@@ -1112,10 +1114,11 @@ def ogretmen_girdi_event(veri):
     """Öğretmenin tuş vuruşlarını PTY'ye gönder."""
     global ogretmen_pty_fd
     if ogretmen_pty_fd is not None:
-        try:
-            os.write(ogretmen_pty_fd, veri['data'].encode('utf-8'))
-        except OSError:
-            pass
+        with ogretmen_pty_lock:
+            try:
+                os.write(ogretmen_pty_fd, veri['data'].encode('utf-8'))
+            except OSError:
+                pass
 
 
 @socketio.on('ogretmen_temizle', namespace='/terminal')
@@ -1153,6 +1156,7 @@ def ogrenci_baglan_event(veri):
         os.close(slave_fd)
 
         ogrenci_surecleri[sid] = (proc, master_fd)
+        ogrenci_pty_locks[master_fd] = threading.Lock()
 
         socketio.emit('container_hazir', room=sid, namespace='/terminal')
 
@@ -1173,10 +1177,19 @@ def ogrenci_girdi_event(veri):
     sid = request.sid
     if sid in ogrenci_surecleri:
         _, fd = ogrenci_surecleri[sid]
-        try:
-            os.write(fd, veri['data'].encode('utf-8'))
-        except OSError:
-            pass
+        lock = ogrenci_pty_locks.get(fd)
+        if lock:
+            with lock:
+                try:
+                    os.write(fd, veri['data'].encode('utf-8'))
+                except OSError:
+                    pass
+        else:
+            # Fallback (lock henüz oluşmamışsa)
+            try:
+                os.write(fd, veri['data'].encode('utf-8'))
+            except OSError:
+                pass
 
 
 # ── Başlat ────────────────────────────────────────────────────
