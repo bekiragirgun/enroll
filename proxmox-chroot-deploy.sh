@@ -122,11 +122,16 @@ install_flask_app() {
     fi
 
     cd "$PROJECT_DIR"
+    
+    # Virtual Environment (venv) oluştur
+    echo "Virtual environment oluşturuluyor..."
+    apt-get install -y python3-venv
+    python3 -m venv venv
+    
+    # Python paketlerini venv içine kur
+    ./venv/bin/pip install flask flask-socketio eventlet requests
 
-    # Python paketleri
-    pip3 install --break-system-packages flask flask-socketio eventlet
-
-    echo -e "${GREEN}✅ Flask uygulaması hazır${NC}"
+    echo -e "${GREEN}✅ Flask uygulaması ve venv hazır${NC}"
 }
 
 setup_ssh_config() {
