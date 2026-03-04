@@ -59,8 +59,37 @@ def _ct991_exec(command: list) -> subprocess.CompletedProcess:
     return result
 
 
+def sync_manager_script():
+    """Local chroot_yonetici.py dosyasını PCT 991'e senkronize et."""
+    try:
+        local_path = Path(__file__).parent / "chroot_yonetici.py"
+        if not local_path.exists():
+            log.error(f"Senkronizasyon hatası: {local_path} bulunamadı")
+            return False
+            
+        content = local_path.read_text()
+        
+        # Dosyayı SSH üzerinden pipe ile gönder
+        ssh_cmd = [
+            "ssh", "-o", "ConnectTimeout=5", "-o", "BatchMode=yes",
+            "-p", str(CT_991_REAL_SSH_PORT),
+            f"root@{CT_991_HOST}",
+            f"cat > {CHROOT_MANAGE_SCRIPT} && chmod +x {CHROOT_MANAGE_SCRIPT}"
+        ]
+        
+        subprocess.run(ssh_cmd, input=content, text=True, check=True)
+        log.info("✅ chroot_yonetici.py PCT 991'e senkronize edildi.")
+        return True
+    except Exception as e:
+        log.error(f"Senkronizasyon hatası: {e}")
+        return False
+
+
 def chroot_var_mi(username: str) -> bool:
     """Öğrenci chroot ortamı var mı?"""
+    # Script güncel olduğundan emin ol
+    sync_manager_script()
+    
     username = _slugify(username)
     result = _ct991_exec([PYTHON_PATH, CHROOT_MANAGE_SCRIPT, "list"])
     if result.returncode != 0:
@@ -76,6 +105,9 @@ def chroot_var_mi(username: str) -> bool:
 def chroot_olustur(username: str, ad: str = "", soyad: str = "") -> bool:
     """Yeni chroot ortamı oluştur."""
     try:
+        # Script güncel olduğundan emin ol
+        sync_manager_script()
+        
         username = _slugify(username)
         tam_ad = f"{ad} {soyad}".strip()
         log.info(f"Chroot oluşturuluyor: {username} ({tam_ad})")
