@@ -216,7 +216,23 @@ PAKET_SECENEKLERI = [
 
 @app.route('/')
 def ana():
-    """Ana sayfa - Giriş formu."""
+    """Ana sayfa - Giriş formu veya Öğrenci Paneli."""
+    # Eğer zaten giriş yapmışsa, paneli göster (PRG için)
+    if session.get('numara'):
+        tarih = bugun()
+        with db_baglantisi() as db:
+            yoklama = db.execute(
+                'SELECT ad_soyad, saat, paket FROM yoklama WHERE tarih=? AND numara=? ORDER BY id DESC LIMIT 1',
+                (tarih, session['numara'])
+            ).fetchone()
+            
+            if yoklama:
+                return render_template('ogrenci_ana.html', 
+                                       ad_soyad=yoklama['ad_soyad'], 
+                                       saat=yoklama['saat'], 
+                                       paket=yoklama['paket'],
+                                       tekrar_giris=True)
+
     siniflar = sinif_listesi()
     return render_template('login.html', siniflar=siniflar, paket_varsayilan=paket_hesapla(), paket_secenekleri=PAKET_SECENEKLERI)
 
@@ -303,14 +319,10 @@ def giris():
             (tarih, numara, ders_paketi)
         ).fetchone()
         if var_mi:
-            # Öğrenci zaten giriş yapmış, tekrar hoş geldin!
-            session['ogrenci_numara'] = numara
-            session['ogrenci_ad'] = ad_soyad
-            return render_template('ogrenci_ana.html',
-                                   ad_soyad=ad_soyad,
-                                   saat=var_mi['saat'],
-                                   paket=ders_paketi,
-                                   tekrar_giris=True)
+            # Öğrenci zaten giriş yapmış
+            session['numara'] = numara
+            session['ad'] = ad_soyad
+            return redirect(url_for('ana'))
 
         # ── 3. YENİ KAYIT ──────────────────────────────────────────
         db.execute(
@@ -321,8 +333,8 @@ def giris():
         db.commit()
 
     # Öğrenci session bilgileri (terminal sayfası için gerekli)
-    session['ogrenci_numara'] = numara
-    session['ogrenci_ad'] = ad_soyad
+    session['numara'] = numara
+    session['ad'] = ad_soyad
 
     # Chroot ortamını login sırasında otomatik oluştur (hız için)
     try:
@@ -333,7 +345,7 @@ def giris():
     except Exception as e:
         log.error(f"Otomatik chroot oluşturma hatası: {e}")
 
-    return render_template('ogrenci_ana.html', ad_soyad=ad_soyad, saat=saat, paket=ders_paketi)
+    return redirect(url_for('ana'))
 
 @app.route('/api/durum')
 def api_durum():
@@ -838,10 +850,11 @@ def terminal_sayfasi():
 @app.route('/terminal/login', methods=['POST'])
 def terminal_login():
     """Terminal login ve güvenlik kontrolü."""
-    # Session bilgileri
+    # Session bilgileri (Artık hepsi 'numara', 'ad', 'soyad' altında)
     session_numara = session.get('numara', '')
     session_ad = session.get('ad', '')
     session_soyad = session.get('soyad', '')
+    session_ad_soyad = f"{session_ad} {session_soyad}".strip()
 
     # Formdan gelen doğrulama
     girilen_numara = request.form.get('numara_dogrulama', '').strip()
@@ -891,7 +904,7 @@ def terminal_login():
         # SSH IP adresini al
         ssh_ip = chroot_ip_al(girilen_numara)
 
-        # Session bilgilerini sakla
+        # Session bilgilerini sakla (Terminal çalışma alanı için spesifik değil, genel kullanıyoruz)
         session['terminal_numara'] = girilen_numara
         session['terminal_ad'] = session_ad
         session['terminal_soyad'] = session_soyad
