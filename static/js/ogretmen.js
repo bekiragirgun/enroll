@@ -640,6 +640,18 @@ document.addEventListener('DOMContentLoaded', () => {
   yoklamaCek();
   sahteCek();
   guvenlikSoketBaslat();  // Güvenlik uyarılarını dinle
+
+  // Eski URL kontrolü ve otomatik düzeltme uyarısı
+  const ttydUrlInput = document.getElementById('config-ttyd-url');
+  if (ttydUrlInput && ttydUrlInput.value.includes('terminal-yayin')) {
+    console.warn('⚠️ Eski terminal URL algılandı! Güncelleniyor...');
+    ttydUrlInput.value = '/terminal';
+    // Kullanıcıya bilgi ver
+    setTimeout(() => {
+      alert('Dikkat: Eski terminal yayın adresi (/terminal-yayin) algılandı.\nSistem artık "/terminal" kullanıyor. Lütfen ayarları kaydedin.');
+    }, 1000);
+  }
+
   setInterval(yoklamaCek, YOKLAMA_ARALIK);
   setInterval(sahteCek, 30_000);   // 30 saniyede bir kontrol
 });

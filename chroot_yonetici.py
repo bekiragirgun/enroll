@@ -89,13 +89,98 @@ def setup_template():
     log.info("✅ Şablon chroot hazır!")
 
 
+def sync_chroot_configs(username, real_name=""):
+    """Chroot içindeki konfigürasyon dosyalarını host ile senkronize et."""
+    student_path = CHROOT_BASE / username
+    if not student_path.exists():
+        return False
+
+    # Host üzerindeki gerçek UID ve GID'leri al
+    try:
+        user_info = pwd.getpwnam(username)
+        group_info = grp.getgrnam(STUDENT_GROUP)
+        REAL_UID = user_info.pw_uid
+        REAL_GID = group_info.gr_gid
+    except KeyError as e:
+        log.error(f"Host sistemde kullanıcı/grup bulunamadı: {e}")
+        return False
+
+    # Chroot içinde konfigürasyon dosyaları
+    passwd_file = student_path / "etc" / "passwd"
+    shadow_file = student_path / "etc" / "shadow"
+    group_file = student_path / "etc" / "group"
+    hosts_file = student_path / "etc" / "hosts"
+
+    # 1. Grup Senkronizasyonu
+    try:
+        group_content = group_file.read_text() if group_file.exists() else ""
+        if f"{STUDENT_GROUP}:x:{REAL_GID}:" not in group_content:
+            # Mevcut satırı bul ve güncelle veya ekle
+            lines = [l for l in group_content.splitlines() if not l.startswith(f"{STUDENT_GROUP}:")]
+            lines.append(f"{STUDENT_GROUP}:x:{REAL_GID}:{username}")
+            group_file.write_text("\n".join(lines) + "\n")
+    except Exception as e:
+        log.error(f"Grup dosyası güncelleme hatası: {e}")
+
+    # 2. Passwd Senkronizasyonu
+    try:
+        passwd_content = passwd_file.read_text() if passwd_file.exists() else ""
+        if f"{username}:x:{REAL_UID}:{REAL_GID}:" not in passwd_content:
+            lines = [l for l in passwd_content.splitlines() if not l.startswith(f"{username}:")]
+            lines.append(f"{username}:x:{REAL_UID}:{REAL_GID}:{real_name}:/home/{username}:/bin/bash")
+            passwd_file.write_text("\n".join(lines) + "\n")
+    except Exception as e:
+        log.error(f"Passwd dosyası güncelleme hatası: {e}")
+
+    # 3. Shadow Senkronizasyonu (Şifrelerin çalışması için)
+    try:
+        if not shadow_file.exists(): shadow_file.write_text("")
+        result = subprocess.run(["grep", f"^{username}:", "/etc/shadow"], capture_output=True, text=True)
+        if result.returncode == 0:
+            shadow_content = shadow_file.read_text()
+            if result.stdout.strip() not in shadow_content:
+                lines = [l for l in shadow_content.splitlines() if not l.startswith(f"{username}:")]
+                lines.append(result.stdout.strip())
+                shadow_file.write_text("\n".join(lines) + "\n")
+        _run(["chmod", "0600", str(shadow_file)], check=False)
+    except Exception as e:
+        log.error(f"Shadow senkronizasyon hatası: {e}")
+
+    # 4. Hostname ve /etc/hosts (Sudo hatası için)
+    try:
+        hosts_content = "127.0.0.1\tlocalhost\n127.0.1.1\togrenci-vm\n"
+        hosts_file.write_text(hosts_content)
+        (student_path / "etc" / "hostname").write_text("ogrenci-vm\n")
+    except Exception as e:
+        log.error(f"Hosts/Hostname güncelleme hatası: {e}")
+
+    # 5. Sudoers
+    try:
+        sudoers = student_path / "etc" / "sudoers"
+        sudoers_line = f"{username} ALL=(ALL:ALL) NOPASSWD:ALL"
+        if not sudoers.exists() or sudoers_line not in sudoers.read_text():
+            sudoers.write_text(sudoers_line + "\n")
+            _run(["chmod", "0440", str(sudoers)], check=False)
+    except Exception as e:
+        log.error(f"Sudoers güncelleme hatası: {e}")
+
+    # 6. Home Dizin Yetkileri
+    try:
+        student_home = student_path / "home" / username
+        if student_home.exists():
+            _run(["chown", "-R", f"{REAL_UID}:{REAL_GID}", str(student_home)], check=False)
+    except Exception as e:
+        log.error(f"Home dizin yetki hatası: {e}")
+
+    return True
+
+
 def create_student_chroot(username, real_name=""):
     """Öğrenci için chroot ortamı oluştur."""
     student_path = CHROOT_BASE / username
 
     if student_path.exists():
-        log.warning(f"{username} için chroot zaten var")
-        # Mevcut chroot'u tamir etmeyi deneyelim (grup ve profile eksikse)
+        log.warning(f"{username} için chroot zaten var, konfigürasyonu güncelliyorum.")
     else:
         log.info(f"{username} için chroot oluşturuluyor...")
         # Şablondan kopyala
@@ -111,73 +196,29 @@ def create_student_chroot(username, real_name=""):
             return False
 
     # Gerekli dizinleri manuel oluştur
-    # Dev, Proc, Sys dizinlerini oluştur (Mount için)
     for d in ["dev", "proc", "sys", "var/run"]:
         (student_path / d).mkdir(parents=True, exist_ok=True)
 
     # Host sistemde kullanıcıyı oluştur (SSH için)
     try:
         try:
-            grp.getgrnam(STUDENT_GROUP)
+            pwd.getpwnam(username)
         except KeyError:
-            _run(["groupadd", STUDENT_GROUP])
-    except KeyError:
-        # --badname: Sayısal kullanıcı adlarına (örn: 123) izin ver
-        _run(["useradd", "--badname", "-m", "-s", "/bin/bash", "-G", STUDENT_GROUP, "-c", real_name, username])
-
-    # Host üzerindeki gerçek UID ve GID'leri al
-    user_info = pwd.getpwnam(username)
-    group_info = grp.getgrnam(STUDENT_GROUP)
-    REAL_UID = user_info.pw_uid
-    REAL_GID = group_info.gr_gid
-
-    # Chroot içinde konfigürasyon dosyaları
-    passwd_file = student_path / "etc" / "passwd"
-    shadow_file = student_path / "etc" / "shadow"
-    group_file = student_path / "etc" / "group"
-
-    # Chroot içinde grubun varlığından emin ol (cannot find name for group ID 1000 hatası için)
-    try:
-        group_content = group_file.read_text() if group_file.exists() else ""
-        group_line = f"{STUDENT_GROUP}:x:{REAL_GID}:{username}\n"
-        if f"{STUDENT_GROUP}:x:{REAL_GID}:" not in group_content:
-            with open(group_file, 'a') as f:
-                f.write(group_line)
+            # --badname: Sayısal kullanıcı adlarına (örn: 123) izin ver
+            _run(["useradd", "--badname", "-m", "-s", "/bin/bash", "-G", STUDENT_GROUP, "-c", real_name, username])
     except Exception as e:
-        log.error(f"Grup dosyası güncelleme hatası: {e}")
- 
-    # Chroot içinde kullanıcı girişi
-    try:
-        passwd_content = passwd_file.read_text() if passwd_file.exists() else ""
-        passwd_line = f"{username}:x:{REAL_UID}:{REAL_GID}:{real_name}:/home/{username}:/bin/bash\n"
-        if f"{username}:x:{REAL_UID}:" not in passwd_content:
-            with open(passwd_file, 'a') as f:
-                f.write(passwd_line)
-    except Exception as e:
-        log.error(f"Passwd dosyası güncelleme hatası: {e}")
+        log.error(f"Kullanıcı oluşturma hatası: {e}")
 
-    # Host sistemdeki shadow hash'ini kopyala (Shadow dosyası yoksa oluştur)
-    if not shadow_file.exists(): shadow_file.write_text("")
-    result = subprocess.run(["grep", f"^{username}:", "/etc/shadow"], capture_output=True, text=True)
-    if result.returncode == 0:
-        shadow_content = shadow_file.read_text()
-        if f"{username}:" not in shadow_content:
-            with open(shadow_file, 'a') as f:
-                f.write(result.stdout.strip() + '\n')
-    _run(["chmod", "0600", str(shadow_file)])
+    # Konfigürasyonları senkronize et
+    sync_chroot_configs(username, real_name)
 
-    # Hostname ve /etc/hosts (Sudo hatası için önemli)
-    hosts_file = student_path / "etc" / "hosts"
-    hosts_content = "127.0.0.1\tlocalhost\n127.0.1.1\togrenci-vm\n"
-    hosts_file.write_text(hosts_content)
-    (student_path / "etc" / "hostname").write_text("ogrenci-vm\n")
-
-    # Home dizini ve Shell ortamı
+    # Home dizini ve Shell ortamı (ilk kez ise)
     student_home = student_path / "home" / username
     student_home.mkdir(mode=0o755, exist_ok=True)
     
-    # .bashrc
-    (student_home / ".bashrc").write_text(f"""
+    bashrc = student_home / ".bashrc"
+    if not bashrc.exists():
+        bashrc.write_text(f"""
 export PS1="\\[\\033[01;32m\\]\\u@\\h\\[\\033[00m\\]:\\[\\033[01;34m\\]\\w\\[\\033[00m\\]\\$ "
 alias ll='ls -la'
 alias ..='cd ..'
@@ -187,8 +228,10 @@ echo "Kullanıcı: {username} | Yetki: sudo su - ile root olabilirsiniz"
 echo ""
 """)
 
-    # .profile (Login shell desteği için)
-    (student_home / ".profile").write_text("""
+    # .profile
+    profile = student_home / ".profile"
+    if not profile.exists():
+        profile.write_text("""
 if [ -n "$BASH_VERSION" ]; then
     if [ -f "$HOME/.bashrc" ]; then
         . "$HOME/.bashrc"
@@ -196,15 +239,7 @@ if [ -n "$BASH_VERSION" ]; then
 fi
 """)
 
-    # Chown gerçek UID/GID (Host sistemdeki ile senkron)
-    _run(["chown", "-R", f"{REAL_UID}:{REAL_GID}", str(student_home)])
-
-    # Sudoers
-    sudoers = student_path / "etc" / "sudoers"
-    sudoers.write_text(f"{username} ALL=(ALL:ALL) NOPASSWD:ALL\n")
-    _run(["chmod", "0440", str(sudoers)])
-
-    log.info(f"✅ {username} chroot ortamı yapılandırıldı.")
+    log.info(f"✅ {username} chroot ortamı hazır.")
     return True
 
 
@@ -277,8 +312,15 @@ def delete_student_chroot(username):
 
 
 def mount_student_chroot(username):
-    """Chroot için gerekli filesystem'leri mount et."""
+    """Chroot için gerekli filesystem'leri mount et ve konfigürasyonları tazele."""
     student_path = CHROOT_BASE / username
+
+    if not student_path.exists():
+        log.error(f"Mount hatası: {username} için chroot dizini yok!")
+        return False
+
+    # Önce konfigürasyonları senkronize et (Her girişte tazelenmesi için)
+    sync_chroot_configs(username)
 
     # dev, proc, sys mount et
     dev_path = student_path / "dev"
@@ -289,15 +331,19 @@ def mount_student_chroot(username):
     proc_path.mkdir(exist_ok=True)
     sys_path.mkdir(exist_ok=True)
 
-    subprocess.run(["mount", "-o", "bind", "/dev", str(dev_path)], check=False)
-    subprocess.run(["mount", "-o", "bind", "/dev/pts", str(student_path / "dev" / "pts")], check=False)
-    subprocess.run(["mount", "-t", "proc", "proc", str(proc_path)], check=False)
-    subprocess.run(["mount", "-o", "bind", "/sys", str(sys_path)], check=False)
+    # Mount durumunu kontrol et (zaten mount edilmişse tekrar etme)
+    check_mount = subprocess.run(["mountpoint", "-q", str(dev_path)])
+    if check_mount.returncode != 0:
+        subprocess.run(["mount", "-o", "bind", "/dev", str(dev_path)], check=False)
+        subprocess.run(["mount", "-o", "bind", "/dev/pts", str(student_path / "dev" / "pts")], check=False)
+        subprocess.run(["mount", "-t", "proc", "proc", str(proc_path)], check=False)
+        subprocess.run(["mount", "-o", "bind", "/sys", str(sys_path)], check=False)
     
-    # Resolv.conf kopyala (İnternet erişimi için)
+    # Resolv.conf kopyala (İnternet erişimi için - her seferinde tazele)
     subprocess.run(["cp", "/etc/resolv.conf", str(student_path / "etc" / "resolv.conf")], check=False)
 
-    log.info(f"✅ {username} chroot filesystem'ları mount edildi.")
+    log.info(f"✅ {username} chroot hazır ve mount edildi.")
+    return True
 
 
 def main():
