@@ -158,7 +158,10 @@ def sync_chroot_configs(username, real_name=""):
             # Mevcut grubu temizle
             lines = [l for l in lines if not l.startswith(f"{STUDENT_GROUP}:")]
             # Yeni satırı ekle
-            lines.append(f"{STUDENT_GROUP}:x:{group_info.gr_gid}:{username}")
+            lines.append(f"{STUDENT_GROUP}:x:{user_info.pw_gid}:{username}")
+            # tty grubunu da ekle (PTY için)
+            if not any(l.startswith("tty:x:5:") for l in lines):
+                lines.append("tty:x:5:")
             group_file.write_text("\n".join(lines) + "\n")
             log.info(f"📝 {group_file} güncellendi")
 
@@ -375,18 +378,24 @@ def mount_student_chroot(username):
     dev_path = student_path / "dev"
     proc_path = student_path / "proc"
     sys_path = student_path / "sys"
+    pts_path = dev_path / "pts"
 
     dev_path.mkdir(exist_ok=True)
     proc_path.mkdir(exist_ok=True)
     sys_path.mkdir(exist_ok=True)
+    pts_path.mkdir(exist_ok=True)
 
     # Mount durumunu kontrol et (zaten mount edilmişse tekrar etme)
     check_mount = subprocess.run(["mountpoint", "-q", str(dev_path)])
     if check_mount.returncode != 0:
         subprocess.run(["mount", "-o", "bind", "/dev", str(dev_path)], check=False)
-        subprocess.run(["mount", "-o", "bind", "/dev/pts", str(student_path / "dev" / "pts")], check=False)
+        # PTY allocation hatası için özel mount seçenekleri
+        subprocess.run(["mount", "-t", "devpts", "devpts", str(pts_path), "-o", "gid=5,mode=620"], check=False)
         subprocess.run(["mount", "-t", "proc", "proc", str(proc_path)], check=False)
-        subprocess.run(["mount", "-o", "bind", "/sys", str(sys_path)], check=False)
+        subprocess.run(["mount", "-t", "sysfs", "sysfs", str(sys_path)], check=False)
+        # /dev/ptmx linki önemli
+        if not (dev_path / "ptmx").exists():
+            subprocess.run(["ln", "-s", "/dev/pts/ptmx", str(dev_path / "ptmx")], check=False)
     
     # Resolv.conf kopyala (İnternet erişimi için - her seferinde tazele)
     subprocess.run(["cp", "/etc/resolv.conf", str(student_path / "etc" / "resolv.conf")], check=False)
