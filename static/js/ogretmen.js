@@ -1,6 +1,25 @@
-// Öğretmen paneli — mod değişimi, yoklama ve sınıf durumu
-
 const YOKLAMA_ARALIK = 5000;
+
+// Centralized Fetch for Cloudflare Access Session Handling
+async function safeFetch(url, options = {}) {
+  try {
+    const res = await fetch(url, options);
+    // Cloudflare Access check: If redirected to login page or 401/403
+    if (res.url && res.url.includes('cloudflareaccess.com')) {
+      alert("Oturum süreniz dolmuş olabilir. Sayfa yenileniyor...");
+      window.location.reload();
+      return new Promise(() => { }); // Never resolve
+    }
+    return res;
+  } catch (e) {
+    // If it's a "Failed to fetch" error, it's very likely a CORS block from Cloudflare redirect
+    if (e.name === 'TypeError' && e.message === 'Failed to fetch') {
+      console.warn("Fetch failed, possibly Cloudflare session timeout. Reloading...");
+      window.location.reload();
+    }
+    throw e;
+  }
+}
 
 function tabGec(tab, btn) {
   document.querySelectorAll('.panel-bolum').forEach(el => el.classList.remove('goster'));
@@ -31,7 +50,7 @@ async function modDegistir(mod) {
     console.log('🔄 Slayt modu, hash sıfırlandı');
   }
 
-  await fetch('/api/mod', {
+  await safeFetch('/api/mod', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(veri)
@@ -46,7 +65,7 @@ async function ayarlariKaydet() {
   const chrootIp = document.getElementById('config-chroot-ip').value;
   const ttydUrl = document.getElementById('config-ttyd-url').value;
 
-  const yanit = await fetch('/api/config', {
+  const yanit = await safeFetch('/api/config', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ chroot_host: chrootIp, ttyd_url: ttydUrl })
@@ -170,7 +189,7 @@ function slaytOnizleme(dosya) {
 
 async function yoklamaCek() {
   try {
-    const yanit = await fetch('/api/yoklama');
+    const yanit = await safeFetch('/api/yoklama');
     const veri = await yanit.json();
 
     const sayac = document.getElementById('ogrenci-sayisi');
@@ -206,24 +225,24 @@ async function yoklamaCek() {
 
 async function sinifDurumCek() {
   try {
-    const sinifYanit = await fetch('/api/siniflar');
-    const sinifVeri = await sinifYanit.json();
+    const sinifYanit = await safeFetch('/api/siniflar');
+    const siniflar = await sinifYanit.json();
     const grid = document.getElementById('sinif-grid');
     if (!grid) return;
 
     // Toplam kayıtlı sayısını güncelle
-    const toplamKayitli = sinifVeri.siniflar.reduce((t, s) => t + s.kayitli, 0);
+    const toplamKayitli = siniflar.siniflar.reduce((t, s) => t + s.kayitli, 0);
     const el = document.getElementById('kayitli-sayisi');
     if (el) el.textContent = toplamKayitli;
 
     // Her sınıf için detay çek
     let html = '';
-    for (const sinif of sinifVeri.siniflar) {
-      const detayYanit = await fetch(`/api/sinif_ogrencileri/${sinif.id}`);
-      const detayVeri = await detayYanit.json();
+    for (const sinif of siniflar.siniflar) {
+      const detayYanit = await safeFetch(`/api/sinif_ogrencileri/${sinif.id}`);
+      const veri = await detayYanit.json();
 
-      const geldi = detayVeri.ogrenciler.filter(o => o.geldi);
-      const gelmedi = detayVeri.ogrenciler.filter(o => !o.geldi);
+      const geldi = veri.ogrenciler.filter(o => o.geldi);
+      const gelmedi = veri.ogrenciler.filter(o => !o.geldi);
       const tamKatilim = geldi.length === sinif.kayitli && sinif.kayitli > 0;
 
       html += `
@@ -233,7 +252,7 @@ async function sinifDurumCek() {
             <span class="sinif-badge ${tamKatilim ? 'tam' : ''}">${sinif.bugun}/${sinif.kayitli}</span>
           </h4>
           <div class="sinif-ozet">Bugün ${sinif.bugun} katıldı · ${sinif.kayitli - sinif.bugun} eksik</div>
-          ${detayVeri.ogrenciler.map(o => `
+          ${veri.ogrenciler.map(o => `
             <div class="ogrenci-mini ${o.geldi ? '' : 'devamsiz'}" id="ogrenci-${o.numara}">
               <div class="${o.geldi ? 'dot-geldi' : 'dot-gelmedi'}"></div>
               <span>${o.ad_soyad}</span>
@@ -259,10 +278,10 @@ async function manuelGiris(sinifId, numara, adSoyad) {
   // Kullanıcı isteği: Onay sormadan direkt işlem yap
 
   try {
-    const yanit = await fetch('/api/manuel_giris', {
+    const yanit = await safeFetch('/api/manuel_giris', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ sinif_id: sinifId, numara })
+      body: JSON.stringify({ sinif_id: sinifId, numara, ad_soyad: adSoyad })
     });
     const veri = await yanit.json();
 
@@ -291,28 +310,33 @@ async function arsivCSVIndir() {
   const tarih = tarihInput.value; // YYYY-MM-DD formatında
 
   try {
-    const yanit = await fetch('/api/yoklama/tarih_csv?tarih=' + encodeURIComponent(tarih));
-    const dosyaAdi = yanit.headers.get('Content-Disposition') || 'yoklama.csv';
+    const yanit = await safeFetch('/api/yoklama/tarih_csv?tarih=' + encodeURIComponent(tarih));
+    if (yanit.ok) {
+      const dosyaAdi = yanit.headers.get('Content-Disposition') || 'yoklama.csv';
 
-    // Blob oluştur
-    const blob = await yanit.blob();
-    const url = window.URL.createObjectURL(blob);
+      // Blob oluştur
+      const blob = await yanit.blob();
+      const url = window.URL.createObjectURL(blob);
 
-    // İndir
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = dosyaAdi.match(/filename="(.+)"/)[1];
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    window.URL.revokeObjectURL(url);
-
-  } catch (e) {
-    if (e.status === 404) {
-      alert('Bu tarihte kayıt bulunamadı.');
+      // İndir
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = dosyaAdi.match(/filename="(.+)"/)[1];
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      window.URL.revokeObjectURL(url);
     } else {
-      alert('Hata: ' + e.message);
+      // Handle non-200 responses, e.g., 404
+      if (yanit.status === 404) {
+        alert('Bu tarihte kayıt bulunamadı.');
+      } else {
+        const errorText = await yanit.text();
+        alert('Hata: ' + errorText);
+      }
     }
+  } catch (e) {
+    alert('Bağlantı hatası: ' + e.message);
   }
 }
 
@@ -326,7 +350,7 @@ async function yoklamaTemizle() {
   // Kullanıcı isteği: Onay sormadan direkt sil
 
   try {
-    const yanit = await fetch('/api/yoklama/sil', {
+    const yanit = await safeFetch('/api/yoklama/sil', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ onay: true })
@@ -349,7 +373,7 @@ async function tekSil(numara, adSoyad) {
   // Kullanıcı isteği: Onay sormadan direkt sil
 
   try {
-    const yanit = await fetch('/api/yoklama/sil_tek', {
+    const yanit = await safeFetch('/api/yoklama/sil_tek', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ numara })
@@ -371,7 +395,7 @@ async function sahteLogSil(kayitId) {
   // Kullanıcı isteği: Onay sormadan direkt sil
 
   try {
-    const yanit = await fetch('/api/sahte_log/sil_tek', {
+    const yanit = await safeFetch('/api/sahte_log/sil_tek', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ id: kayitId })
@@ -390,12 +414,12 @@ async function sahteLogSil(kayitId) {
 
 // ── Şüpheli Giriş Logu ───────────────────────────────────────
 async function sahteCek() {
-  try {
-    const yanit = await fetch('/api/sahte_log');
-    const veri = await yanit.json();
-    const kutu = document.getElementById('sahte-kutu');
-    if (!kutu) return;
+  const kutu = document.getElementById('sahte-kutu');
+  if (!kutu) return;
 
+  try {
+    const yanit = await safeFetch('/api/sahte_log');
+    const veri = await yanit.json();
     const kayitlar = veri.kayitlar || [];
 
     // Rozet güncelle
@@ -500,7 +524,7 @@ function guvenlikSoketBaslat() {
 
 async function guvenlikLogCek() {
   try {
-    const yanit = await fetch('/api/terminal/guvenlik_log');
+    const yanit = await safeFetch('/api/terminal/guvenlik_log');
     const veri = await yanit.json();
 
     const logDiv = document.getElementById('guvenlik-log-kutu');
@@ -572,7 +596,7 @@ function slaytHashGonder(hash) {
   const apiUrl = (window.API_BASE || '') + '/api/durum?hash=' + encodeURIComponent(hash);
 
   // GET request ile query parametresi olarak gönder (Cloudflare Access CORS sorunu için)
-  fetch(apiUrl)
+  safeFetch(apiUrl)
     .then(res => {
       console.log('✅ Hash gönderildi:', hash);
       return res.json();

@@ -202,7 +202,65 @@ def sync_chroot_configs(username, real_name=""):
     if not student_path.exists():
         log.error(f"Chroot dizini yok: {student_path}")
         return False
-...
+
+    log.info(f"🔄 {username} için konfigürasyonlar senkronize ediliyor... (Path: {student_path})")
+
+    try:
+        # Host'tan kullanıcı bilgilerini al
+        try:
+            user_info = pwd.getpwnam(username)
+        except KeyError:
+            log.error(f"❌ Host'ta kullanıcı bulunamadı: {username}")
+            return False
+
+        try:
+            group_info = grp.getgrnam(STUDENT_GROUP)
+        except KeyError:
+            log.warning(f"⚠️ {STUDENT_GROUP} grubu bulunamadı, oluşturuluyor...")
+            _run(["groupadd", STUDENT_GROUP])
+            group_info = grp.getgrnam(STUDENT_GROUP)
+        
+        # /etc/passwd senkronizasyonu
+        passwd_file = student_path / "etc" / "passwd"
+        if passwd_file.exists():
+            lines = passwd_file.read_text().splitlines()
+            original_len = len(lines)
+            # Mevcut kullanıcıyı temizle
+            lines = [l for l in lines if not l.startswith(f"{username}:")]
+            # Yeni satırı ekle
+            passwd_line = f"{username}:x:{user_info.pw_uid}:{user_info.pw_gid}:{real_name or user_info.pw_gecos}:{user_info.pw_dir}:{user_info.pw_shell}"
+            lines.append(passwd_line)
+            passwd_file.write_text("\n".join(lines) + "\n")
+            log.info(f"📝 {passwd_file} güncellendi ({original_len} -> {len(lines)} satır)")
+        else:
+            log.error(f"❌ {passwd_file} bulunamadı!")
+
+        # /etc/group senkronizasyonu
+        group_file = student_path / "etc" / "group"
+        if group_file.exists():
+            lines = group_file.read_text().splitlines()
+            # Mevcut grubu temizle
+            lines = [l for l in lines if not l.startswith(f"{STUDENT_GROUP}:")]
+            # Yeni satırı ekle
+            lines.append(f"{STUDENT_GROUP}:x:{group_info.gr_gid}:{username}")
+            group_file.write_text("\n".join(lines) + "\n")
+            log.info(f"📝 {group_file} güncellendi")
+
+        # Sudoers dosyasını kopyala
+        sudo_src = Path("/etc/sudoers.d/chroot-ogrenciler")
+        sudo_dst = student_path / "etc" / "sudoers.d" / "chroot-ogrenciler"
+        if sudo_src.exists():
+            sudo_dst.parent.mkdir(parents=True, exist_ok=True)
+            subprocess.run(["cp", str(sudo_src), str(sudo_dst)], check=False)
+            subprocess.run(["chmod", "0440", str(sudo_dst)], check=False)
+            log.info(f"📝 Sudoers kopyalandı: {sudo_dst}")
+
+        return True
+    except Exception as e:
+        log.error(f"❌ Konfigürasyon senkronizasyon hatası: {e}")
+        import traceback
+        log.error(traceback.format_exc())
+        return False
 def create_student_chroot(username, real_name=""):
     """Öğrenci için chroot ortamı oluştur."""
     # Username'i normalize et
@@ -280,44 +338,45 @@ fi
 
 
 def create_ssh_entry(username):
-    """SSH ve sudoers yapılandırması."""
+    """Kullanıcı için SSH Match block ve Sudoers yetkisi oluştur."""
     username = _slugify(username)
-    # Kullanıcının shell'i /bin/bash olsun (chrootlogin değil)
-    _run([
-        "usermod", "-s", "/bin/bash", username
-    ])
+    student_path = CHROOT_BASE / username
+    
+    # Kullanıcının shell'i /bin/bash olsun
+    subprocess.run(["usermod", "-s", "/bin/bash", username], check=False)
 
     # Sudoers'a chroot yetkisi ekle
     sudoers_line = f"{username} ALL=(ALL) NOPASSWD: /usr/sbin/chroot\n"
     sudoers_file = Path("/etc/sudoers.d/chroot-ogrenciler")
 
-    # Sudoers dosyasına ekle (tekrarı önle)
+    # Sudoers dosyasına ekle
     existing_sudoers = sudoers_file.read_text() if sudoers_file.exists() else ""
     if sudoers_line not in existing_sudoers:
         with open(sudoers_file, 'a') as f:
             f.write(sudoers_line)
-        _run(["chmod", "0440", str(sudoers_file)])
+        subprocess.run(["chmod", "0440", str(sudoers_file)], check=False)
 
     # SSH config'e ForceCommand ekle
     ssh_config = Path("/etc/ssh/sshd_config")
-    force_command = f"Match User {username}\n    ForceCommand sudo /usr/sbin/chroot {CHROOT_BASE}/{username} /bin/su - {username}\n"
+    # Önemli: Chroot dizini ve su komutu
+    force_command = f"Match User {username}\n    ForceCommand sudo /usr/sbin/chroot {student_path} /bin/su - {username}\n"
 
-    # SSH config'e ekle (tekrarı önle)
+    # SSH config'e ekle
     ssh_config_text = ssh_config.read_text()
     if force_command not in ssh_config_text:
         with open(ssh_config, 'a') as f:
             f.write(force_command)
 
-    # chrootlogin script'ini chroot içine kopyala
+    # Chroot login script'ini kopyala
     chrootlogin_src = Path("/usr/sbin/chrootlogin")
     chrootlogin_dst = student_path / "usr" / "sbin" / "chrootlogin"
     if chrootlogin_src.exists():
+        chrootlogin_dst.parent.mkdir(parents=True, exist_ok=True)
         subprocess.run(["cp", str(chrootlogin_src), str(chrootlogin_dst)], check=False)
         subprocess.run(["chmod", "+x", str(chrootlogin_dst)], check=False)
 
     # SSH'yi restart et
-    _run(["systemctl", "restart", "sshd"])
-
+    subprocess.run(["systemctl", "restart", "sshd"], check=False)
     log.info(f"✅ {username} SSH/Sudoers yapılandırması tamam")
 
 

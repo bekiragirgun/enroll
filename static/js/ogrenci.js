@@ -73,13 +73,20 @@ async function durumKontrol() {
       headers: { 'Cache-Control': 'no-cache' }
     });
 
-    if (!yanit.ok) return;
-
-    // Cloudflare Access redirect kontrolü (CORS hatasını önlemek için)
-    if (yanit.redirected) {
-      console.warn('[Polling] Session süresi dolmuş olabilir, yönlendirildi.');
+    // Cloudflare Access check: If redirected to login page or redirected in general
+    if (yanit.url && yanit.url.includes('cloudflareaccess.com')) {
+      console.warn('[Polling] Session süresi dolmuş, yenileniyor...');
+      window.location.reload();
       return;
     }
+
+    if (yanit.redirected) {
+      console.warn('[Polling] Yönlendirme algılandı, yenileniyor...');
+      window.location.reload();
+      return;
+    }
+
+    if (!yanit.ok) return;
 
     const veri = await yanit.json();
 
