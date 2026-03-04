@@ -179,9 +179,20 @@ def _slugify(text):
     """Kullanıcı adını Linux dostu hale getir (küçük harf, rakam ve alt çizgi)."""
     import re
     import unicodedata
+    if not text: return ""
+    text = str(text).strip()
+    # Sayısal ise veya rakamla başlıyorsa 'u' öneki ekle (Linux için daha güvenli)
+    if text.isdigit():
+        text = f"u{text}"
+    
     text = unicodedata.normalize('NFKD', text).encode('ascii', 'ignore').decode('ascii')
     text = re.sub(r'[^\w\s-]', '', text).strip().lower()
-    return re.sub(r'[-\s]+', '_', text)
+    text = re.sub(r'[-\s]+', '_', text)
+    
+    # Hala rakamla başlıyorsa (slugify sonrası) u ekle
+    if text and text[0].isdigit():
+        text = f"u{text}"
+    return text
 
 
 def sync_chroot_configs(username, real_name=""):
@@ -403,8 +414,10 @@ def main():
         if len(sys.argv) < 3:
             print("Kullanıcı adı gerekli")
             return
-        create_student_chroot(sys.argv[2])
-        create_ssh_entry(sys.argv[2])
+        username = sys.argv[2]
+        real_name = sys.argv[3] if len(sys.argv) > 3 else ""
+        create_student_chroot(username, real_name)
+        create_ssh_entry(username)
 
     elif command == "list":
         students = list_student_chroots()

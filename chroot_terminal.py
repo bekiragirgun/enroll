@@ -25,10 +25,19 @@ def _slugify(text):
     import re
     import unicodedata
     if not text: return ""
-    text = str(text) # Sayısal numara gelirse stringe çevir
+    text = str(text).strip()
+    # Sayısal ise veya rakamla başlıyorsa 'u' öneki ekle (Linux için daha güvenli)
+    if text.isdigit():
+        text = f"u{text}"
+    
     text = unicodedata.normalize('NFKD', text).encode('ascii', 'ignore').decode('ascii')
     text = re.sub(r'[^\w\s-]', '', text).strip().lower()
-    return re.sub(r'[-\s]+', '_', text)
+    text = re.sub(r'[-\s]+', '_', text)
+    
+    # Hala rakamla başlıyorsa (slugify sonrası) u ekle
+    if text and text[0].isdigit():
+        text = f"u{text}"
+    return text
 
 
 def _ct991_exec(command: list) -> subprocess.CompletedProcess:
@@ -68,11 +77,12 @@ def chroot_olustur(username: str, ad: str = "", soyad: str = "") -> bool:
     """Yeni chroot ortamı oluştur."""
     try:
         username = _slugify(username)
-        log.info(f"Chroot oluşturuluyor: {username}")
+        tam_ad = f"{ad} {soyad}".strip()
+        log.info(f"Chroot oluşturuluyor: {username} ({tam_ad})")
 
-        # CT 991 üzerinde yönetici script'ini çalıştır
+        # CT 991 üzerinde yönetici script'ini çalıştır (Ad-Soyad ile)
         result = _ct991_exec(
-            [PYTHON_PATH, CHROOT_MANAGE_SCRIPT, "create", username]
+            [PYTHON_PATH, CHROOT_MANAGE_SCRIPT, "create", username, tam_ad]
         )
 
         if result.returncode == 0:
