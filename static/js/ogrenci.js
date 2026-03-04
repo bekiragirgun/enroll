@@ -76,6 +76,12 @@ async function durumKontrol() {
 
     if (!yanit.ok) return;
 
+    // Cloudflare Access redirect kontrolü (CORS hatasını önlemek için)
+    if (yanit.redirected) {
+      console.warn('[Polling] Session süresi dolmuş olabilir, yönlendirildi.');
+      return;
+    }
+
     const veri = await yanit.json();
 
     // Derin karşılaştırma (Loop'u durduran asıl yer)

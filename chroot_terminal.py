@@ -64,6 +64,8 @@ def chroot_olustur(username: str, ad: str = "", soyad: str = "") -> bool:
 
         if result.returncode == 0:
             log.info(f"✅ Chroot oluşturuldu: {username}")
+            # Mount işlemini tetikle
+            _ct991_exec([PYTHON_PATH, CHROOT_MANAGE_SCRIPT, "mount", username])
             return True
         else:
             log.error(f"Chroot oluşturma hatası: {result.stderr}")

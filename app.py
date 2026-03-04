@@ -56,10 +56,15 @@ socketio = SocketIO(app, cors_allowed_origins="*", async_mode='eventlet')
 # Ders durumu (bellek içi)
 ders_durumu = {
     'mod':   'bekleme',   # bekleme | slayt
-    'dosya': ''              # aktif slayt dosyası
+    'dosya': '',           # aktif slayt dosyası
+    'terminal_url': '/terminal'
 }
 
-# ── Veritabanı ────────────────────────────────────────────────
+@app.route('/favicon.ico')
+def favicon():
+    return Response(status=204)
+
+# ── Veritabanı ve Yardımcılar ─────────────────────────────────
 def db_baglantisi():
     DB_YOLU.parent.mkdir(exist_ok=True)
     baglanti = sqlite3.connect(DB_YOLU)
@@ -456,7 +461,7 @@ def api_config():
             pass
             
     if 'ttyd_url' in veri:
-        ders_durumu['ttyd_url'] = veri['ttyd_url']
+        ders_durumu['terminal_url'] = veri['ttyd_url']
         
     return jsonify({'durum': 'ok'})
 
