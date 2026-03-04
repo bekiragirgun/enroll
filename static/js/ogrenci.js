@@ -9,11 +9,11 @@ function mevcutModu() {
 
 function modalGoster(mod, ekstra) {
   const bekleme = document.getElementById('bekleme-ekrani');
-  const slayt   = document.getElementById('slayt-ekrani');
+  const slayt = document.getElementById('slayt-ekrani');
   const terminal = document.getElementById('terminal-ekrani');
 
   // Hepsini gizle
-  [bekleme, slayt, terminal].forEach(el => { if(el) el.style.display = 'none'; });
+  [bekleme, slayt, terminal].forEach(el => { if (el) el.style.display = 'none'; });
 
   if (mod === 'bekleme') {
     if (bekleme) bekleme.style.display = 'flex';
@@ -106,12 +106,32 @@ async function durumKontrol() {
 
     const veri = await yanit.json();
     const eskiMod = mevcutModu();
-    const eskiDosya = document.getElementById('slayt-iframe')?.dataset.dosya || '';
-    const eskiHash = document.getElementById('slayt-iframe')?.dataset.hash || '';
+    const slaytIframe = document.getElementById('slayt-iframe');
+    const eskiDosya = slaytIframe?.dataset.dosya || '';
+    const eskiHash = slaytIframe?.dataset.hash || '';
+    const eskiTerminalUrl = document.getElementById('terminal-iframe')?.dataset.url || '';
 
-    // Mod, dosya veya hash değiştiyse güncelle
-    if (veri.mod !== eskiMod || veri.dosya !== eskiDosya || (veri.mod === 'slayt' && veri.slayt_hash !== eskiHash)) {
-      console.log('Durum değişti:', { eski: { mod: eskiMod, dosya: eskiDosya, hash: eskiHash }, yeni: veri });
+    // Terminal URL için trailing slash kontrolü yapalım (Nginx uyumu için)
+    if (veri.mod === 'terminal' && veri.terminal_url && !veri.terminal_url.endsWith('/')) {
+      veri.terminal_url += '/';
+    }
+
+    // Durum değişti mi kontrolü
+    let degisti = false;
+    if (veri.mod !== eskiMod) degisti = true;
+    if (veri.dosya !== eskiDosya) degisti = true; // Dosya bilgisi her zaman takip edilmeli
+    if (veri.mod === 'slayt' && veri.slayt_hash !== eskiHash) degisti = true;
+    if (veri.mod === 'terminal' && veri.terminal_url !== eskiTerminalUrl) degisti = true;
+
+    if (degisti) {
+      console.log('Durum değişti:', { eski: { mod: eskiMod, dosya: eskiDosya, hash: eskiHash, term: eskiTerminalUrl }, yeni: veri });
+
+      // Iframe dataset'lerini hemen güncelle ki bir sonraki poll'da "degisti" olmasın
+      if (slaytIframe) {
+        slaytIframe.dataset.dosya = veri.dosya || '';
+        if (veri.mod === 'slayt') slaytIframe.dataset.hash = veri.slayt_hash || '';
+      }
+
       modalGoster(veri.mod, veri);
     }
   } catch (e) {

@@ -46,6 +46,11 @@ server {
     }
 
     # TTYD Terminal Yayını
+    location /terminal-yayin {
+        # Trailing slash redirect
+        rewrite ^/terminal-yayin$ /terminal-yayin/ permanent;
+    }
+
     location /terminal-yayin/ {
         proxy_pass http://127.0.0.1:7681/;
         proxy_http_version 1.1;
@@ -59,6 +64,9 @@ server {
         # WebSocket için gerekli timeout'lar
         proxy_read_timeout 86400;
         proxy_send_timeout 86400;
+        
+        # Buffer kapatma (terminal hızı için)
+        proxy_buffering off;
     }
 }
 EOF
