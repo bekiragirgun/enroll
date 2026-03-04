@@ -246,6 +246,31 @@ def sync_chroot_configs(username, real_name=""):
             group_file.write_text("\n".join(lines) + "\n")
             log.info(f"📝 {group_file} güncellendi")
 
+        # /etc/shadow senkronizasyonu (Authentication failure çözümü)
+        shadow_file = student_path / "etc" / "shadow"
+        host_shadow = Path("/etc/shadow")
+        if shadow_file.exists() and host_shadow.exists():
+            # Host'tan bu kullanıcıya ait satırı bul
+            with open(host_shadow, 'r') as f:
+                shadow_lines = f.readlines()
+            user_shadow_line = next((l for l in shadow_lines if l.startswith(f"{username}:")), None)
+            
+            if user_shadow_line:
+                lines = shadow_file.read_text().splitlines()
+                # Mevcut kullanıcıyı temizle
+                lines = [l for l in lines if not l.startswith(f"{username}:")]
+                lines.append(user_shadow_line.strip())
+                shadow_file.write_text("\n".join(lines) + "\n")
+                _run(["chmod", "0640", str(shadow_file)])
+                log.info(f"📝 {shadow_file} güncellendi")
+            else:
+                # Host'ta yoksa placeholder ekle (şifresiz ama kilitli olmayan)
+                lines = shadow_file.read_text().splitlines()
+                if not any(l.startswith(f"{username}:") for l in lines):
+                    lines.append(f"{username}:*:19000:0:99999:7:::")
+                    shadow_file.write_text("\n".join(lines) + "\n")
+                    log.info(f"📝 {shadow_file} için placeholder eklendi")
+
         # Sudoers dosyasını kopyala
         sudo_src = Path("/etc/sudoers.d/chroot-ogrenciler")
         sudo_dst = student_path / "etc" / "sudoers.d" / "chroot-ogrenciler"
