@@ -617,6 +617,22 @@ setInterval(slaytHashKontrol, 500);
 // ── Mod değiştirme yardımcı fonksiyonları ───────────────────────────
 function terminalModu() {
   modDegistir('terminal');
+
+  const modal = document.getElementById('terminal-onizleme-modal');
+  const iframe = document.getElementById('terminal-onizleme-iframe');
+  const ttydUrl = document.getElementById('config-ttyd-url').value;
+
+  if (modal && iframe) {
+    iframe.src = ttydUrl;
+    modal.style.display = 'flex';
+  }
+}
+
+function terminalOnizlemeKapat() {
+  const modal = document.getElementById('terminal-onizleme-modal');
+  const iframe = document.getElementById('terminal-onizleme-iframe');
+  if (modal) modal.style.display = 'none';
+  if (iframe) iframe.src = 'about:blank';
 }
 
 function bekletModu() {
