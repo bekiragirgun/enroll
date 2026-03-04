@@ -134,6 +134,12 @@ def create_student_chroot(username, real_name=""):
 
     # Kullanıcı oluştur (host sistemi)
     try:
+        # Grubun varlığından emin ol
+        try:
+            grp.getgrnam(STUDENT_GROUP)
+        except KeyError:
+            _run(["groupadd", STUDENT_GROUP])
+            
         pwd.getpwnam(username)
     except KeyError:
         _run([

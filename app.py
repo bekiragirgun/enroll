@@ -1054,21 +1054,24 @@ def ogretmen_baglan_event():
     ogretmen_numara = 'ogretmen'
 
     # Chroot ortamını kontrol et/yarat (PCT 991 üzerinde)
-    from chroot_terminal import chroot_var_mi, chroot_olustur, CT_991_HOST, CT_991_SSH_PORT
+    from chroot_terminal import chroot_var_mi, chroot_olustur, CT_991_HOST, CT_991_REAL_SSH_PORT, CHROOT_BASE
     
     try:
         if not chroot_var_mi(ogretmen_numara):
             log.info(f"Öğretmen chroot ortamı oluşturuluyor...")
             chroot_olustur(ogretmen_numara, "Öğretmen", "Paneli")
 
-        # Container'a (PCT 991) SSH ile bağlan (PTY modunda)
-        # -t: PTY tahsisi için gerekli (terminal etkileşimi için kritik)
+        # PCT 991'e ROOT olarak bağlan ve komutla chroot'a gir
+        # Bu yöntem öğrenci/öğretmen için ayrı SSH anahtarı gereksinimini ortadan kaldırır
         master_fd, slave_fd = pty.openpty()
-        proc = subprocess.Popen(
-            ['ssh', '-t', '-o', 'StrictHostKeyChecking=no', '-p', str(CT_991_SSH_PORT), f'{ogretmen_numara}@{CT_991_HOST}'],
-            stdin=slave_fd, stdout=slave_fd, stderr=slave_fd,
-            preexec_fn=os.setsid
-        )
+        ssh_cmd = [
+            'ssh', '-t', '-o', 'StrictHostKeyChecking=no', 
+            '-p', str(CT_991_REAL_SSH_PORT), 
+            f'root@{CT_991_HOST}',
+            f'chroot {CHROOT_BASE}/{ogretmen_numara} /bin/su - {ogretmen_numara}'
+        ]
+        
+        proc = subprocess.Popen(ssh_cmd, stdin=slave_fd, stdout=slave_fd, stderr=slave_fd, preexec_fn=os.setsid)
         os.close(slave_fd)
 
         ogretmen_pty_fd = master_fd
@@ -1117,16 +1120,19 @@ def ogrenci_baglan_event(veri):
     ogrenci_sidleri[sid] = username
 
     # Container'a (PCT 991) SSH ile bağlan (PTY modunda)
-    # NOT: Chroot ortamı login sırasında (terminal_login) otomatik oluşturuluyor.
-    # -t: PTY tahsisi için gerekli
+    # ROOT üzerinden bağlanıp chroot'a geçiyoruz (auth sorunlarını çözmek için)
     try:
         master_fd, slave_fd = pty.openpty()
-        from chroot_terminal import CT_991_HOST, CT_991_SSH_PORT
-        proc = subprocess.Popen(
-            ['ssh', '-t', '-o', 'StrictHostKeyChecking=no', '-p', str(CT_991_SSH_PORT), f'{username}@{CT_991_HOST}'],
-            stdin=slave_fd, stdout=slave_fd, stderr=slave_fd,
-            preexec_fn=os.setsid
-        )
+        from chroot_terminal import CT_991_HOST, CT_991_REAL_SSH_PORT, CHROOT_BASE
+        
+        ssh_cmd = [
+            'ssh', '-t', '-o', 'StrictHostKeyChecking=no', 
+            '-p', str(CT_991_REAL_SSH_PORT), 
+            f'root@{CT_991_HOST}',
+            f'chroot {CHROOT_BASE}/{username} /bin/su - {username}'
+        ]
+        
+        proc = subprocess.Popen(ssh_cmd, stdin=slave_fd, stdout=slave_fd, stderr=slave_fd, preexec_fn=os.setsid)
         os.close(slave_fd)
 
         ogrenci_surecleri[sid] = (proc, master_fd)

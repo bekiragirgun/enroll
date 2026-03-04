@@ -17,6 +17,7 @@ CT_991_SSH_PORT = 2222          # Chroot içindeki SSH portu
 CT_991_REAL_SSH_PORT = 22       # CT 991 ana sistem SSH portu
 CHROOT_MANAGE_SCRIPT = "/root/ders-takip/chroot_yonetici.py" # PCT 991'deki tam yol
 PYTHON_PATH = "/root/ders-takip/venv/bin/python3" # PCT 991'deki venv yolu
+CHROOT_BASE = "/home/chroot"
 
 
 def _ct991_exec(command: list) -> subprocess.CompletedProcess:
