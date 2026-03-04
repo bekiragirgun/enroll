@@ -16,6 +16,7 @@ CT_991_HOST = "192.168.111.51"  # CT 991 IP adresi
 CT_991_SSH_PORT = 2222          # Chroot içindeki SSH portu
 CT_991_REAL_SSH_PORT = 22       # CT 991 ana sistem SSH portu
 CHROOT_MANAGE_SCRIPT = "/root/ders-takip/chroot_yonetici.py" # PCT 991'deki tam yol
+PYTHON_PATH = "/root/ders-takip/venv/bin/python3" # PCT 991'deki venv yolu
 
 
 def _ct991_exec(command: list) -> subprocess.CompletedProcess:
@@ -31,7 +32,7 @@ def _ct991_exec(command: list) -> subprocess.CompletedProcess:
 
 def chroot_var_mi(username: str) -> bool:
     """Öğrenci chroot ortamı var mı?"""
-    result = _ct991_exec(["python3", CHROOT_MANAGE_SCRIPT, "list"])
+    result = _ct991_exec([PYTHON_PATH, CHROOT_MANAGE_SCRIPT, "list"])
     if result.returncode != 0:
         log.error(f"Chroot listesi alınamadı: {result.stderr}")
         return False
@@ -47,7 +48,7 @@ def chroot_olustur(username: str, ad: str = "", soyad: str = "") -> bool:
 
         # CT 991 üzerinde yönetici script'ini çalıştır
         result = _ct991_exec(
-            ["python3", CHROOT_MANAGE_SCRIPT, "create", username]
+            [PYTHON_PATH, CHROOT_MANAGE_SCRIPT, "create", username]
         )
 
         if result.returncode == 0:
@@ -74,7 +75,7 @@ def chroot_durum(username: str) -> bool:
 
 def chroot_listesi() -> list:
     """Tüm chroot ortamlarını listele."""
-    result = _ct991_exec(["python3", CHROOT_MANAGE_SCRIPT, "list"])
+    result = _ct991_exec([PYTHON_PATH, CHROOT_MANAGE_SCRIPT, "list"])
 
     if result.returncode != 0:
         log.error(f"Chroot listesi alınamadı: {result.stderr}")
