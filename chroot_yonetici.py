@@ -201,14 +201,30 @@ deb http://security.ubuntu.com/ubuntu/ jammy-security main restricted universe m
     # KRİTİK: Cihazları onar (V11)
     _restore_device_nodes(d)
 
+    # DNS Ayarları
+    log.info("🌐 DNS ayarları yapılandırılıyor...")
+    with open(STUDENT_TEMPLATE / "etc" / "resolv.conf", "w") as f:
+        f.write("nameserver 8.8.8.8\nnameserver 1.1.1.1\n")
+
+    # Time Sync Fix (Zaman uyumsuzluğu nedeniyle apt-get update hatasını önlemek için)
+    log.info("🕒 Apt-get zaman uyumsuzluğu kontrolleri esnetiliyor...")
+    (STUDENT_TEMPLATE / "etc" / "apt" / "apt.conf.d").mkdir(parents=True, exist_ok=True)
+    with open(STUDENT_TEMPLATE / "etc" / "apt" / "apt.conf.d" / "99ignore-time-errors", "w") as f:
+        f.write('Acquire::Check-Valid-Until "false";\nAcquire::Check-Date "false";\n')
+
     try:
-        _run(["chroot", str(STUDENT_TEMPLATE), "apt-get", "update"])
-        _run(["chroot", str(STUDENT_TEMPLATE), "apt-get", "install", "-y",
-              "sudo", "bash", "vim", "nano", "curl", "wget", "htop",
-              "iputils-ping", "iproute2", "net-tools", "man-db",
-              "gnupg", "ubuntu-keyring", "gpgv", "ca-certificates",
-              "build-essential", "python3-full", "python3-pip", "git",
-              "software-properties-common", "apt-transport-https", "dnsutils"])
+        # Temel paketleri kur
+        log.info("📦 Temel paketler chroot içinde kuruluyor...")
+        # Ortam değişkenlerini ayarla (interaktif prompt'ları engellemek için)
+        env = os.environ.copy()
+        env["DEBIAN_FRONTEND"] = "noninteractive"
+        
+        # APT konfigürasyonunu zorlayarak çalıştır (Release file invalid yet hatasını kesin önlemek için)
+        _run(["chroot", str(STUDENT_TEMPLATE), "apt-get", "-o", "Acquire::Check-Valid-Until=false", "-o", "Acquire::Check-Date=false", "update"], env=env)
+        
+        _run(["chroot", str(STUDENT_TEMPLATE), "apt-get", "install", "-y", 
+              "ubuntu-minimal", "build-essential", "python3", "python3-pip", 
+              "git", "curl", "wget", "vim", "nano", "sudo", "locales"], env=env)
     finally:
         log.info("🧹 Geçici filesystem'ler çözülüyor...")
         subprocess.run(["umount", "-l", str(pts)], check=False)
