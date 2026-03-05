@@ -17,7 +17,7 @@ import logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 log = logging.getLogger(__name__)
 
-VERSION = "2026-03-05-CHROOT-RECOVERY-V12"
+VERSION = "2026-03-05-CHROOT-MULTIARCH-V13"
 log.info(f"🚀 Chroot Manager Script Version: {VERSION}")
 
 # Yapılandırma
@@ -41,6 +41,17 @@ def setup_template():
     """Şablon chroot ortamı oluştur."""
     log.info("Şablon chroot ortamı kuruluyor...")
 
+    # Mimari Tespiti (V13)
+    import platform
+    machine = platform.machine() # x86_64 veya aarch64
+    if machine == "x86_64":
+        target_arch = "amd64"
+    elif machine == "aarch64":
+        target_arch = "arm64"
+    else:
+        target_arch = machine # Fallback
+    log.info(f"Detected architecture: {machine} (Target arch for debootstrap: {target_arch})")
+
     # ÖNCE TEMİZLİK (V11): Eski mount'ları temizle ki rm -rf veya init hata vermesin
     log.info("🧹 Eski şablon mount'ları temizleniyor...")
     for p in ["proc", "sys", "dev/pts", "dev"]:
@@ -51,16 +62,26 @@ def setup_template():
         STUDENT_TEMPLATE.parent.mkdir(parents=True, exist_ok=True)
         # GNUPG ve Keyring'i baştan dahil et ki apt update doğrulamada hata vermesin (V8)
         _run([
-            "debootstrap", "--arch=amd64", 
+            "debootstrap", f"--arch={target_arch}", 
             "--include=gnupg,ubuntu-keyring,gpgv,ca-certificates",
             "jammy",
             str(STUDENT_TEMPLATE),
-            "http://archive.ubuntu.com/ubuntu/"
+            "http://ports.ubuntu.com/ubuntu-ports/" if target_arch == "arm64" else "http://archive.ubuntu.com/ubuntu/"
         ])
 
     # 1. Full Repositories (V7)
     sources_list = STUDENT_TEMPLATE / "etc" / "apt" / "sources.list"
-    repo_content = """
+    
+    # ARM64 için ports mirror kullan (V13)
+    if target_arch == "arm64":
+        repo_content = """
+deb http://ports.ubuntu.com/ubuntu-ports/ jammy main restricted universe multiverse
+deb http://ports.ubuntu.com/ubuntu-ports/ jammy-updates main restricted universe multiverse
+deb http://ports.ubuntu.com/ubuntu-ports/ jammy-backports main restricted universe multiverse
+deb http://ports.ubuntu.com/ubuntu-ports/ jammy-security main restricted universe multiverse
+"""
+    else:
+        repo_content = """
 deb http://archive.ubuntu.com/ubuntu/ jammy main restricted universe multiverse
 deb http://archive.ubuntu.com/ubuntu/ jammy-updates main restricted universe multiverse
 deb http://archive.ubuntu.com/ubuntu/ jammy-backports main restricted universe multiverse
