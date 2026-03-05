@@ -158,6 +158,8 @@ def seb_config():
     <string>SEB_OSX_3.3.2_52D4</string>
     <key>startURL</key>
     <string>{url}</string>
+    <key>allowVirtualMachine</key>
+    <true/>
     <key>sendBrowserExamKey</key>
     <true/>
     <key>browserWindowAllowReload</key>
