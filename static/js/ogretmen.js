@@ -64,6 +64,8 @@ async function modDegistir(mod) {
 async function ayarlariKaydet() {
   const chrootIp = document.getElementById('config-chroot-ip').value;
   const chrootPort = document.getElementById('config-chroot-port').value;
+  const chrootUser = document.getElementById('config-chroot-user').value;
+  const chrootPass = document.getElementById('config-chroot-pass').value;
   const systemHost = document.getElementById('config-system-host').value;
   const ttydUrl = document.getElementById('config-ttyd-url').value;
 
@@ -73,6 +75,8 @@ async function ayarlariKaydet() {
     body: JSON.stringify({
       chroot_host: chrootIp,
       chroot_port: chrootPort,
+      chroot_user: chrootUser,
+      chroot_pass: chrootPass,
       system_host: systemHost,
       ttyd_url: ttydUrl
     })

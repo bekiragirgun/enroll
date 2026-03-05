@@ -282,6 +282,21 @@
               style="width:100%; padding:0.6rem; background:#2d3748; border:1px solid #4a5568; border-radius:6px; color:#fff;">
             <small style="color:#718096;">Ana makine SSH portu (Default: 22).</small>
           </div>
+          <div style="display:grid; grid-template-columns: 1fr 1fr; gap:1rem;">
+            <div>
+              <label style="display:block; color:#90cdf4; font-size:0.9rem; margin-bottom:0.5rem;">👤 SSH User</label>
+              <input type="text" id="config-chroot-user" value="{{ config.chroot_user }}"
+                style="width:100%; padding:0.6rem; background:#2d3748; border:1px solid #4a5568; border-radius:6px; color:#fff;">
+              <small style="color:#718096;">Remote SSH kullanıcı adı.</small>
+            </div>
+            <div>
+              <label style="display:block; color:#90cdf4; font-size:0.9rem; margin-bottom:0.5rem;">🔑 SSH
+                Password</label>
+              <input type="password" id="config-chroot-pass" value="{{ config.chroot_pass }}"
+                style="width:100%; padding:0.6rem; background:#2d3748; border:1px solid #4a5568; border-radius:6px; color:#fff;">
+              <small style="color:#718096;">Boş bırakılırsa key-based ssh kullanılır.</small>
+            </div>
+          </div>
           <div>
             <label style="display:block; color:#90cdf4; font-size:0.9rem; margin-bottom:0.5rem;">🌍 Sistem IP /
               Hostname</label>

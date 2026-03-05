@@ -15,6 +15,8 @@ log = logging.getLogger("chroot_terminal")
 CT_991_HOST = "192.168.111.51"  # CT 991 IP adresi
 CT_991_SSH_PORT = 22            # Chroot içindeki SSH portu (V14 Default: 22)
 CT_991_REAL_SSH_PORT = 22       # CT 991 ana sistem SSH portu (V14 Default: 22)
+CT_991_USER = "root"            # SSH kullanıcı adı (V15 Default: root)
+CT_991_PASS = ""                # SSH şifresi (Opsiyonel, sshpass gerektirir)
 CHROOT_MANAGE_SCRIPT = "/root/enroll/chroot_yonetici.py" # PCT 991'deki tam yol
 PYTHON_PATH = "python3" # PCT 991'deki python yolu (Venv yerine sistem python kullanıyoruz)
 CHROOT_BASE = "/home/chroot"
@@ -51,12 +53,23 @@ def _ct991_exec(command: list) -> subprocess.CompletedProcess:
         log.debug(f"Executing locally: {' '.join(command)}")
         return subprocess.run(command, capture_output=True, text=True)
 
+    # Chroot komutları genellikle root yetkisi gerektirir
+    final_command = command
+    if CT_991_USER != "root":
+        final_command = ["sudo"] + command
+
     # SSH üzerinden bağlat
     ssh_cmd = [
-        "ssh", "-o", "ConnectTimeout=5", "-o", "BatchMode=yes",
+        "ssh", "-o", "ConnectTimeout=5", "-o", "BatchMode=yes" if not CT_991_PASS else "BatchMode=no",
         "-p", str(CT_991_REAL_SSH_PORT),
-        f"root@{CT_991_HOST}"
-    ] + command
+        f"{CT_991_USER}@{CT_991_HOST}"
+    ]
+    
+    # Şifre varsa sshpass kullan
+    if CT_991_PASS:
+        ssh_cmd = ["sshpass", "-p", CT_991_PASS] + ssh_cmd
+
+    ssh_cmd += final_command
     
     log.debug(f"Remoting (PCT 991): {' '.join(ssh_cmd)}")
     result = subprocess.run(ssh_cmd, capture_output=True, text=True)
@@ -89,13 +102,23 @@ def sync_manager_script():
 
         content = local_path.read_text()
         
+        # Dizin varlığı ve pipe için komut
+        target_dir = os.path.dirname(CHROOT_MANAGE_SCRIPT)
+        remote_cmd = f"mkdir -p {target_dir} && cat > {CHROOT_MANAGE_SCRIPT} && chmod +x {CHROOT_MANAGE_SCRIPT}"
+        if CT_991_USER != "root":
+            remote_cmd = f"sudo mkdir -p {target_dir} && sudo tee {CHROOT_MANAGE_SCRIPT} > /dev/null && sudo chmod +x {CHROOT_MANAGE_SCRIPT}"
+
         # Dizin varlığından emin ol ve dosyayı SSH üzerinden pipe ile gönder
         ssh_cmd = [
-            "ssh", "-o", "ConnectTimeout=5", "-o", "BatchMode=yes",
+            "ssh", "-o", "ConnectTimeout=5", "-o", "BatchMode=yes" if not CT_991_PASS else "BatchMode=no",
             "-p", str(CT_991_REAL_SSH_PORT),
-            f"root@{CT_991_HOST}",
-            f"mkdir -p /root/enroll && cat > {CHROOT_MANAGE_SCRIPT} && chmod +x {CHROOT_MANAGE_SCRIPT}"
+            f"{CT_991_USER}@{CT_991_HOST}",
+            remote_cmd
         ]
+
+        # Şifre varsa sshpass kullan
+        if CT_991_PASS:
+            ssh_cmd = ["sshpass", "-p", CT_991_PASS] + ssh_cmd
         
         subprocess.run(ssh_cmd, input=content, text=True, check=True)
         log.info(f"✅ chroot_yonetici.py {CT_991_HOST} üzerine senkronize edildi.")

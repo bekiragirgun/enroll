@@ -60,6 +60,8 @@ ders_durumu = {
     'terminal_url': '/terminal',
     'chroot_host': '192.168.111.51',
     'chroot_port': 22,
+    'chroot_user': 'root',
+    'chroot_pass': '',
     'system_host': '' # Boş ise otomatik IP kullanılır (V14.2)
 }
 
@@ -189,18 +191,24 @@ def ayarları_yukle():
     chroot_port = int(ayar_getir('chroot_port', 22))
     terminal_url = ayar_getir('terminal_url', '/terminal')
     system_host = ayar_getir('system_host', '')
+    chroot_user = ayar_getir('chroot_user', 'root')
+    chroot_pass = ayar_getir('chroot_pass', '')
     
     ders_durumu['chroot_host'] = chroot_host
     ders_durumu['chroot_port'] = chroot_port
     ders_durumu['terminal_url'] = terminal_url
     ders_durumu['system_host'] = system_host
+    ders_durumu['chroot_user'] = chroot_user
+    ders_durumu['chroot_pass'] = chroot_pass
     
     try:
         import chroot_terminal
         chroot_terminal.CT_991_HOST = chroot_host
         chroot_terminal.CT_991_SSH_PORT = chroot_port
         chroot_terminal.CT_991_REAL_SSH_PORT = chroot_port
-        log.info(f"✅ Ayarlar yüklendi: Chroot Host={chroot_host}, Port={chroot_port}, System Host={system_host or 'Auto'}")
+        chroot_terminal.CT_991_USER = chroot_user
+        chroot_terminal.CT_991_PASS = chroot_pass
+        log.info(f"✅ Ayarlar yüklendi: Host={chroot_host}, Port={chroot_port}, User={chroot_user}")
     except Exception as e:
         log.error(f"❌ Modül ayarları yüklenirken hata: {e}")
 
@@ -524,6 +532,24 @@ def api_config():
             chroot_terminal.CT_991_REAL_SSH_PORT = port
         except:
             pass
+
+    if 'chroot_user' in veri:
+        user = veri['chroot_user']
+        ders_durumu['chroot_user'] = user
+        ayar_kaydet('chroot_user', user)
+        try:
+            import chroot_terminal
+            chroot_terminal.CT_991_USER = user
+        except: pass
+
+    if 'chroot_pass' in veri:
+        pw = veri['chroot_pass']
+        ders_durumu['chroot_pass'] = pw
+        ayar_kaydet('chroot_pass', pw)
+        try:
+            import chroot_terminal
+            chroot_terminal.CT_991_PASS = pw
+        except: pass
 
     if 'system_host' in veri:
         host = veri['system_host']
