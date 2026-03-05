@@ -17,7 +17,7 @@ import logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 log = logging.getLogger(__name__)
 
-VERSION = "2026-03-05-CHROOT-PTY-FIX-V9"
+VERSION = "2026-03-05-STICKY-SHELL-V10"
 log.info(f"🚀 Chroot Manager Script Version: {VERSION}")
 
 # Yapılandırma
@@ -321,8 +321,10 @@ export PS1="\\[\\033[01;32m\\]\\u@\\h\\[\\033[00m\\]:\\[\\033[01;34m\\]\\w\\[\\0
 alias ll='ls -la'
 alias ..='cd ..'
 alias root='sudo su -'
+export IGNOREEOF=10
 echo "Kapadokya Üniversitesi Linux Laboratuvarı"
 echo "Kullanıcı: {username} | Yetki: sudo su - ile root olabilirsiniz"
+echo "İpucu: Ctrl+D hemen çıkış yapmaz (10 kez basılmalıdır)."
 echo ""
 """)
 
@@ -360,10 +362,10 @@ def create_ssh_entry(username):
             f.write(sudoers_line)
         subprocess.run(["chmod", "0440", str(sudoers_file)], check=False)
 
-    # SSH config'e ForceCommand ekle
+    # SSH config'e ForceCommand ekle (V10 - Sticky Shell)
     ssh_config = Path("/etc/ssh/sshd_config")
-    # Önemli: Chroot dizini ve su komutu
-    force_command = f"Match User {username}\n    ForceCommand sudo /usr/sbin/chroot {student_path} /bin/su - {username}\n"
+    # Önemli: Chroot dizini ve su komutunu bir döngüye al
+    force_command = f"Match User {username}\n    ForceCommand /bin/bash -c \"while true; do sudo /usr/sbin/chroot {student_path} /bin/su - {username}; echo 'Oturum kapatılamaz, yeniden başlatılıyor...'; sleep 1; done\"\n"
 
     # SSH config'e ekle
     ssh_config_text = ssh_config.read_text()

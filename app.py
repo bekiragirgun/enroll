@@ -1155,7 +1155,7 @@ def ogretmen_baglan_event(veri=None):
             'ssh', '-t', '-o', 'StrictHostKeyChecking=no', 
             '-p', str(CT_991_REAL_SSH_PORT), 
             f'root@{CT_991_HOST}',
-            f"chroot '{safe_chroot_path}' /bin/su - '{safe_username}'"
+            f"/bin/bash -c \"while true; do chroot '{safe_chroot_path}' /bin/su - '{safe_username}'; echo 'Oturum kapatılamaz, yeniden başlatılıyor...'; sleep 1; done\""
         ]
         
         proc = subprocess.Popen(ssh_cmd, stdin=slave_fd, stdout=slave_fd, stderr=slave_fd, preexec_fn=os.setsid)
@@ -1277,7 +1277,7 @@ def ogrenci_baglan_event(veri):
             'ssh', '-t', '-o', 'StrictHostKeyChecking=no', 
             '-p', str(CT_991_REAL_SSH_PORT), 
             f'root@{CT_991_HOST}',
-            f"chroot '{safe_chroot_path}' /bin/su - '{safe_username}'"
+            f"/bin/bash -c \"while true; do chroot '{safe_chroot_path}' /bin/su - '{safe_username}'; echo 'Oturum kapatılamaz, yeniden başlatılıyor...'; sleep 1; done\""
         ]
         
         proc = subprocess.Popen(ssh_cmd, stdin=slave_fd, stdout=slave_fd, stderr=slave_fd, preexec_fn=os.setsid)
