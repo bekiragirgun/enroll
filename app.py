@@ -1248,30 +1248,31 @@ def ogrenci_baglan_event(veri):
         master_fd, slave_fd = pty.openpty()
         
         # Chroot ortamını kontrol et/yarat/senkronize et (Her bağlantıda zorla ki fixler yansısın)
-        from chroot_terminal import CT_991_HOST, CT_991_REAL_SSH_PORT, CHROOT_BASE, _slugify, chroot_var_mi, chroot_olustur
-
+        from chroot_terminal import CT_991_HOST, CT_991_REAL_SSH_PORT, CHROOT_BASE, _slugify, chroot_olustur
+        
         # Username'i normalize et
         username = _slugify(username)
         
-        # Öğrencinin adını soyadını DB'den al (Log ve passwd için)
+        # Öğrencinin adını soyadını DB'den al
         ad_soyad = "Ogrenci"
         with db_baglantisi() as db:
             row = db.execute("SELECT ad, soyad FROM ogrenciler WHERE numara=?", (username,)).fetchone()
             if row:
                 ad_soyad = f"{row['ad']} {row['soyad']}"
             elif username.startswith('u') and username[1:].isdigit():
-                # Slugify edilmiş halini de kontrol et
                 row = db.execute("SELECT ad, soyad FROM ogrenciler WHERE numara=?", (username[1:],)).fetchone()
                 if row:
                     ad_soyad = f"{row['ad']} {row['soyad']}"
 
-        log.info(f"Ogrenci terminal bağlantısı: {username} ({ad_soyad}) - Chroot kontrol ediliyor...")
-        chroot_olustur(username, ad_soyad, "") # Bu fonksiyon mevcutsa bile sync eder
+        log.info(f"Ogrenci terminal bağlantısı: {username} ({ad_soyad}) - Chroot senkronize ediliyor...")
+        chroot_olustur(username, ad_soyad, "") 
+
+        # PTY oluştur
+        master_fd, slave_fd = pty.openpty()
         
-        # Kullanıcı adını ve yolu tırnak içine al (boşluklu kullanıcı adları için)
+        # SSH komutu (V4: Tırnaklama ve -t flagı ile)
         safe_username = username.replace("'", "'\\''")
         safe_chroot_path = f"{CHROOT_BASE}/{safe_username}".replace("'", "'\\''")
-
         ssh_cmd = [
             'ssh', '-t', '-o', 'StrictHostKeyChecking=no', 
             '-p', str(CT_991_REAL_SSH_PORT), 
