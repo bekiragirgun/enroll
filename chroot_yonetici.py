@@ -380,10 +380,11 @@ def create_student_chroot(username, real_name=""):
     username = _slugify(username)
     student_path = CHROOT_BASE / username
 
-    if student_path.exists():
+    if student_path.exists() and (student_path / "etc" / "passwd").exists():
         log.warning(f"{username} için chroot zaten var, konfigürasyonu güncelliyorum.")
     else:
-        log.info(f"{username} için chroot oluşturuluyor...")
+        log.info(f"{username} için chroot oluşturuluyor/onarılıyor...")
+        student_path.mkdir(parents=True, exist_ok=True)
         # Şablondan kopyala
         import subprocess
         result = subprocess.run(
@@ -420,7 +421,7 @@ def create_student_chroot(username, real_name=""):
 
     # Home dizini ve Shell ortamı (ilk kez ise)
     student_home = student_path / "home" / username
-    student_home.mkdir(mode=0o755, exist_ok=True)
+    student_home.mkdir(mode=0o755, parents=True, exist_ok=True)
     
     bashrc = student_home / ".bashrc"
     if not bashrc.exists():
