@@ -270,6 +270,22 @@ def ogretmen_giris_gerekli(f):
         return f(*args, **kwargs)
     return decorated
 
+def seb_gerekli(f):
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        # Eğer Kiosk Modu açık ise (bunu ayar olarak da veritabanından alabiliriz, şimdilik hep açık varsayabiliriz)
+        kiosk_modu = ayar_getir('kiosk_modu', '1') == '1'
+        if kiosk_modu:
+            user_agent = request.headers.get('User-Agent', '')
+            if 'SafeExamBrowser' not in user_agent:
+                return redirect(url_for('seb_gerekli_sayfasi'))
+        return f(*args, **kwargs)
+    return decorated
+
+@app.route('/seb-gerekli')
+def seb_gerekli_sayfasi():
+    return render_template('seb_gerekli.html')
+
 # ── Öğrenci Rotaları ──────────────────────────────────────────
 PAKET_SECENEKLERI = [
     '1. Paket (09:00-11:35)',
@@ -278,6 +294,7 @@ PAKET_SECENEKLERI = [
 ]
 
 @app.route('/')
+@seb_gerekli
 def ana():
     """Ana sayfa - Giriş formu veya Öğrenci Paneli."""
     # Eğer zaten giriş yapmışsa, paneli göster (PRG için)
@@ -307,6 +324,7 @@ def ana():
     return render_template('login.html', siniflar=siniflar, paket_varsayilan=paket_hesapla(), paket_secenekleri=PAKET_SECENEKLERI)
 
 @app.route('/giris', methods=['POST'])
+@seb_gerekli
 def giris():
     sinif_id  = request.form.get('sinif_id', '').strip()
     ad_soyad  = request.form.get('ad_soyad', '').strip().upper()

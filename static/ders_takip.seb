@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>originatorVersion</key>
+    <string>SEB_OSX_3.3.2_52D4</string>
+    <key>startURL</key>
+    <string>http://192.168.111.52:3333/</string>
+    <key>sendBrowserExamKey</key>
+    <true/>
+    <key>browserWindowAllowReload</key>
+    <true/>
+    <key>enableZoomPage</key>
+    <true/>
+    <key>allowSpellCheck</key>
+    <false/>
+    <key>showTaskBar</key>
+    <false/>
+    <key>enableQuitButton</key>
+    <true/>
+    <key>allowQuit</key>
+    <true/>
+    <key>quitPassword</key>
+    <string>linux2024</string>
+    <key>hashedQuitPassword</key>
+    <!-- Müşteri şifre istiyorsa buraya hash koyulabilir, biz şimdilik düz parola koyduk veya boş bırakabilir * -->
+    <string></string>
+    <key>allowPreferencesWindow</key>
+    <false/>
+    <key>showReloadButton</key>
+    <true/>
+    <key>showTime</key>
+    <true/>
+    <key>taskBarHeight</key>
+    <integer>40</integer>
+    <key>newBrowserWindowAllow</key>
+    <false/>
+    <key>allowDeveloperConsole</key>
+    <false/>
+    <key>enableTouchExit</key>
+    <false/>
+</dict>
+</plist>
