@@ -89,3 +89,48 @@ def db_olustur():
                 uyari_gonderildi INTEGER DEFAULT 0
             )
         """)
+
+        # ── Sınav / Quiz Modülü Tabloları ──
+        
+        # 1. Sınavlar
+        db.execute("""
+            CREATE TABLE IF NOT EXISTS sinavlar (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                baslik TEXT NOT NULL,
+                aktif INTEGER DEFAULT 0,
+                olusturma_tarihi TEXT NOT NULL
+            )
+        """)
+        
+        # 2. Sorular
+        db.execute("""
+            CREATE TABLE IF NOT EXISTS sorular (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                sinav_id INTEGER NOT NULL REFERENCES sinavlar(id) ON DELETE CASCADE,
+                metin TEXT NOT NULL,
+                tip TEXT NOT NULL DEFAULT 'cok_secmeli',
+                puan INTEGER DEFAULT 10
+            )
+        """)
+
+        # 3. Seçenekler
+        db.execute("""
+            CREATE TABLE IF NOT EXISTS secenekler (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                soru_id INTEGER NOT NULL REFERENCES sorular(id) ON DELETE CASCADE,
+                metin TEXT NOT NULL,
+                dogru_mu INTEGER DEFAULT 0
+            )
+        """)
+
+        # 4. Öğrenci Cevapları
+        db.execute("""
+            CREATE TABLE IF NOT EXISTS ogrenci_cevaplari (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                sinav_id INTEGER NOT NULL REFERENCES sinavlar(id) ON DELETE CASCADE,
+                ogrenci_numara TEXT NOT NULL,
+                soru_id INTEGER NOT NULL REFERENCES sorular(id) ON DELETE CASCADE,
+                verilen_cevap TEXT NOT NULL,
+                puan INTEGER DEFAULT 0
+            )
+        """)

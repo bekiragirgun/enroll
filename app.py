@@ -28,6 +28,7 @@ from routes.student import student_bp
 from routes.teacher import teacher_bp
 from routes.api import api_bp
 from routes.terminal import terminal_bp
+from routes.exam import exam_bp
 
 SECRET_KEY = 'kapadokya-linux-2024'
 
@@ -49,6 +50,7 @@ app.register_blueprint(student_bp)
 app.register_blueprint(teacher_bp)
 app.register_blueprint(api_bp)
 app.register_blueprint(terminal_bp)
+app.register_blueprint(exam_bp)
 
 # İlk yükleme
 db_olustur()

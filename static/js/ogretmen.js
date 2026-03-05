@@ -683,3 +683,206 @@ document.addEventListener('DOMContentLoaded', () => {
   setInterval(yoklamaCek, YOKLAMA_ARALIK);
   setInterval(sahteCek, 30_000);   // 30 saniyede bir kontrol
 });
+
+// ── Sınav / Quiz Yönetimi ──
+
+async function sinavListesiniGuncelle() {
+  const yanit = await safeFetch('/api/sinav/liste');
+  const veri = await yanit.json();
+  const kutu = document.getElementById('sinav-listesi-kutu');
+
+  if (!veri.sinavlar || veri.sinavlar.length === 0) {
+    kutu.innerHTML = '<div style="color:#718096;text-align:center;">Henüz sınav oluşturulmamış.</div>';
+    return;
+  }
+
+  let html = '<table style="width:100%; border-collapse:collapse; margin-top:1rem; color:#e2e8f0; font-size:0.9rem;">';
+  html += '<tr style="border-bottom:1px solid #4a5568; color:#a0aec0; text-align:left;">';
+  html += '<th style="padding:0.5rem;">Sınav Adı</th>';
+  html += '<th style="padding:0.5rem;">Soru Sayısı</th>';
+  html += '<th style="padding:0.5rem;">Durum</th>';
+  html += '<th style="padding:0.5rem;text-align:right;">İşlemler</th>';
+  html += '</tr>';
+
+  veri.sinavlar.forEach(s => {
+    const durumBadge = s.aktif ?
+      '<span style="background:#48bb78;color:#fff;padding:2px 8px;border-radius:12px;font-size:0.75rem;">Aktif (Yayında)</span>' :
+      '<span style="background:#718096;color:#fff;padding:2px 8px;border-radius:12px;font-size:0.75rem;">Beklemede</span>';
+
+    html += `<tr style="border-bottom:1px solid #2d3748;">
+          <td style="padding:0.5rem;">${s.baslik}</td>
+          <td style="padding:0.5rem;">${s.soru_sayisi} Soru</td>
+          <td style="padding:0.5rem;">${durumBadge}</td>
+          <td style="padding:0.5rem;text-align:right;">
+             <button class="btn-kucuk" style="background:#3182ce;" onclick="soruYonetiminiAc(${s.id}, '${s.baslik}')">📝 Sorular</button>
+             <button class="btn-kucuk yeşil" onclick="sinavSonuclariniAc(${s.id}, '${s.baslik}')">📊 Sonuçlar</button>
+             <button class="btn-kucuk" style="background:${s.aktif ? '#e53e3e' : '#48bb78'};" onclick="sinavDurumDegistir(${s.id}, ${!s.aktif})">
+                ${s.aktif ? '⏹ Yayını Durdur' : '▶ Sınavı Başlat'}
+             </button>
+          </td>
+      </tr>`;
+  });
+
+  html += '</table>';
+  kutu.innerHTML = html;
+}
+
+async function sinavOlustur() {
+  const baslik = document.getElementById('yeni-sinav-baslik').value;
+  if (!baslik.trim()) {
+    alert("Sınav başlığı boş olamaz!");
+    return;
+  }
+
+  const yanit = await safeFetch('/api/sinav/olustur', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ baslik })
+  });
+
+  if (yanit.ok) {
+    document.getElementById('yeni-sinav-baslik').value = '';
+    sinavListesiniGuncelle();
+  } else {
+    alert("Hata oluştu.");
+  }
+}
+
+async function sinavDurumDegistir(id, aktifYap) {
+  if (aktifYap && !confirm("Bu sınavı başlatmak istediğinize emin misiniz? Öğrenci ekranlarında otomatik olarak bu sınav açılacaktır.")) return;
+  if (!aktifYap && !confirm("Sınav yayından kaldırılsın mı?")) return;
+
+  const yanit = await safeFetch('/api/sinav/aktiflestir', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ sinav_id: id, aktif: aktifYap })
+  });
+
+  if (yanit.ok) {
+    sinavListesiniGuncelle();
+    if (aktifYap) {
+      document.querySelectorAll('.btn-mod').forEach(btn => btn.classList.remove('aktif'));
+    }
+  }
+}
+
+async function soruYonetiminiAc(sinavId, baslik) {
+  document.getElementById('soru-yonetimi-alani').style.display = 'block';
+  document.getElementById('sinav-sonuclari-alani').style.display = 'none';
+  document.getElementById('aktif-sinav-baslik').innerText = `Soru Yönetimi: ${baslik}`;
+  document.getElementById('soru-sinav-id').value = sinavId;
+
+  // Mevcut soruları çek
+  mevcutSorulariGetir(sinavId);
+}
+
+function soruEklemeKapat() {
+  document.getElementById('soru-yonetimi-alani').style.display = 'none';
+}
+
+async function mevcutSorulariGetir(sinavId) {
+  const yanit = await safeFetch(`/api/sinav/sorular/${sinavId}`);
+  const veri = await yanit.json();
+
+  document.getElementById('mevcut-soru-sayisi').innerText = veri.sorular.length;
+
+  const kutu = document.getElementById('mevcut-sorular-listesi');
+  if (veri.sorular.length === 0) {
+    kutu.innerHTML = '<div style="color:#718096;">Soru eklenmemiş.</div>';
+    return;
+  }
+
+  let html = '';
+  veri.sorular.forEach((s, idx) => {
+    html += `<div style="background:#1a202c; padding:1rem; border-radius:6px; margin-bottom:1rem; border:1px solid #4a5568;">
+          <div style="font-weight:bold; color:#e2e8f0; margin-bottom:0.5rem;">Soru ${idx + 1}: ${s.metin} <span style="color:#a0aec0;font-size:0.8rem;font-weight:normal;">(${s.puan} Puan)</span></div>`;
+
+    s.secenekler.forEach((sec, sIdx) => {
+      const isCorrect = sec.dogru_mu ? '✅' : '❌';
+      const color = sec.dogru_mu ? '#48bb78' : '#a0aec0';
+      html += `<div style="color:${color}; font-size:0.9rem; margin-left:1rem; margin-bottom:0.25rem;">${String.fromCharCode(65 + sIdx)}) ${sec.metin} ${sec.dogru_mu ? '(Doğru Cevap)' : ''}</div>`;
+    });
+    html += `</div>`;
+  });
+  kutu.innerHTML = html;
+}
+
+async function soruKaydet() {
+  const sinavId = document.getElementById('soru-sinav-id').value;
+  const metin = document.getElementById('soru-metni').value;
+
+  let secenekler = [];
+  let secilenDogruIndex = parseInt(document.querySelector('input[name="dogru_secenek"]:checked').value);
+
+  for (let i = 0; i < 4; i++) {
+    let optText = document.getElementById(`secenek-${i}`).value.trim();
+    if (optText !== '') {
+      secenekler.push({
+        metin: optText,
+        dogru_mu: (secilenDogruIndex === i)
+      });
+    }
+  }
+
+  if (secenekler.length < 2) {
+    alert("En az 2 seçenek girmelisiniz!");
+    return;
+  }
+  if (!metin.trim()) {
+    alert("Soru metni boş olamaz!");
+    return;
+  }
+
+  const yanit = await safeFetch('/api/sinav/soru_ekle', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ sinav_id: sinavId, metin: metin, secenekler: secenekler, puan: 10 })
+  });
+
+  if (yanit.ok) {
+    // Formu temizle
+    document.getElementById('soru-metni').value = '';
+    for (let i = 0; i < 4; i++) document.getElementById(`secenek-${i}`).value = '';
+    document.querySelectorAll('input[name="dogru_secenek"]')[0].checked = true;
+
+    mevcutSorulariGetir(sinavId);
+    sinavListesiniGuncelle(); // Listede soru sayısını güncelle
+  } else {
+    const v = await yanit.json();
+    alert("Hata: " + (v.mesaj || 'Bilinmeyen hata'));
+  }
+}
+
+async function sinavSonuclariniAc(sinavId, baslik) {
+  document.getElementById('sinav-sonuclari-alani').style.display = 'block';
+  document.getElementById('soru-yonetimi-alani').style.display = 'none';
+  document.getElementById('sonuc-sinav-baslik').innerText = `Sınav Sonuçları: ${baslik}`;
+
+  const tablo = document.getElementById('sinav-sonuclari-tablo');
+  tablo.innerHTML = '<div style="color:#718096;text-align:center;">Sonuçlar yükleniyor...</div>';
+
+  const yanit = await safeFetch(`/api/sinav/sonuclar/${sinavId}`);
+  const veri = await yanit.json();
+
+  if (!veri.sonuclar || veri.sonuclar.length === 0) {
+    tablo.innerHTML = '<div style="color:#718096;text-align:center;">Henüz bu sınavı çözen öğrenci yok.</div>';
+    return;
+  }
+
+  let html = '<table style="width:100%; border-collapse:collapse; margin-top:1rem; color:#e2e8f0; font-size:0.9rem;">';
+  html += '<tr style="border-bottom:1px solid #4a5568; color:#a0aec0; text-align:left;">';
+  html += '<th style="padding:0.5rem;">Öğrenci No</th>';
+  html += '<th style="padding:0.5rem;">Ad Soyad</th>';
+  html += '<th style="padding:0.5rem;">Puanı</th>';
+  html += '</tr>';
+
+  veri.sonuclar.sort((a, b) => b.toplam_puan - a.toplam_puan).forEach(s => {
+    html += `<tr style="border-bottom:1px solid #2d3748;">
+          <td style="padding:0.5rem;">${s.numara}</td>
+          <td style="padding:0.5rem;">${s.ad_soyad}</td>
+          <td style="padding:0.5rem;font-weight:bold;color:#48bb78;">${s.toplam_puan} Puan</td>
+       </tr>`;
+  });
+  html += '</table>';
+  tablo.innerHTML = html;
+}

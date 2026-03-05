@@ -190,6 +190,7 @@
           style="display:none;background:#c53030;color:#fff;border-radius:10px;padding:0 6px;font-size:0.72rem;margin-left:4px;">0</span>
       </button>
       <button class="tab-btn" onclick="tabGec('arsiv', this)">📁 Arşiv</button>
+      <button class="tab-btn" onclick="tabGec('sinav', this); sinavListesiniGuncelle();">📝 Sınavlar</button>
       <button class="tab-btn" onclick="tabGec('ayarlar', this)">⚙️ Ayarlar</button>
     </div>
 
@@ -257,6 +258,79 @@
       </div>
       <div id="guvenlik-log-kutu" style="margin-top:0.75rem;">
         <div style="color:#718096;text-align:center;padding:1rem;">Yükleniyor...</div>
+      </div>
+    </div>
+
+    <!-- Sınav Yönetimi -->
+    <div id="tab-sinav" class="panel-bolum" style="margin-top:1rem;">
+      <div class="kutu-baslik">
+        <h3>📝 Sınav Yönetimi</h3>
+        <span style="color:#4a5568;font-size:0.8rem;">Sınav oluştur, soruları ekle ve başlat</span>
+      </div>
+      <div class="kontrol-kutu" style="margin-top:1rem; background:#1a202c;">
+        <div style="display:flex;gap:0.5rem;margin-bottom:1rem;">
+          <input type="text" id="yeni-sinav-baslik" placeholder="Sınav Başlığı (Örn: Ünite 1 Quizi)"
+            style="padding:0.4rem;border-radius:6px;border:1px solid #4a5568;background:#2d3748;color:#fff;flex:1;">
+          <button class="btn-kucuk yeşil" onclick="sinavOlustur()">➕ Yeni Sınav Oluştur</button>
+        </div>
+        <div id="sinav-listesi-kutu">
+          <div style="color:#718096;text-align:center;">Sınavlar yükleniyor...</div>
+        </div>
+      </div>
+
+      <!-- Soru Ekleme / Düzenleme Alanı -->
+      <div id="soru-yonetimi-alani"
+        style="display:none; margin-top:1rem; padding:1rem; background:#2d3748; border-radius:8px; border:1px solid #4a5568;">
+        <h4 style="color:#90cdf4; margin-top:0; margin-bottom:1rem;" id="aktif-sinav-baslik">Soru Yönetimi</h4>
+        <input type="hidden" id="soru-sinav-id">
+        <div style="margin-bottom:1rem;">
+          <label style="display:block;font-size:0.85rem;margin-bottom:4px;color:#a0aec0;">Soru Metni:</label>
+          <textarea id="soru-metni" rows="3"
+            style="width:100%;padding:0.5rem;border-radius:6px;border:1px solid #4a5568;background:#1a202c;color:#fff;resize:vertical;"
+            placeholder="Soru metnini yazın..."></textarea>
+        </div>
+        <div style="margin-bottom:1rem;">
+          <label style="display:block;font-size:0.85rem;margin-bottom:4px;color:#a0aec0;">Seçenekler (Doğru cevabın
+            yanındaki kutuyu işaretleyin):</label>
+          <div style="display:flex;align-items:center;gap:0.5rem;margin-bottom:0.5rem;">
+            <input type="radio" name="dogru_secenek" value="0" checked>
+            <input type="text" id="secenek-0" placeholder="A şıkkı"
+              style="flex:1;padding:0.4rem;border-radius:6px;border:1px solid #4a5568;background:#1a202c;color:#fff;">
+          </div>
+          <div style="display:flex;align-items:center;gap:0.5rem;margin-bottom:0.5rem;">
+            <input type="radio" name="dogru_secenek" value="1">
+            <input type="text" id="secenek-1" placeholder="B şıkkı"
+              style="flex:1;padding:0.4rem;border-radius:6px;border:1px solid #4a5568;background:#1a202c;color:#fff;">
+          </div>
+          <div style="display:flex;align-items:center;gap:0.5rem;margin-bottom:0.5rem;">
+            <input type="radio" name="dogru_secenek" value="2">
+            <input type="text" id="secenek-2" placeholder="C şıkkı"
+              style="flex:1;padding:0.4rem;border-radius:6px;border:1px solid #4a5568;background:#1a202c;color:#fff;">
+          </div>
+          <div style="display:flex;align-items:center;gap:0.5rem;margin-bottom:0.5rem;">
+            <input type="radio" name="dogru_secenek" value="3">
+            <input type="text" id="secenek-3" placeholder="D şıkkı"
+              style="flex:1;padding:0.4rem;border-radius:6px;border:1px solid #4a5568;background:#1a202c;color:#fff;">
+          </div>
+        </div>
+        <div style="text-align:right;">
+          <button class="btn-kucuk" style="background:#718096;" onclick="soruEklemeKapat()">İptal</button>
+          <button class="btn-kucuk yeşil" onclick="soruKaydet()">💾 Soruyu Ekle</button>
+        </div>
+        <hr style="border-color:#4a5568;margin:1.5rem 0;">
+        <h4 style="color:#e2e8f0;margin-top:0;">Mevcut Sorular: <span id="mevcut-soru-sayisi">0</span></h4>
+        <div id="mevcut-sorular-listesi"></div>
+      </div>
+
+      <!-- Sınav Sonuçları Alanı -->
+      <div id="sinav-sonuclari-alani"
+        style="display:none; margin-top:1rem; padding:1rem; background:#2d3748; border-radius:8px; border:1px solid #4a5568;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;">
+          <h4 style="color:#90cdf4; margin:0;" id="sonuc-sinav-baslik">Sınav Sonuçları</h4>
+          <button class="btn-kucuk"
+            onclick="document.getElementById('sinav-sonuclari-alani').style.display='none'">Kapat</button>
+        </div>
+        <div id="sinav-sonuclari-tablo"></div>
       </div>
     </div>
 

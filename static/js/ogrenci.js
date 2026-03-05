@@ -42,10 +42,11 @@ function modalGoster(mod, ekstra) {
   const bekleme = document.getElementById('bekleme-ekrani');
   const slayt = document.getElementById('slayt-ekrani');
   const terminal = document.getElementById('terminal-ekrani');
+  const sinav = document.getElementById('sinav-ekrani');
   const overlay = document.getElementById('join-overlay');
 
   // Hepsini gizle
-  [bekleme, slayt, terminal].forEach(el => { if (el) el.style.display = 'none'; });
+  [bekleme, slayt, terminal, sinav].forEach(el => { if (el) el.style.display = 'none'; });
 
   // Eğer mod 'bekleme' DEĞİLSE ve tam ekran DEĞİLSE overlay göster
   if (mod !== 'bekleme' && !document.fullscreenElement) {
@@ -101,8 +102,111 @@ function modalGoster(mod, ekstra) {
       }
     }
   }
+  else if (mod === 'sinav') {
+    if (sinav) {
+      sinav.style.display = 'block';
+      aktifSinaviGetir();
+    }
+  }
 
   document.body.dataset.mod = mod;
+}
+
+// Global olarak sınav değişkenleri
+let mevcutSinavId = null;
+
+async function aktifSinaviGetir() {
+  try {
+    const yanit = await fetch('/api/sinav/aktif');
+    const veri = await yanit.json();
+
+    if (!veri.aktif_sinav) return;
+
+    mevcutSinavId = veri.aktif_sinav.id;
+    document.getElementById('ogrenci-sinav-baslik').innerText = veri.aktif_sinav.baslik;
+
+    const alan = document.getElementById('ogrenci-sorular-alani');
+    const buton = document.getElementById('btn-sinav-gonder');
+    const bitis = document.getElementById('sinav-bitis-mesaji');
+
+    if (veri.aktif_sinav.zaten_cevapladi) {
+      alan.style.display = 'none';
+      buton.style.display = 'none';
+      bitis.style.display = 'block';
+      return;
+    }
+
+    alan.style.display = 'block';
+    buton.style.display = 'block';
+    bitis.style.display = 'none';
+
+    let html = '';
+    veri.aktif_sinav.sorular.forEach((soru, i) => {
+      html += `<div class="sinav-soru" data-soru-id="${soru.id}" style="background:#2d3748; padding:1.5rem; border-radius:8px; margin-bottom:1.5rem; border:1px solid #4a5568;">
+                <h3 style="margin-top:0; color:#e2e8f0; font-size:1.1rem; margin-bottom:1rem;">${i + 1}. ${soru.metin}</h3>
+                <div style="display:flex; flex-direction:column; gap:0.75rem;">`;
+
+      soru.secenekler.forEach(secenek => {
+        html += `
+                 <label style="display:flex; align-items:center; gap:0.5rem; cursor:pointer; background:#1a202c; padding:0.75rem; border-radius:6px; border:1px solid #4a5568; transition:all 0.2s;">
+                    <input type="radio" name="soru_${soru.id}" value="${secenek.id}" style="width:18px;height:18px;">
+                    <span style="font-size:1rem;">${secenek.metin}</span>
+                 </label>
+               `;
+      });
+      html += `</div></div>`;
+    });
+
+    alan.innerHTML = html;
+
+  } catch (e) {
+    console.error("Sınav çekilemedi", e);
+  }
+}
+
+async function sinavCevaplariniGonder() {
+  if (!mevcutSinavId) return;
+
+  const sorular = document.querySelectorAll('.sinav-soru');
+  let cevaplar = [];
+  let eksikVar = false;
+
+  sorular.forEach(soruDiv => {
+    const soruId = soruDiv.dataset.soruId;
+    const secili = document.querySelector(`input[name="soru_${soruId}"]:checked`);
+    if (secili) {
+      cevaplar.push({
+        soru_id: parseInt(soruId),
+        secenek_id: parseInt(secili.value)
+      });
+    } else {
+      eksikVar = true;
+    }
+  });
+
+  if (eksikVar) {
+    alert("Lütfen tüm soruları işaretlediğinizden emin olun.");
+    return;
+  }
+
+  try {
+    const yanit = await fetch('/api/sinav/cevap_kaydet', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        sinav_id: mevcutSinavId,
+        cevaplar: cevaplar
+      })
+    });
+
+    if (yanit.ok) {
+      document.getElementById('ogrenci-sorular-alani').style.display = 'none';
+      document.getElementById('btn-sinav-gonder').style.display = 'none';
+      document.getElementById('sinav-bitis-mesaji').style.display = 'block';
+    }
+  } catch (e) {
+    alert("Bağlantı hatası, cevaplar gönderilemedi!");
+  }
 }
 
 async function durumKontrol() {
