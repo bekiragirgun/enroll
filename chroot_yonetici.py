@@ -506,7 +506,7 @@ def mount_student_chroot(username):
     # Resolv.conf tazele
     subprocess.run(["cp", "-f", "/etc/resolv.conf", str(student_path / "etc" / "resolv.conf")], check=False)
 
-    log.info(f"✅ {username} chroot (V9) hazır ve mount edildi.")
+    log.info(f"✅ {username} chroot (V11) hazır ve mount edildi.")
     return True
 
 
