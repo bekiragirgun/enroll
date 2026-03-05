@@ -13,8 +13,8 @@ log = logging.getLogger("chroot_terminal")
 
 # CT 991 (ogrenci-vm) bilgileri
 CT_991_HOST = "192.168.111.51"  # CT 991 IP adresi
-CT_991_SSH_PORT = 2222          # Chroot içindeki SSH portu
-CT_991_REAL_SSH_PORT = 2222       # CT 991 ana sistem SSH portu
+CT_991_SSH_PORT = 22            # Chroot içindeki SSH portu (V14 Default: 22)
+CT_991_REAL_SSH_PORT = 22       # CT 991 ana sistem SSH portu (V14 Default: 22)
 CHROOT_MANAGE_SCRIPT = "/root/enroll/chroot_yonetici.py" # PCT 991'deki tam yol
 PYTHON_PATH = "python3" # PCT 991'deki python yolu (Venv yerine sistem python kullanıyoruz)
 CHROOT_BASE = "/home/chroot"
@@ -40,9 +40,18 @@ def _slugify(text):
     return text
 
 
+def _is_local(host):
+    """Host yerel mi kontrol et."""
+    return host in ["localhost", "127.0.0.1", "::1"] or host == Path("/etc/hostname").read_text().strip() if Path("/etc/hostname").exists() else False
+
 def _ct991_exec(command: list) -> subprocess.CompletedProcess:
-    """CT 991 üzerinde komut çalıştır (SSH üzerinden)."""
-    # PCT 990 üzerinden PCT 991'e SSH ile bağlanıp komut çalıştırır
+    """CT 991 üzerinde komut çalıştır (Local veya SSH üzerinden)."""
+    
+    if _is_local(CT_991_HOST):
+        log.debug(f"Executing locally: {' '.join(command)}")
+        return subprocess.run(command, capture_output=True, text=True)
+
+    # SSH üzerinden bağlat
     ssh_cmd = [
         "ssh", "-o", "ConnectTimeout=5", "-o", "BatchMode=yes",
         "-p", str(CT_991_REAL_SSH_PORT),
@@ -67,6 +76,17 @@ def sync_manager_script():
             log.error(f"Senkronizasyon hatası: {local_path} bulunamadı")
             return False
             
+        if _is_local(CT_991_HOST):
+            # Yerel modda dosya zaten burada, sadece erişimi kontrol et
+            if not Path(CHROOT_MANAGE_SCRIPT).exists():
+                # Eğer CHROOT_MANAGE_SCRIPT farklı bir yerse kopyala
+                if str(local_path) != CHROOT_MANAGE_SCRIPT:
+                    import shutil
+                    os.makedirs(os.path.dirname(CHROOT_MANAGE_SCRIPT), exist_ok=True)
+                    shutil.copy2(local_path, CHROOT_MANAGE_SCRIPT)
+                    os.chmod(CHROOT_MANAGE_SCRIPT, 0o755)
+            return True
+
         content = local_path.read_text()
         
         # Dizin varlığından emin ol ve dosyayı SSH üzerinden pipe ile gönder
@@ -78,7 +98,7 @@ def sync_manager_script():
         ]
         
         subprocess.run(ssh_cmd, input=content, text=True, check=True)
-        log.info("✅ chroot_yonetici.py PCT 991'e senkronize edildi.")
+        log.info(f"✅ chroot_yonetici.py {CT_991_HOST} üzerine senkronize edildi.")
         return True
     except Exception as e:
         log.error(f"Senkronizasyon hatası: {e}")

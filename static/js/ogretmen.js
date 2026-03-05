@@ -63,12 +63,19 @@ async function modDegistir(mod) {
 
 async function ayarlariKaydet() {
   const chrootIp = document.getElementById('config-chroot-ip').value;
+  const chrootPort = document.getElementById('config-chroot-port').value;
+  const systemHost = document.getElementById('config-system-host').value;
   const ttydUrl = document.getElementById('config-ttyd-url').value;
 
   const yanit = await safeFetch('/api/config', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ chroot_host: chrootIp, ttyd_url: ttydUrl })
+    body: JSON.stringify({
+      chroot_host: chrootIp,
+      chroot_port: chrootPort,
+      system_host: systemHost,
+      ttyd_url: ttydUrl
+    })
   });
 
   const veri = await yanit.json();

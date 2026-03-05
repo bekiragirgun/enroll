@@ -271,17 +271,32 @@
           <div>
             <label style="display:block; color:#90cdf4; font-size:0.9rem; margin-bottom:0.5rem;">🖥️ Chroot Host IP (PCT
               991)</label>
-            <input type="text" id="config-chroot-ip" value="192.168.111.51"
+            <input type="text" id="config-chroot-ip" value="{{ config.chroot_host }}"
               style="width:100%; padding:0.6rem; background:#2d3748; border:1px solid #4a5568; border-radius:6px; color:#fff;">
             <small style="color:#718096;">Öğrenci chroot ortamlarının oluşturulduğu sunucu.</small>
           </div>
           <div>
+            <label style="display:block; color:#90cdf4; font-size:0.9rem; margin-bottom:0.5rem;">🔌 Chroot SSH
+              Port</label>
+            <input type="number" id="config-chroot-port" value="{{ config.chroot_port }}"
+              style="width:100%; padding:0.6rem; background:#2d3748; border:1px solid #4a5568; border-radius:6px; color:#fff;">
+            <small style="color:#718096;">Ana makine SSH portu (Default: 22).</small>
+          </div>
+          <div>
+            <label style="display:block; color:#90cdf4; font-size:0.9rem; margin-bottom:0.5rem;">🌍 Sistem IP /
+              Hostname</label>
+            <input type="text" id="config-system-host" value="{{ config.system_host }}"
+              style="width:100%; padding:0.6rem; background:#2d3748; border:1px solid #4a5568; border-radius:6px; color:#fff;"
+              placeholder="Örn: 192.168.1.50">
+            <small style="color:#718096;">Öğrenci giriş adresi için kullanılır. Boş bırakılırsa otomatik tespit
+              edilir.</small>
+          </div>
+          <div>
             <label style="display:block; color:#90cdf4; font-size:0.9rem; margin-bottom:0.5rem;">📡 Terminal (TTYD)
               Yayını URL</label>
-            <input type="text" id="config-ttyd-url" value="/terminal"
+            <input type="text" id="config-ttyd-url" value="{{ config.terminal_url }}"
               style="width:100%; padding:0.6rem; background:#2d3748; border:1px solid #4a5568; border-radius:6px; color:#fff;">
-            <small style="color:#718096;">Öğrenci ekranında gösterilecek terminal adresi (Kendi terminal için /terminal
-              bırakın).</small>
+            <small style="color:#718096;">Öğrenci ekranında gösterilecek terminal adresi (/terminal bırakın).</small>
           </div>
           <button class="btn-kucuk" style="background:#48bb78; align-self:start;" onclick="ayarlariKaydet()">💾 Ayarları
             Kaydet</button>

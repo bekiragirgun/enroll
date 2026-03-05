@@ -57,7 +57,10 @@ socketio = SocketIO(app, cors_allowed_origins="*", async_mode='eventlet')
 ders_durumu = {
     'mod':   'bekleme',   # bekleme | slayt
     'dosya': '',           # aktif slayt dosyası
-    'terminal_url': '/terminal'
+    'terminal_url': '/terminal',
+    'chroot_host': '192.168.111.51',
+    'chroot_port': 22,
+    'system_host': '' # Boş ise otomatik IP kullanılır (V14.2)
 }
 
 @app.route('/favicon.ico')
@@ -136,9 +139,17 @@ def db_olustur():
                 ip             TEXT NOT NULL,
                 gercek_numara  TEXT NOT NULL,
                 gercek_ad      TEXT NOT NULL,
-                denenen_numara TEXT NOT NULL,
-                denenen_ad     TEXT NOT NULL,
+                denenen_numara TEXT NOT NULL DEFAULT '',
+                denenen_ad     TEXT NOT NULL DEFAULT '',
                 sinif          TEXT NOT NULL DEFAULT ''
+            )
+        """)
+        
+        # Sistem ayarları tablosu (V14 Persistence)
+        db.execute("""
+            CREATE TABLE IF NOT EXISTS ayarlar (
+                anahtar  TEXT PRIMARY KEY,
+                deger    TEXT NOT NULL
             )
         """)
 
@@ -156,7 +167,46 @@ def db_olustur():
                 uyari_gonderildi INTEGER DEFAULT 0
             )
         """)
-        db.commit()
+
+# ── Ayarlar Servisi ───────────────────────────────────────────
+def ayar_kaydet(anahtar, deger):
+    with db_baglantisi() as db:
+        db.execute("INSERT OR REPLACE INTO ayarlar (anahtar, deger) VALUES (?, ?)", (anahtar, str(deger)))
+
+def ayar_getir(anahtar, varsayilan=None):
+    try:
+        with db_baglantisi() as db:
+            satir = db.execute("SELECT deger FROM ayarlar WHERE anahtar=?", (anahtar,)).fetchone()
+            return satir['deger'] if satir else varsayilan
+    except:
+        return varsayilan
+
+def ayarları_yukle():
+    """Veritabanındaki ayarları belleğe ve modüllere yükle."""
+    log.info("⚙️ Ayarlar yükleniyor...")
+    
+    chroot_host = ayar_getir('chroot_host', '192.168.111.51')
+    chroot_port = int(ayar_getir('chroot_port', 22))
+    terminal_url = ayar_getir('terminal_url', '/terminal')
+    system_host = ayar_getir('system_host', '')
+    
+    ders_durumu['chroot_host'] = chroot_host
+    ders_durumu['chroot_port'] = chroot_port
+    ders_durumu['terminal_url'] = terminal_url
+    ders_durumu['system_host'] = system_host
+    
+    try:
+        import chroot_terminal
+        chroot_terminal.CT_991_HOST = chroot_host
+        chroot_terminal.CT_991_SSH_PORT = chroot_port
+        chroot_terminal.CT_991_REAL_SSH_PORT = chroot_port
+        log.info(f"✅ Ayarlar yüklendi: Chroot Host={chroot_host}, Port={chroot_port}, System Host={system_host or 'Auto'}")
+    except Exception as e:
+        log.error(f"❌ Modül ayarları yüklenirken hata: {e}")
+
+# İlk yükleme (V14.2: modüllerin erişebilmesi için global scope)
+db_olustur()
+ayarları_yukle()
 
 # ── Yardımcı ──────────────────────────────────────────────────
 def bugun():
@@ -311,12 +361,12 @@ def giris():
                 # ── Şüpheli girişi logla ──────────────────────────────
                 db.execute(
                     'INSERT INTO sahte_giris_log '
-                    '(tarih, saat, ip, gercek_numara, gercek_ad, denenen_numara, denenen_ad, sinif) '
-                    'VALUES (?,?,?,?,?,?,?,?)',
+                    '(tarih, saat, ip, gercek_numara, gercek_ad, girilen_numara, denenen_ad, denenen_numara, sinif) '
+                    'VALUES (?,?,?,?,?,?,?,?,?)',
                     (tarih, saat, istemci,
                      list(ip_numaralar)[0],  # İlk numara
                      'Aynı IP',  # Gerçek ad (IP logu)
-                     numara, ad_soyad,
+                     numara, ad_soyad, numara,
                      sinif_ad)
                 )
                 db.commit()
@@ -428,7 +478,8 @@ def ogretmen_panel():
         tarih=bugun(),
         slaytlar=slayt_listesi(),
         aktif_mod=ders_durumu['mod'],
-        aktif_dosya=ders_durumu['dosya']
+        aktif_dosya=ders_durumu['dosya'],
+        config=ders_durumu
     )
 
 @app.route('/api/mod', methods=['POST'])
@@ -452,16 +503,37 @@ def api_mod_degistir():
 def api_config():
     veri = request.get_json()
     if 'chroot_host' in veri:
-        ders_durumu['chroot_host'] = veri['chroot_host']
+        host = veri['chroot_host']
+        ders_durumu['chroot_host'] = host
+        ayar_kaydet('chroot_host', host)
         # chroot_terminal modülündeki IP'yi güncelle
         try:
             import chroot_terminal
-            chroot_terminal.CT_991_HOST = veri['chroot_host']
+            chroot_terminal.CT_991_HOST = host
         except:
             pass
             
+    if 'chroot_port' in veri:
+        try:
+            port = int(veri['chroot_port'])
+            ders_durumu['chroot_port'] = port
+            ayar_kaydet('chroot_port', port)
+            # chroot_terminal modülündeki portları güncelle
+            import chroot_terminal
+            chroot_terminal.CT_991_SSH_PORT = port
+            chroot_terminal.CT_991_REAL_SSH_PORT = port
+        except:
+            pass
+
+    if 'system_host' in veri:
+        host = veri['system_host']
+        ders_durumu['system_host'] = host
+        ayar_kaydet('system_host', host)
+            
     if 'ttyd_url' in veri:
-        ders_durumu['terminal_url'] = veri['ttyd_url']
+        url = veri['ttyd_url']
+        ders_durumu['terminal_url'] = url
+        ayar_kaydet('terminal_url', url)
         
     return jsonify({'durum': 'ok'})
 
@@ -1321,18 +1393,22 @@ def ogrenci_girdi_event(veri):
 
 
 # ── Başlat ────────────────────────────────────────────────────
+# ── Başlat ────────────────────────────────────────────────────
 if __name__ == '__main__':
-    db_olustur()
+    # İlk yükleme (Global scope'a alındı)
 
     # Yerel IP'yi göster
     import socket
-    try:
-        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        s.connect(('8.8.8.8', 80))
-        yerel_ip = s.getsockname()[0]
-        s.close()
-    except Exception:
-        yerel_ip = '127.0.0.1'
+    if ders_durumu.get('system_host'):
+        yerel_ip = ders_durumu['system_host']
+    else:
+        try:
+            s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            s.connect(('8.8.8.8', 80))
+            yerel_ip = s.getsockname()[0]
+            s.close()
+        except Exception:
+            yerel_ip = '127.0.0.1'
 
     print()
     print('=' * 55)
@@ -1343,7 +1419,16 @@ if __name__ == '__main__':
     from chroot_terminal import CT_991_HOST, CT_991_REAL_SSH_PORT
     print(f'  Öğretmen terminal  : http://localhost:3333/teacher/terminal')
     print(f'  Şifre              : {OGRETMEN_SIFRE}')
-    print(f'  Chroot Host (991)  : ✅ {CT_991_HOST}:{CT_991_REAL_SSH_PORT}')
+    
+    from chroot_terminal import CT_991_HOST, CT_991_REAL_SSH_PORT, _is_local
+    is_local = _is_local(CT_991_HOST)
+    mode_text = "🏠 LOCAL MODE" if is_local else "🌐 REMOTE MODE"
+    print(f'  Chroot Host (991)  : ✅ {CT_991_HOST}:{CT_991_REAL_SSH_PORT} ({mode_text})')
+    
+    if ders_durumu.get('system_host'):
+        print(f'  Sistem IP (Manuel) : 🛠️ {ders_durumu["system_host"]}')
+    else:
+        print(f'  Sistem IP (Oto)    : 🔍 {yerel_ip}')
     print('=' * 55)
     print()
 
