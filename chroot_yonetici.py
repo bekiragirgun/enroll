@@ -27,10 +27,10 @@ STUDENT_GROUP = "ogrenciler"
 SUDOERS_FILE = "/etc/sudoers.d/chroot-ogrenciler"
 
 
-def _run(cmd, check=True):
+def _run(cmd, check=True, **kwargs):
     """Komut çalıştır."""
     log.info(f"Running: {' '.join(cmd)}")
-    result = subprocess.run(cmd, capture_output=True, text=True)
+    result = subprocess.run(cmd, capture_output=True, text=True, **kwargs)
     if check and result.returncode != 0:
         log.error(f"Command failed: {result.stderr}")
         raise RuntimeError(f"Command failed: {cmd}")
