@@ -55,9 +55,9 @@ socketio = SocketIO(app, cors_allowed_origins="*", async_mode='eventlet')
 
 # Ders durumu (bellek içi)
 ders_durumu = {
-    'mod':   'bekleme',   # bekleme | slayt
+    'mod':   'bekleme',   # bekleme | slayt | terminal
     'dosya': '',           # aktif slayt dosyası
-    'terminal_url': '/terminal'
+    'terminal_url': ''     # öğretmen terminal moduna geçene kadar boş
 }
 
 @app.route('/favicon.ico')
@@ -1038,6 +1038,37 @@ ogretmen_komut_tampon = ""
 ogrenci_surecleri = {}
 
 
+def _pty_olustur():
+    """PTY oluştur, başarısız olursa pipe ile fallback yap."""
+    try:
+        master_fd, slave_fd = pty.openpty()
+        log.debug("PTY başarıyla oluşturuldu (openpty)")
+        return master_fd, slave_fd, True  # (master, slave, is_pty)
+    except OSError as e:
+        log.warning(f"PTY oluşturulamadı ({e}), pipe fallback kullanılıyor...")
+        # Fallback: pipe kullan
+        master_fd, slave_fd = os.pipe()
+        return master_fd, slave_fd, False
+
+
+def _ssh_cmd_olustur(host, port, chroot_base, username):
+    """SSH komutunu oluştur, PTY allocation ile."""
+    safe_username = username.replace("'", "'\\''")
+    safe_chroot_path = f"{chroot_base}/{safe_username}".replace("'", "'\\''")
+
+    return [
+        'ssh',
+        '-t', '-t',  # Çift -t: forced PTY allocation (uzak tarafta PTY yoksa bile zorla)
+        '-o', 'StrictHostKeyChecking=no',
+        '-o', 'ConnectTimeout=10',
+        '-o', 'ServerAliveInterval=15',
+        '-o', 'ServerAliveCountMax=3',
+        '-p', str(port),
+        f'root@{host}',
+        f"chroot '{safe_chroot_path}' /bin/su - '{safe_username}'"
+    ]
+
+
 def _pty_oku_ve_yayinla(fd, hedef_event, hedef_room=None, broadcast=False):
     """PTY'den oku ve SocketIO ile yayınla (thread içinde çalışır)."""
     # Eventlet uyumlu: select.select yerine doğrudan os.read kullanıyoruz.
@@ -1143,21 +1174,13 @@ def ogretmen_baglan_event(veri=None):
             log.info(f"Öğretmen chroot ortamı oluşturuluyor...")
             chroot_olustur(ogretmen_numara, "Öğretmen", "Paneli")
 
-        # PCT 991'e ROOT olarak bağlan ve komutla chroot'a gir
-        # Bu yöntem öğrenci/öğretmen için ayrı SSH anahtarı gereksinimini ortadan kaldırır
-        master_fd, slave_fd = pty.openpty()
-        
-        # Kullanıcı adını ve yolu tırnak içine al (boşluklu kullanıcı adları için)
-        safe_username = ogretmen_numara.replace("'", "'\\''")
-        safe_chroot_path = f"{CHROOT_BASE}/{safe_username}".replace("'", "'\\''")
-        
-        ssh_cmd = [
-            'ssh', '-t', '-o', 'StrictHostKeyChecking=no', 
-            '-p', str(CT_991_REAL_SSH_PORT), 
-            f'root@{CT_991_HOST}',
-            f"chroot '{safe_chroot_path}' /bin/su - '{safe_username}'"
-        ]
-        
+        # PTY oluştur (başarısız olursa pipe fallback)
+        master_fd, slave_fd, is_pty = _pty_olustur()
+
+        # SSH komutu oluştur (forced PTY allocation ile)
+        ssh_cmd = _ssh_cmd_olustur(CT_991_HOST, CT_991_REAL_SSH_PORT, CHROOT_BASE, ogretmen_numara)
+        log.info(f"Öğretmen SSH bağlantısı başlatılıyor: {' '.join(ssh_cmd)}")
+
         proc = subprocess.Popen(ssh_cmd, stdin=slave_fd, stdout=slave_fd, stderr=slave_fd, preexec_fn=os.setsid)
         os.close(slave_fd)
 
@@ -1245,14 +1268,12 @@ def ogrenci_baglan_event(veri):
     # Container'a (PCT 991) SSH ile bağlan (PTY modunda)
     # ROOT üzerinden bağlanıp chroot'a geçiyoruz (auth sorunlarını çözmek için)
     try:
-        master_fd, slave_fd = pty.openpty()
-        
         # Chroot ortamını kontrol et/yarat/senkronize et (Her bağlantıda zorla ki fixler yansısın)
         from chroot_terminal import CT_991_HOST, CT_991_REAL_SSH_PORT, CHROOT_BASE, _slugify, chroot_var_mi, chroot_olustur
 
         # Username'i normalize et
         username = _slugify(username)
-        
+
         # Öğrencinin adını soyadını DB'den al (Log ve passwd için)
         ad_soyad = "Ogrenci"
         with db_baglantisi() as db:
@@ -1267,18 +1288,14 @@ def ogrenci_baglan_event(veri):
 
         log.info(f"Ogrenci terminal bağlantısı: {username} ({ad_soyad}) - Chroot kontrol ediliyor...")
         chroot_olustur(username, ad_soyad, "") # Bu fonksiyon mevcutsa bile sync eder
-        
-        # Kullanıcı adını ve yolu tırnak içine al (boşluklu kullanıcı adları için)
-        safe_username = username.replace("'", "'\\''")
-        safe_chroot_path = f"{CHROOT_BASE}/{safe_username}".replace("'", "'\\''")
 
-        ssh_cmd = [
-            'ssh', '-t', '-o', 'StrictHostKeyChecking=no', 
-            '-p', str(CT_991_REAL_SSH_PORT), 
-            f'root@{CT_991_HOST}',
-            f"chroot '{safe_chroot_path}' /bin/su - '{safe_username}'"
-        ]
-        
+        # PTY oluştur (başarısız olursa pipe fallback)
+        master_fd, slave_fd, is_pty = _pty_olustur()
+
+        # SSH komutu oluştur (forced PTY allocation ile)
+        ssh_cmd = _ssh_cmd_olustur(CT_991_HOST, CT_991_REAL_SSH_PORT, CHROOT_BASE, username)
+        log.info(f"Öğrenci SSH bağlantısı başlatılıyor: {username}")
+
         proc = subprocess.Popen(ssh_cmd, stdin=slave_fd, stdout=slave_fd, stderr=slave_fd, preexec_fn=os.setsid)
         os.close(slave_fd)
 
