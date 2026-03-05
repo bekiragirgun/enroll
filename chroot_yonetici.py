@@ -17,7 +17,7 @@ import logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 log = logging.getLogger(__name__)
 
-VERSION = "2026-03-05-CHROOT-PTY-FIX-V11"
+VERSION = "2026-03-05-CHROOT-LXC-FINAL-V11.1"
 log.info(f"🚀 Chroot Manager Script Version: {VERSION}")
 
 # Yapılandırma
@@ -410,10 +410,11 @@ def delete_student_chroot(username):
         log.warning(f"{username} chroot bulunamadı")
         return False
 
-    # Önce mount'ları unmount et
-    subprocess.run(["umount", f"{student_path}/dev"], check=False)
-    subprocess.run(["umount", f"{student_path}/proc"], check=False)
-    subprocess.run(["umount", f"{student_path}/sys"], check=False)
+    # Önce mount'ları unmount et (V11 Robustness)
+    # Lazy unmount (-l) busy olsa bile temizler
+    log.info(f"🧹 {username} mount noktaları temizleniyor...")
+    for p in ["dev/pts", "dev", "proc", "sys"]:
+        subprocess.run(["umount", "-l", str(student_path / p)], check=False)
 
     # Dizini sil
     shutil.rmtree(student_path)
