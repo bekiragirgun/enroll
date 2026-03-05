@@ -225,7 +225,10 @@ deb http://security.ubuntu.com/ubuntu/ jammy-security main restricted universe m
         _run(["chroot", str(STUDENT_TEMPLATE), "apt-get", "install", "-y", 
               "ubuntu-minimal", "build-essential", "python3", "python3-pip", 
               "git", "curl", "wget", "vim", "nano", "sudo", "locales",
-              "dnsutils", "net-tools", "iputils-ping", "iproute2"], env=env)
+              "dnsutils", "net-tools", "iputils-ping", "iproute2",
+              "man-db", "tree", "zip", "unzip", "bzip2", "xz-utils", "tar", "gzip",
+              "htop", "psmisc", "acl", "gawk", "sed", "grep", "findutils", "lsof", 
+              "openssh-client", "less", "file"], env=env)
     finally:
         log.info("🧹 Geçici filesystem'ler çözülüyor...")
         subprocess.run(["umount", "-l", str(pts)], check=False)
