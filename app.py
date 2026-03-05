@@ -286,6 +286,68 @@ def seb_gerekli(f):
 def seb_gerekli_sayfasi():
     return render_template('seb_gerekli.html')
 
+@app.route('/seb-config')
+def seb_config():
+    # Sistem IP'si ayarlanmışsa onu, aksi halde tarayıcının girdiği host_url'yi kullan
+    system_host = ayar_getir('system_host', '')
+    if system_host:
+        # Eğer http veya https ile başlamıyorsa ekle
+        if not system_host.startswith('http'):
+            # Güvenli liman olarak http varsayıyoruz
+            url = f"http://{system_host}/"
+        else:
+            url = system_host
+            if not url.endswith('/'): url += '/'
+    else:
+        url = request.host_url
+        
+    xml_content = f"""<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>originatorVersion</key>
+    <string>SEB_OSX_3.3.2_52D4</string>
+    <key>startURL</key>
+    <string>{url}</string>
+    <key>sendBrowserExamKey</key>
+    <true/>
+    <key>browserWindowAllowReload</key>
+    <true/>
+    <key>enableZoomPage</key>
+    <true/>
+    <key>allowSpellCheck</key>
+    <false/>
+    <key>showTaskBar</key>
+    <false/>
+    <key>enableQuitButton</key>
+    <true/>
+    <key>allowQuit</key>
+    <true/>
+    <key>quitPassword</key>
+    <string>linux2024</string>
+    <key>hashedQuitPassword</key>
+    <string></string>
+    <key>allowPreferencesWindow</key>
+    <false/>
+    <key>showReloadButton</key>
+    <true/>
+    <key>showTime</key>
+    <true/>
+    <key>taskBarHeight</key>
+    <integer>40</integer>
+    <key>newBrowserWindowAllow</key>
+    <false/>
+    <key>allowDeveloperConsole</key>
+    <false/>
+    <key>enableTouchExit</key>
+    <false/>
+</dict>
+</plist>"""
+    from flask import Response
+    return Response(xml_content, mimetype='application/seb', headers={
+        "Content-Disposition": "attachment; filename=ders_takip.seb"
+    })
+
 # ── Öğrenci Rotaları ──────────────────────────────────────────
 PAKET_SECENEKLERI = [
     '1. Paket (09:00-11:35)',
