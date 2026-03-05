@@ -17,7 +17,7 @@ import logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 log = logging.getLogger(__name__)
 
-VERSION = "2026-03-04-PTY-FIX-V4"
+VERSION = "2026-03-05-LAB-XP-V7"
 log.info(f"🚀 Chroot Manager Script Version: {VERSION}")
 
 # Yapılandırma
@@ -50,6 +50,17 @@ def setup_template():
             "http://archive.ubuntu.com/ubuntu/"
         ])
 
+    # 1. Full Repositories (V7)
+    sources_list = STUDENT_TEMPLATE / "etc" / "apt" / "sources.list"
+    repo_content = """
+deb http://archive.ubuntu.com/ubuntu/ jammy main restricted universe multiverse
+deb http://archive.ubuntu.com/ubuntu/ jammy-updates main restricted universe multiverse
+deb http://archive.ubuntu.com/ubuntu/ jammy-backports main restricted universe multiverse
+deb http://security.ubuntu.com/ubuntu/ jammy-security main restricted universe multiverse
+"""
+    sources_list.write_text(repo_content.strip() + "\n")
+    log.info("📝 sources.list full depo desteği ile güncellendi.")
+
     # DNS filtering - şablonda yap
     resolv_conf = STUDENT_TEMPLATE / "etc" / "resolv.conf"
     resolv_conf.write_text("nameserver 185.228.168.168\n")
@@ -77,12 +88,17 @@ def setup_template():
         with open(hosts_file, 'a') as f:
             f.write(f"127.0.0.1 {site}\n")
 
-    # Temel paketler
+    # Temel ve Geliştirici Paketleri (V7)
     _run(["chroot", str(STUDENT_TEMPLATE), "apt-get", "update"])
     _run(["chroot", str(STUDENT_TEMPLATE), "apt-get", "install", "-y",
           "sudo", "bash", "vim", "nano", "curl", "wget", "htop",
           "iputils-ping", "iproute2", "net-tools", "man-db",
-          "gnupg", "ubuntu-keyring", "gpgv"])
+          "gnupg", "ubuntu-keyring", "gpgv", "ca-certificates",
+          "build-essential", "python3-full", "python3-pip", "git",
+          "software-properties-common", "apt-transport-https", "dnsutils"])
+    
+    # İzinler
+    _run(["chmod", "1777", str(STUDENT_TEMPLATE / "tmp")])
     
     # Temizlik
     _run(["chroot", str(STUDENT_TEMPLATE), "apt-get", "clean"])
@@ -369,8 +385,6 @@ def delete_student_chroot(username):
     return True
 
 
-VERSION = "2026-03-04-PTY-FIX-V4"
-log.info(f"🚀 Chroot Manager Script Version: {VERSION}")
 
 def mount_student_chroot(username):
     """Chroot için gerekli filesystem'leri mount et ve konfigürasyonları tazele."""
@@ -439,7 +453,7 @@ def mount_student_chroot(username):
     # Resolv.conf tazele
     subprocess.run(["cp", "-f", "/etc/resolv.conf", str(student_path / "etc" / "resolv.conf")], check=False)
 
-    log.info(f"✅ {username} chroot (V6) hazır ve mount edildi.")
+    log.info(f"✅ {username} chroot (V7) hazır ve mount edildi.")
     return True
 
 
