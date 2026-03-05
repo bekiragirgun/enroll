@@ -225,6 +225,7 @@ async function yoklamaCek() {
         <div class="isim">${o.ad_soyad}</div>
         <div class="numara">${o.numara}</div>
         <div class="sinif-etiket" style="font-size:0.75rem;color:#90cdf4;margin-left:auto;">${o.sinif || ''}</div>
+        <div style="font-size:0.75rem;color:#a0aec0;margin-left:0.5rem;" title="Bağlantı IP Adresi">🌐 ${o.ip || ''}</div>
         ${o.paket && o.paket !== '—' ? `<div class="paket-etiket" style="font-size:0.7rem;color:#68d391;background:#1a3a2a;border:1px solid #2d6a4a;border-radius:4px;padding:0.1rem 0.4rem;margin-left:0.4rem;">📦 ${o.paket.split(' ')[0] + ' ' + o.paket.split(' ')[1]}</div>` : ''}
         ${o.kaynak === 'manuel' ? `<span title="Manuel giriş" style="font-size:0.7rem;color:#f6c90e;background:#2d2a00;border:1px solid #6b5900;border-radius:4px;padding:0.1rem 0.4rem;margin-left:0.4rem;">👨‍🏫 M</span>` : ''}
         <div class="saat">${o.saat}</div>
@@ -587,6 +588,39 @@ async function guvenlikLogCek() {
     logDiv.innerHTML = html;
   } catch (e) {
     console.error('Güvenlik log hatası:', e);
+  }
+}
+
+async function sebCikisCek() {
+  try {
+    const yanit = await safeFetch('/api/seb_cikis_log');
+    const veri = await yanit.json();
+
+    const div = document.getElementById('seb-cikis-kutu');
+    if (!div) return;
+
+    if (!veri.loglar || veri.loglar.length === 0) {
+      div.innerHTML = '<div style="color:#718096;text-align:center;padding:1rem;">Bugün sayfadan ayrılan/kapatan öğrenci kaydı yok.</div>';
+      return;
+    }
+
+    let html = '<table class="veri-tablosu" style="width:100%; border-collapse:collapse;">';
+    html += '<thead><tr style="border-bottom:1px solid #4a5568;"><th style="padding:0.5rem;text-align:left;">Zaman</th><th style="padding:0.5rem;text-align:left;">Öğrenci No</th><th style="padding:0.5rem;text-align:left;">Ad Soyad</th><th style="padding:0.5rem;text-align:left;">IP Adresi</th></tr></thead>';
+    html += '<tbody>';
+
+    veri.loglar.forEach(log => {
+      html += `<tr style="border-bottom:1px solid #2d3748; background:rgba(229,62,62,0.1);">
+            <td style="padding:0.5rem;color:#fc8181;">${log.tarih} ${log.saat.substring(0, 5)}</td>
+            <td style="padding:0.5rem;">${log.numara}</td>
+            <td style="padding:0.5rem;">${log.ad_soyad}</td>
+            <td style="padding:0.5rem;color:#a0aec0;font-size:0.85rem;">${log.ip}</td>
+        </tr>`;
+    });
+
+    html += '</tbody></table>';
+    div.innerHTML = html;
+  } catch (e) {
+    console.error('SEB çıkış log çekme hatası:', e);
   }
 }
 

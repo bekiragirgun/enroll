@@ -256,3 +256,10 @@ document.addEventListener('DOMContentLoaded', () => {
   durumKontrol();
   setInterval(durumKontrol, POLLING_ARALIK);
 });
+
+// SEB kapandığında / Sayfa tazelendiğinde arka plana log at
+window.addEventListener('beforeunload', function (e) {
+  if (suAnkiDurum.mod === 'sinav' || suAnkiDurum.mod === 'terminal' || suAnkiDurum.mod === 'slayt') {
+    navigator.sendBeacon('/api/seb_cikis');
+  }
+});

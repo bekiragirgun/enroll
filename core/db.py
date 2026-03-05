@@ -134,3 +134,15 @@ def db_olustur():
                 puan INTEGER DEFAULT 0
             )
         """)
+
+        # SEB Çıkış Logları
+        db.execute("""
+            CREATE TABLE IF NOT EXISTS seb_cikis_log (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                tarih TEXT NOT NULL,
+                saat TEXT NOT NULL,
+                numara TEXT NOT NULL,
+                ad_soyad TEXT NOT NULL,
+                ip TEXT NOT NULL
+            )
+        """)

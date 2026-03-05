@@ -184,7 +184,7 @@
         <span id="sahte-rozet"
           style="display:none;background:#c53030;color:#fff;border-radius:10px;padding:0 6px;font-size:0.72rem;margin-left:4px;">0</span>
       </button>
-      <button class="tab-btn" onclick="tabGec('guvenlik', this); guvenlikLogCek();">
+      <button class="tab-btn" onclick="tabGec('guvenlik', this); guvenlikLogCek(); sebCikisCek();">
         🔐 Güvenlik Log
         <span id="guvenlik-rozet"
           style="display:none;background:#c53030;color:#fff;border-radius:10px;padding:0 6px;font-size:0.72rem;margin-left:4px;">0</span>
@@ -256,7 +256,15 @@
         <h3>🔐 Terminal Güvenlik Logu</h3>
         <span style="color:#4a5568;font-size:0.8rem;">Terminal erişim denemeleri</span>
       </div>
-      <div id="guvenlik-log-kutu" style="margin-top:0.75rem;">
+      <div id="guvenlik-log-kutu" style="margin-top:0.75rem; margin-bottom:2rem;">
+        <div style="color:#718096;text-align:center;padding:1rem;">Yükleniyor...</div>
+      </div>
+
+      <div class="kutu-baslik" style="margin-top:2rem;">
+        <h3>🚪 SEB Çıkış / Kapatma Logu</h3>
+        <span style="color:#4a5568;font-size:0.8rem;">Programı kapatan veya sayfadan ayrılanlar</span>
+      </div>
+      <div id="seb-cikis-kutu" style="margin-top:0.75rem;">
         <div style="color:#718096;text-align:center;padding:1rem;">Yükleniyor...</div>
       </div>
     </div>

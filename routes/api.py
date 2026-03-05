@@ -112,7 +112,7 @@ def api_config():
 def api_yoklama():
     with db_baglantisi() as db:
         satirlar = db.execute(
-            'SELECT ad_soyad, numara, saat, sinif, paket, kaynak FROM yoklama WHERE tarih=? ORDER BY saat',
+            'SELECT ad_soyad, numara, saat, sinif, paket, kaynak, ip FROM yoklama WHERE tarih=? ORDER BY saat',
             (bugun(),)
         ).fetchall()
     return jsonify({
@@ -280,3 +280,29 @@ def api_terminal_durum():
         'konteyner_calisiyor': docker_terminal.container_durum(),
         'bagli_ogrenciler': bagli
     })
+
+@api_bp.route('/seb_cikis', methods=['POST'])
+def api_seb_cikis():
+    from flask import session
+    from core.utils import istemci_ip
+    
+    numara = session.get('numara')
+    if not numara:
+        return jsonify({'durum': 'ok'})
+        
+    ad_soyad = f"{session.get('ad', '')} {session.get('soyad', '')}".strip()
+    
+    with db_baglantisi() as db:
+        db.execute(
+            'INSERT INTO seb_cikis_log (tarih, saat, numara, ad_soyad, ip) VALUES (?, ?, ?, ?, ?)',
+            (bugun(), simdi(), numara, ad_soyad, istemci_ip())
+        )
+        db.commit()
+    return jsonify({'durum': 'ok'})
+
+@api_bp.route('/seb_cikis_log')
+@ogretmen_giris_gerekli
+def api_seb_cikis_log():
+    with db_baglantisi() as db:
+        loglar = db.execute("SELECT * FROM seb_cikis_log WHERE tarih=? ORDER BY id DESC", (bugun(),)).fetchall()
+    return jsonify({'loglar': [dict(l) for l in loglar]})
