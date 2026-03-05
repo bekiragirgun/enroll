@@ -17,7 +17,7 @@ import logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 log = logging.getLogger(__name__)
 
-VERSION = "2026-03-05-STICKY-SHELL-V10"
+VERSION = "2026-03-05-CHROOT-PTY-FIX-V11"
 log.info(f"🚀 Chroot Manager Script Version: {VERSION}")
 
 # Yapılandırma
@@ -40,6 +40,11 @@ def _run(cmd, check=True):
 def setup_template():
     """Şablon chroot ortamı oluştur."""
     log.info("Şablon chroot ortamı kuruluyor...")
+
+    # ÖNCE TEMİZLİK (V11): Eski mount'ları temizle ki rm -rf veya init hata vermesin
+    log.info("🧹 Eski şablon mount'ları temizleniyor...")
+    for p in ["proc", "sys", "dev/pts", "dev"]:
+        subprocess.run(["umount", "-l", str(STUDENT_TEMPLATE / p)], check=False)
 
     # Ubuntu base kur (debootstrap)
     if not STUDENT_TEMPLATE.exists():
@@ -103,10 +108,12 @@ deb http://security.ubuntu.com/ubuntu/ jammy-security main restricted universe m
     log.info("📦 Apt paketleri için geçici filesystem'ler mount ediliyor...")
     subprocess.run(["mount", "-t", "proc", "proc", str(p)], check=False)
     subprocess.run(["mount", "-t", "sysfs", "sysfs", str(s)], check=False)
+    
+    # LXC DESTEĞİ: /dev bind mount et ama nodev/nosuid gibi bayraklar gelmiş olabilir
     subprocess.run(["mount", "-o", "bind", "/dev", str(d)], check=False)
     subprocess.run(["mount", "-o", "bind", "/dev/pts", str(pts)], check=False)
     
-    # KRİTİK: Cihazları onar (V9) - Apt-key ve gpg için /dev/null vb. şart
+    # KRİTİK: Cihazları onar (V11)
     _restore_device_nodes(d)
 
     try:
@@ -418,7 +425,7 @@ def delete_student_chroot(username):
 def _restore_device_nodes(dev_path):
     """
     Kritik cihaz düğümlerini (/dev/null, /dev/ptmx vb.) onarır.
-    LXC içinde bind-mount sonrası regular file olarak kalırlarsa Permission Denied hatası verirler.
+    LXC içinde mknod çalışmazsa, host'tan bind-mount ile aktarır (V11).
     """
     devices = [
         ("null", "c 1 3"),
@@ -431,11 +438,23 @@ def _restore_device_nodes(dev_path):
     
     for dev_name, mode in devices:
         d_p = dev_path / dev_name
-        # Eğer bu bir mount noktası değilse ve karakter cihazı değilse deneriz
-        if not d_p.exists() or not d_p.is_char_device():
-            subprocess.run(["rm", "-f", str(d_p)], check=False)
-            subprocess.run(["mknod", "-m", "666", str(d_p)] + mode.split(), check=False)
-        else:
+        
+        # Eğer zaten doğru bir karakter cihazıysa dokunma, sadece izinleri tazele
+        if d_p.exists() and d_p.is_char_device():
+            subprocess.run(["chmod", "666", str(d_p)], check=False)
+            continue
+
+        # Değilse, Önce Silmeyi Dene (Eğer busy değilse)
+        subprocess.run(["rm", "-f", str(d_p)], check=False)
+        
+        # 1. mknod dene (Privileged modda çalışır)
+        res = subprocess.run(["mknod", "-m", "666", str(d_p)] + mode.split(), capture_output=True)
+        
+        # 2. mknod başarısızsa (LXC Unprivileged), Host'tan BIND-MOUNT yap (En sağlam yöntem)
+        if res.returncode != 0:
+            if not d_p.exists():
+                subprocess.run(["touch", str(d_p)], check=False)
+            subprocess.run(["mount", "-o", "bind", f"/dev/{dev_name}", str(d_p)], check=False)
             subprocess.run(["chmod", "666", str(d_p)], check=False)
 
     # /dev/ptmx (Sembolik Link) - PTY ler için hayati
