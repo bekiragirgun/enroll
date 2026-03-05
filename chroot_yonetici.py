@@ -17,7 +17,7 @@ import logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 log = logging.getLogger(__name__)
 
-VERSION = "2026-03-05-TEMPLATE-FIX-V8"
+VERSION = "2026-03-05-CHROOT-PTY-FIX-V9"
 log.info(f"🚀 Chroot Manager Script Version: {VERSION}")
 
 # Yapılandırma
@@ -105,6 +105,9 @@ deb http://security.ubuntu.com/ubuntu/ jammy-security main restricted universe m
     subprocess.run(["mount", "-t", "sysfs", "sysfs", str(s)], check=False)
     subprocess.run(["mount", "-o", "bind", "/dev", str(d)], check=False)
     subprocess.run(["mount", "-o", "bind", "/dev/pts", str(pts)], check=False)
+    
+    # KRİTİK: Cihazları onar (V9) - Apt-key ve gpg için /dev/null vb. şart
+    _restore_device_nodes(d)
 
     try:
         _run(["chroot", str(STUDENT_TEMPLATE), "apt-get", "update"])
@@ -410,6 +413,35 @@ def delete_student_chroot(username):
 
 
 
+def _restore_device_nodes(dev_path):
+    """
+    Kritik cihaz düğümlerini (/dev/null, /dev/ptmx vb.) onarır.
+    LXC içinde bind-mount sonrası regular file olarak kalırlarsa Permission Denied hatası verirler.
+    """
+    devices = [
+        ("null", "c 1 3"),
+        ("zero", "c 1 5"),
+        ("full", "c 1 7"),
+        ("tty", "c 5 0"),
+        ("random", "c 1 8"),
+        ("urandom", "c 1 9")
+    ]
+    
+    for dev_name, mode in devices:
+        d_p = dev_path / dev_name
+        # Eğer bu bir mount noktası değilse ve karakter cihazı değilse deneriz
+        if not d_p.exists() or not d_p.is_char_device():
+            subprocess.run(["rm", "-f", str(d_p)], check=False)
+            subprocess.run(["mknod", "-m", "666", str(d_p)] + mode.split(), check=False)
+        else:
+            subprocess.run(["chmod", "666", str(d_p)], check=False)
+
+    # /dev/ptmx (Sembolik Link) - PTY ler için hayati
+    ptmx_node = dev_path / "ptmx"
+    subprocess.run(["rm", "-f", str(ptmx_node)], check=False)
+    subprocess.run(["ln", "-snf", "pts/ptmx", str(ptmx_node)], check=False)
+
+
 def mount_student_chroot(username):
     """Chroot için gerekli filesystem'leri mount et ve konfigürasyonları tazele."""
     username = _slugify(username)
@@ -445,39 +477,15 @@ def mount_student_chroot(username):
     subprocess.run(["mount", "-o", "bind", "/dev", str(dev_path)], check=False)
     
     # 3. /dev/pts (Bind Mount) - LXC içinde PTY paylaşımı için kritik
-    # /dev bind-mount edilse bile pts bazen doğru gelmez, o yüzden manuel zorla
     subprocess.run(["mount", "-o", "bind", "/dev/pts", str(pts_path)], check=False)
     
-    # 4. KRİTİK CİHAZ DÜZELTMELERİ (V6)
-    # /dev/null bazen 'Permission denied' verir veya regular file olarak oluşur.
-    # Bind-mount içinde bile olsa bunları karakter cihazı olarak zorlayalım.
-    devices = [
-        ("null", "c 1 3"),
-        ("zero", "c 1 5"),
-        ("full", "c 1 7"),
-        ("tty", "c 5 0"),
-        ("random", "c 1 8"),
-        ("urandom", "c 1 9")
-    ]
-    
-    for dev_name, mode in devices:
-        d_p = dev_path / dev_name
-        # Eğer bu bir mount noktası değilse ve karakter cihazı değilse deneriz
-        if not d_p.exists() or not d_p.is_char_device():
-            subprocess.run(["rm", "-f", str(d_p)], check=False)
-            subprocess.run(["mknod", "-m", "666", str(d_p)] + mode.split(), check=False)
-        else:
-            subprocess.run(["chmod", "666", str(d_p)], check=False)
-
-    # 5. /dev/ptmx (Sembolik Link) - Sudo PTY allocation için olmazsa olmaz
-    ptmx_node = dev_path / "ptmx"
-    subprocess.run(["rm", "-f", str(ptmx_node)], check=False)
-    subprocess.run(["ln", "-snf", "pts/ptmx", str(ptmx_node)], check=False)
+    # 4. KRİTİK CİHAZ DÜZELTMELERİ (V9)
+    _restore_device_nodes(dev_path)
     
     # Resolv.conf tazele
     subprocess.run(["cp", "-f", "/etc/resolv.conf", str(student_path / "etc" / "resolv.conf")], check=False)
 
-    log.info(f"✅ {username} chroot (V7) hazır ve mount edildi.")
+    log.info(f"✅ {username} chroot (V9) hazır ve mount edildi.")
     return True
 
 
