@@ -43,8 +43,37 @@ def _slugify(text):
 
 
 def _is_local(host):
-    """Host yerel mi kontrol et."""
-    return host in ["localhost", "127.0.0.1", "::1"] or host == Path("/etc/hostname").read_text().strip() if Path("/etc/hostname").exists() else False
+    """Host yerel mi kontrol et (Eski hostname/IP'leri de kapsar - V15.1)."""
+    if host in ["localhost", "127.0.0.1", "::1"]:
+        return True
+    
+    # Kendi hostname'i ile karşılaştır
+    try:
+        if Path("/etc/hostname").exists():
+            if host == Path("/etc/hostname").read_text().strip():
+                return True
+    except: pass
+
+    # Sistemin tüm yerel IP'lerini kontrol et (Burası en kritik kısım)
+    try:
+        import socket
+        me = socket.gethostname()
+        local_ips = socket.gethostbyname_ex(me)[2]
+        if host in local_ips:
+            return True
+        
+        # Ekstra: aktif interface IP'sini al
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        try:
+            s.connect(('8.8.8.8', 80))
+            active_ip = s.getsockname()[0]
+            if host == active_ip:
+                return True
+        finally:
+            s.close()
+    except: pass
+    
+    return False
 
 def _ct991_exec(command: list) -> subprocess.CompletedProcess:
     """CT 991 üzerinde komut çalıştır (Local veya SSH üzerinden)."""
@@ -56,17 +85,25 @@ def _ct991_exec(command: list) -> subprocess.CompletedProcess:
     # Chroot komutları genellikle root yetkisi gerektirir
     final_command = command
     if CT_991_USER != "root":
+        # Sudo kullanırken -S (stdin'den şifre okuma) ve -n (non-interactive) gerekebilir
+        # Ama biz sshpass kullandığımızda remote tarafta password istiyorsa o sorun olabilir.
         final_command = ["sudo"] + command
 
     # SSH üzerinden bağlat
     ssh_cmd = [
-        "ssh", "-o", "ConnectTimeout=5", "-o", "BatchMode=yes" if not CT_991_PASS else "BatchMode=no",
+        "ssh", "-o", "ConnectTimeout=5", 
+        "-o", "StrictHostKeyChecking=no",  # SSH anahtar onayını atla
+        "-o", "BatchMode=yes" if not CT_991_PASS else "BatchMode=no",
         "-p", str(CT_991_REAL_SSH_PORT),
         f"{CT_991_USER}@{CT_991_HOST}"
     ]
     
     # Şifre varsa sshpass kullan
     if CT_991_PASS:
+        import shutil
+        if not shutil.which("sshpass"):
+            log.error("❌ HATA: Şifre ile bağlanmak için 'sshpass' paketi yüklü olmalıdır! 'sudo apt install sshpass' komutunu çalıştırın.")
+            return subprocess.CompletedProcess(ssh_cmd, 1, stderr="sshpass not found")
         ssh_cmd = ["sshpass", "-p", CT_991_PASS] + ssh_cmd
 
     ssh_cmd += final_command
