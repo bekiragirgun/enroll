@@ -55,9 +55,9 @@ socketio = SocketIO(app, cors_allowed_origins="*", async_mode='eventlet')
 
 # Ders durumu (bellek içi)
 ders_durumu = {
-    'mod':   'bekleme',   # bekleme | slayt
+    'mod':   'bekleme',   # bekleme | slayt | terminal
     'dosya': '',           # aktif slayt dosyası
-    'terminal_url': '/terminal'
+    'terminal_url': ''     # öğretmen terminal moduna geçene kadar boş
 }
 
 @app.route('/favicon.ico')
