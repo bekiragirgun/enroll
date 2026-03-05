@@ -49,5 +49,16 @@ echo "│  Komut: 'sudo su -' ile root olabilirsiniz        │"
 echo "└────────────────────────────────────────────────────┘"
 echo ""
 
+# Chroot içindeki /bin/su dosyasını kontrol et (Sonsuz döngüyü önlemek için)
+if [ ! -x "$CHROOT_PATH/bin/su" ]; then
+    echo "❌ HATA: Chroot ortamı bozuk veya eksik yüklenmiş!"
+    echo "Sistem yöneticisinin ortamınızı onarması gerekiyor."
+    echo "(/bin/su çalıştırılamadı)"
+    
+    # 5 saniye bekle ve çıkış yap, SSH bağlantısı kopsun ki loop'a girmesin
+    sleep 5
+    exit 1
+fi
+
 # Chroot içine giriş
 exec chroot "$CHROOT_PATH" /bin/su - "$USERNAME"
