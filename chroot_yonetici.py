@@ -377,48 +377,36 @@ def mount_student_chroot(username):
         log.error(f"Mount hatası: {username} için chroot dizini yok!")
         return False
 
-    # Önce konfigürasyonları senkronize et (Her girişte tazelenmesi için)
+    # Konfigürasyonları senkronize et
     sync_chroot_configs(username)
 
-    # dev, proc, sys mount et
+    # dev, proc, sys yollarını hazırla
     dev_path = student_path / "dev"
     proc_path = student_path / "proc"
     sys_path = student_path / "sys"
     pts_path = dev_path / "pts"
 
-    dev_path.mkdir(exist_ok=True)
-    proc_path.mkdir(exist_ok=True)
-    sys_path.mkdir(exist_ok=True)
-    pts_path.mkdir(exist_ok=True)
+    # ÖNCE TEMİZLİK (Clean Slate): Mevcut mount'ları çöz ki çakışma olmasın
+    for p in [pts_path, dev_path, proc_path, sys_path]:
+        subprocess.run(["umount", "-l", str(p)], check=False)
 
-    # 1. /proc ve /sys mount
-    if subprocess.run(["mountpoint", "-q", str(proc_path)]).returncode != 0:
-        subprocess.run(["mount", "-t", "proc", "proc", str(proc_path)], check=False)
-    if subprocess.run(["mountpoint", "-q", str(sys_path)]).returncode != 0:
-        subprocess.run(["mount", "-t", "sysfs", "sysfs", str(sys_path)], check=False)
+    # Dizinlerin varlığından emin ol
+    for d in [dev_path, proc_path, sys_path]:
+        d.mkdir(parents=True, exist_ok=True)
+    pts_path.mkdir(parents=True, exist_ok=True)
 
-    # 2. /dev konfigürasyonu
-    # TÜM /dev'i bind mount etmek yerine kritik cihazları bağlayalım veya kernel dev'ini kullanalım
-    # Ancak en kolayı bind-mount /dev ama pts'i sonradan üzerine mount etmek
-    if subprocess.run(["mountpoint", "-q", str(dev_path)]).returncode != 0:
-        subprocess.run(["mount", "-o", "bind", "/dev", str(dev_path)], check=False)
+    # 1. /proc ve /sys (Standard mount)
+    subprocess.run(["mount", "-t", "proc", "proc", str(proc_path)], check=False)
+    subprocess.run(["mount", "-t", "sysfs", "sysfs", str(sys_path)], check=False)
+
+    # 2. /dev (Bind Mount) - LXC içinde en güvenli yöntem
+    subprocess.run(["mount", "-o", "bind", "/dev", str(dev_path)], check=False)
     
-    # 3. /dev/pts - ASIL ÖNEMLİ NOKTA
-    # Önce unmount et (bind mount'tan gelenleri temizle)
-    subprocess.run(["umount", "-l", str(pts_path)], check=False)
+    # 3. /dev/pts (Bind Mount) - LXC içinde PTY paylaşımı için kritik
+    # /dev bind-mount edilse bile pts bazen doğru gelmez, o yüzden manuel zorla
+    subprocess.run(["mount", "-o", "bind", "/dev/pts", str(pts_path)], check=False)
     
-    # LXC içinde 'newinstance' bazen hata verir. Önce standart deniyoruz.
-    # gid=5 (tty), mode=620
-    res = subprocess.run(["mount", "-t", "devpts", "devpts", str(pts_path), "-o", "gid=5,mode=620,ptmxmode=666"], capture_output=True)
-    if res.returncode != 0:
-        # Alternatif: newinstance dene
-        res2 = subprocess.run(["mount", "-t", "devpts", "devpts", str(pts_path), "-o", "gid=5,mode=620,newinstance,ptmxmode=666"], capture_output=True)
-        if res2.returncode != 0:
-            log.warning(f"⚠️ devpts mount failed, falling back to bind-mount for /dev/pts...")
-            subprocess.run(["mount", "-o", "bind", "/dev/pts", str(pts_path)], check=False)
-    
-    # 4. /dev/ptmx linkini tazele
-    # PTY allocation hatası (Invalid argument) genelde ptmx <-> pts/ptmx uyumsuzluğundan çıkar.
+    # 4. /dev/ptmx (Sembolik Link) - Sudo PTY allocation için olmazsa olmaz
     ptmx_node = dev_path / "ptmx"
     if ptmx_node.exists() and not ptmx_node.is_symlink():
         # Dosya veya character device ise linke çevirmeyi dene (bind-mount altındaysa hata verebilir)
