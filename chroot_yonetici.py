@@ -17,7 +17,7 @@ import logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 log = logging.getLogger(__name__)
 
-VERSION = "2026-03-05-CHROOT-LXC-FINAL-V11.1"
+VERSION = "2026-03-05-CHROOT-RECOVERY-V12"
 log.info(f"🚀 Chroot Manager Script Version: {VERSION}")
 
 # Yapılandırma
@@ -440,23 +440,29 @@ def _restore_device_nodes(dev_path):
     for dev_name, mode in devices:
         d_p = dev_path / dev_name
         
-        # Eğer zaten doğru bir karakter cihazıysa dokunma, sadece izinleri tazele
+        # 1. Eğer zaten doğru bir karakter cihazıysa, sadece izinleri tazele (V12 Safety)
         if d_p.exists() and d_p.is_char_device():
             subprocess.run(["chmod", "666", str(d_p)], check=False)
             continue
 
-        # Değilse, Önce Silmeyi Dene (Eğer busy değilse)
-        subprocess.run(["rm", "-f", str(d_p)], check=False)
+        # 2. Karakter cihazı değilse (veya yoksa) silmeyi dene
+        # Busy hatası almamak için sadece karakter cihazı değilse sileriz
+        if d_p.exists() and not d_p.is_char_device():
+            subprocess.run(["rm", "-f", str(d_p)], check=False)
         
-        # 1. mknod dene (Privileged modda çalışır)
-        res = subprocess.run(["mknod", "-m", "666", str(d_p)] + mode.split(), capture_output=True)
-        
-        # 2. mknod başarısızsa (LXC Unprivileged), Host'tan BIND-MOUNT yap (En sağlam yöntem)
-        if res.returncode != 0:
-            if not d_p.exists():
-                subprocess.run(["touch", str(d_p)], check=False)
-            subprocess.run(["mount", "-o", "bind", f"/dev/{dev_name}", str(d_p)], check=False)
-            subprocess.run(["chmod", "666", str(d_p)], check=False)
+        # 3. mknod dene (Privileged modda çalışır)
+        if not d_p.exists():
+            res = subprocess.run(["mknod", "-m", "666", str(d_p)] + mode.split(), capture_output=True)
+            
+            # 4. mknod başarısızsa (LXC Unprivileged), Host'tan BIND-MOUNT yap (V11 fallback)
+            if res.returncode != 0:
+                if not d_p.exists():
+                    subprocess.run(["touch", str(d_p)], check=False)
+                subprocess.run(["mount", "-o", "bind", f"/dev/{dev_name}", str(d_p)], check=False)
+                subprocess.run(["chmod", "666", str(d_p)], check=False)
+        else:
+            # Dosya var ama karakter cihazı değilse (yukarıdaki rm başarısız olduysa)
+            log.warning(f"⚠️ {d_p} karakter cihazı değil ve silinemedi (Busy olabilir).")
 
     # /dev/ptmx (Sembolik Link) - PTY ler için hayati
     ptmx_node = dev_path / "ptmx"
