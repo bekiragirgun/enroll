@@ -45,6 +45,18 @@ socketio = SocketIO(app, cors_allowed_origins="*", async_mode='eventlet')
 def favicon():
     return Response(status=204)
 
+@app.route('/slayt/<path:filename>')
+def serve_slayt(filename):
+    from flask import send_from_directory
+    from core.paths import SLAYT_DIR
+    return send_from_directory(SLAYT_DIR, filename)
+
+@app.route('/gorseller/<path:filename>')
+def serve_gorseller(filename):
+    from flask import send_from_directory
+    from core.paths import GORSELLER_DIR
+    return send_from_directory(GORSELLER_DIR, filename)
+
 # ── Blueprints ──────────────────────────────────────────────
 app.register_blueprint(student_bp)
 app.register_blueprint(teacher_bp)
