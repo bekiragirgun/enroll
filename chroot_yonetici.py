@@ -17,7 +17,7 @@ import logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 log = logging.getLogger(__name__)
 
-VERSION = "2026-03-05-LAB-XP-V7"
+VERSION = "2026-03-05-TEMPLATE-FIX-V8"
 log.info(f"🚀 Chroot Manager Script Version: {VERSION}")
 
 # Yapılandırma
@@ -44,8 +44,11 @@ def setup_template():
     # Ubuntu base kur (debootstrap)
     if not STUDENT_TEMPLATE.exists():
         STUDENT_TEMPLATE.parent.mkdir(parents=True, exist_ok=True)
+        # GNUPG ve Keyring'i baştan dahil et ki apt update doğrulamada hata vermesin (V8)
         _run([
-            "debootstrap", "--arch=amd64", "jammy",
+            "debootstrap", "--arch=amd64", 
+            "--include=gnupg,ubuntu-keyring,gpgv,ca-certificates",
+            "jammy",
             str(STUDENT_TEMPLATE),
             "http://archive.ubuntu.com/ubuntu/"
         ])
@@ -88,14 +91,35 @@ deb http://security.ubuntu.com/ubuntu/ jammy-security main restricted universe m
         with open(hosts_file, 'a') as f:
             f.write(f"127.0.0.1 {site}\n")
 
-    # Temel ve Geliştirici Paketleri (V7)
-    _run(["chroot", str(STUDENT_TEMPLATE), "apt-get", "update"])
-    _run(["chroot", str(STUDENT_TEMPLATE), "apt-get", "install", "-y",
-          "sudo", "bash", "vim", "nano", "curl", "wget", "htop",
-          "iputils-ping", "iproute2", "net-tools", "man-db",
-          "gnupg", "ubuntu-keyring", "gpgv", "ca-certificates",
-          "build-essential", "python3-full", "python3-pip", "git",
-          "software-properties-common", "apt-transport-https", "dnsutils"])
+    # Temel ve Geliştirici Paketleri (V7/V8)
+    # Apt işlemleri için /proc, /sys ve /dev mount edilmeli
+    p = STUDENT_TEMPLATE / "proc"
+    s = STUDENT_TEMPLATE / "sys"
+    d = STUDENT_TEMPLATE / "dev"
+    pts = d / "pts"
+
+    for path in [p, s, d, pts]: path.mkdir(exist_ok=True)
+
+    log.info("📦 Apt paketleri için geçici filesystem'ler mount ediliyor...")
+    subprocess.run(["mount", "-t", "proc", "proc", str(p)], check=False)
+    subprocess.run(["mount", "-t", "sysfs", "sysfs", str(s)], check=False)
+    subprocess.run(["mount", "-o", "bind", "/dev", str(d)], check=False)
+    subprocess.run(["mount", "-o", "bind", "/dev/pts", str(pts)], check=False)
+
+    try:
+        _run(["chroot", str(STUDENT_TEMPLATE), "apt-get", "update"])
+        _run(["chroot", str(STUDENT_TEMPLATE), "apt-get", "install", "-y",
+              "sudo", "bash", "vim", "nano", "curl", "wget", "htop",
+              "iputils-ping", "iproute2", "net-tools", "man-db",
+              "gnupg", "ubuntu-keyring", "gpgv", "ca-certificates",
+              "build-essential", "python3-full", "python3-pip", "git",
+              "software-properties-common", "apt-transport-https", "dnsutils"])
+    finally:
+        log.info("🧹 Geçici filesystem'ler çözülüyor...")
+        subprocess.run(["umount", "-l", str(pts)], check=False)
+        subprocess.run(["umount", "-l", str(d)], check=False)
+        subprocess.run(["umount", "-l", str(s)], check=False)
+        subprocess.run(["umount", "-l", str(p)], check=False)
     
     # İzinler
     _run(["chmod", "1777", str(STUDENT_TEMPLATE / "tmp")])
