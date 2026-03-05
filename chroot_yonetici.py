@@ -81,7 +81,11 @@ def setup_template():
     _run(["chroot", str(STUDENT_TEMPLATE), "apt-get", "update"])
     _run(["chroot", str(STUDENT_TEMPLATE), "apt-get", "install", "-y",
           "sudo", "bash", "vim", "nano", "curl", "wget", "htop",
-          "iputils-ping", "iproute2", "net-tools", "man-db"])
+          "iputils-ping", "iproute2", "net-tools", "man-db",
+          "gnupg", "ubuntu-keyring", "gpgv"])
+    
+    # Temizlik
+    _run(["chroot", str(STUDENT_TEMPLATE), "apt-get", "clean"])
 
     # Öğrenci grubu oluştur
     try:
@@ -406,19 +410,36 @@ def mount_student_chroot(username):
     # /dev bind-mount edilse bile pts bazen doğru gelmez, o yüzden manuel zorla
     subprocess.run(["mount", "-o", "bind", "/dev/pts", str(pts_path)], check=False)
     
-    # 4. /dev/ptmx (Sembolik Link) - Sudo PTY allocation için olmazsa olmaz
-    ptmx_node = dev_path / "ptmx"
-    if ptmx_node.exists() and not ptmx_node.is_symlink():
-        # Dosya veya character device ise linke çevirmeyi dene (bind-mount altındaysa hata verebilir)
-        subprocess.run(["rm", "-f", str(ptmx_node)], check=False)
+    # 4. KRİTİK CİHAZ DÜZELTMELERİ (V6)
+    # /dev/null bazen 'Permission denied' verir veya regular file olarak oluşur.
+    # Bind-mount içinde bile olsa bunları karakter cihazı olarak zorlayalım.
+    devices = [
+        ("null", "c 1 3"),
+        ("zero", "c 1 5"),
+        ("full", "c 1 7"),
+        ("tty", "c 5 0"),
+        ("random", "c 1 8"),
+        ("urandom", "c 1 9")
+    ]
     
-    if not ptmx_node.exists() or not ptmx_node.is_symlink():
-        subprocess.run(["ln", "-snf", "pts/ptmx", str(ptmx_node)], check=False)
-    
-    # Resolv.conf kopyala
-    subprocess.run(["cp", "/etc/resolv.conf", str(student_path / "etc" / "resolv.conf")], check=False)
+    for dev_name, mode in devices:
+        d_p = dev_path / dev_name
+        # Eğer bu bir mount noktası değilse ve karakter cihazı değilse deneriz
+        if not d_p.exists() or not d_p.is_char_device():
+            subprocess.run(["rm", "-f", str(d_p)], check=False)
+            subprocess.run(["mknod", "-m", "666", str(d_p)] + mode.split(), check=False)
+        else:
+            subprocess.run(["chmod", "666", str(d_p)], check=False)
 
-    log.info(f"✅ {username} chroot (V4) hazır ve mount edildi.")
+    # 5. /dev/ptmx (Sembolik Link) - Sudo PTY allocation için olmazsa olmaz
+    ptmx_node = dev_path / "ptmx"
+    subprocess.run(["rm", "-f", str(ptmx_node)], check=False)
+    subprocess.run(["ln", "-snf", "pts/ptmx", str(ptmx_node)], check=False)
+    
+    # Resolv.conf tazele
+    subprocess.run(["cp", "-f", "/etc/resolv.conf", str(student_path / "etc" / "resolv.conf")], check=False)
+
+    log.info(f"✅ {username} chroot (V6) hazır ve mount edildi.")
     return True
 
 
