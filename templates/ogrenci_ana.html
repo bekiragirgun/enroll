@@ -1,15 +1,31 @@
 <!DOCTYPE html>
 <html lang="tr">
+
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>BGY106 Linux İşletim Sistemi</title>
   <link rel="stylesheet" href="/static/css/stil.css">
 </head>
+
 <body data-mod="bekleme">
+
+  <!-- TAM EKRAN BUTONU (Sağ Alt) -->
+  <button id="full-screen-btn" title="Tam Ekran" onclick="toggleFullScreen()">
+    ⛶
+  </button>
+
+  <!-- DERSE KATIL OVERLAY -->
+  <div id="join-overlay" class="join-overlay">
+    <div style="font-size: 4rem; margin-bottom: 1rem;">🎓</div>
+    <h2 id="join-status">Ders Başladı!</h2>
+    <p style="color: #a0aec0; margin-bottom: 2rem;">Derse katılmak ve tam ekrana geçmek için butona tıklayın.</p>
+    <button class="join-btn" onclick="startLessonFullscreen()">Derse Katıl</button>
+  </div>
 
   <!-- BEKLEME EKRANI -->
   <div id="bekleme-ekrani" class="bekleme-ekrani" style="display:flex;">
+    <div class="onay-ikonu">👤</div>
     <h2>{{ ad_soyad }}</h2>
     <p style="color:#a0aec0; font-size:1.1rem; margin-top:1rem;">
       Öğretmen girişini bekleyiniz...
@@ -23,7 +39,8 @@
 
   <!-- TERMİNAL EKRANI -->
   <div id="terminal-ekrani" class="terminal-ekrani" style="display:none;">
-    <div id="terminal-loading" style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);text-align:center;">
+    <div id="terminal-loading"
+      style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);text-align:center;">
       <div style="font-size:3rem;margin-bottom:1rem;">⏳</div>
       <div style="color:#90cdf4;font-size:1.2rem;">Terminal yükleniyor...</div>
     </div>
@@ -32,4 +49,5 @@
 
   <script src="/static/js/ogrenci.js"></script>
 </body>
+
 </html>
