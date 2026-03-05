@@ -159,9 +159,37 @@ def sync_manager_script():
         
         subprocess.run(ssh_cmd, input=content, text=True, check=True)
         log.info(f"✅ chroot_yonetici.py {CT_991_HOST} üzerine senkronize edildi.")
+        
+        # PTY Onarımını tetikle (V14)
+        chroot_onar()
+        
         return True
     except Exception as e:
         log.error(f"Senkronizasyon hatası: {e}")
+        return False
+
+
+def chroot_onar() -> bool:
+    """CT 991 üzerinde PTY onarımını tetikle."""
+    log.info("🛠️ CT 991 üzerinde PTY onarımı başlatılıyor...")
+    result = _ct991_exec([PYTHON_PATH, CHROOT_MANAGE_SCRIPT, "repair"])
+    if result.returncode == 0:
+        log.info("✅ PTY onarımı başarılı.")
+        return True
+    else:
+        log.error(f"❌ PTY onarımı başarısız: {result.stderr}")
+        return False
+
+
+def chroot_persist() -> bool:
+    """CT 991 üzerinde onarımı kalıcı yap (Service kur)."""
+    log.info("📡 CT 991 üzerinde kalıcı onarım servisi kuruluyor...")
+    result = _ct991_exec([PYTHON_PATH, CHROOT_MANAGE_SCRIPT, "persist"])
+    if result.returncode == 0:
+        log.info("✅ Kalıcı onarım servisi kuruldu.")
+        return True
+    else:
+        log.error(f"❌ Servis kurulum hatası: {result.stderr}")
         return False
 
 
@@ -263,3 +291,10 @@ if __name__ == "__main__":
         print(f"Var mı: {chroot_var_mi(username)}")
         print(f"Durum: {chroot_durum(username)}")
         print(f"SSH: {ssh_bilgi(username)}")
+        
+        if username == "sync":
+            sync_manager_script()
+        elif username == "repair":
+            chroot_onar()
+        elif username == "persist":
+            chroot_persist()

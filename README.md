@@ -5,7 +5,7 @@ Kapadokya Üniversitesi Linux dersleri için geliştirilmiş, gerçek zamanlı y
 ## 🚀 Öne Çıkan Özellikler
 
 - **İzole Chroot Terminalleri**: Her öğrenci için PCT 991 üzerinde çalışan, tamamen izole ve güvenli Linux ortamı.
-- **PTY Fix (V7)**: unprivileged LXC/Proxmox ortamları ile tam uyumlu, kalıcı terminal bağlantısı.
+- **PTY Fix & Persistence (V14)**: unprivileged LXC/Proxmox ortamları ile tam uyumlu, kalıcı ve kendi kendini onaran terminal bağlantısı.
 - **Tam Linux Deneyimi**: `build-essential`, `python3`, `git`, `gcc` gibi araçlar ve genişletilmiş Ubuntu depoları (universe, multiverse) ön yüklü.
 - **Zorunlu Tam Ekran**: Öğrenciler ders başladığında tam ekrana geçmeye zorlanır; tam ekrandan çıkıldığında içerik otomatik gizlenir.
 - **Öğretmen Monitörü**: Öğretmenin kendi terminalinde yazdığı komutları anlık olarak öğrencilerin ekranında görüntüleme.
@@ -28,11 +28,28 @@ python3 app.py
 sudo python3 chroot_yonetici.py init
 ```
 
+## 🔧 Sorun Giderme (Troubleshooting)
+
+### Terminal Bağlantı Hatası (PTY Allocation Failed)
+
+Eğer snapshot sonrası veya beklenmedik bir durumda terminale bağlanamazsanız, tek komutla her şeyi düzeltebilir ve kalıcı hale getirebilirsiniz:
+
+```bash
+chmod +x hizli_onarim.sh && ./hizli_onarim.sh
+```
+
+Bu komut:
+
+- Tüm scriptleri CT 991'e senkronize eder.
+- PTY ayarlarını onarır.
+- Her reboot sonrası fixin kalıcı olması için systemd servisini kurar.
+
 ## 📂 Klasör Yapısı
 
 - `app.py`: Ana Flask ve Socket.IO sunucusu.
-- `chroot_yonetici.py`: Chroot ortamlarını, mount işlemlerini ve kullanıcı izinlerini yöneten ana modül (V7).
+- `chroot_yonetici.py`: Chroot ortamlarını, mount işlemlerini ve kalıcı onarımı yöneten ana modül (V14).
 - `chroot_terminal.py`: Terminal bağlantılarını ve SSH tünellerini koordine eden servis.
+- `hizli_onarim.sh`: Snapshot sonrası veya hata durumunda tek tuşla onarım sağlayan script.
 - `templates/`: Dinamik HTML arayüzleri.
 - `static/js/ogrenci.js`: Tam ekran ve polling mantığını yöneten öğrenci arayüzü.
 

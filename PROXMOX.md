@@ -49,6 +49,7 @@ cd /root
 ### 3. Tamamlandı
 
 Script otomatik olarak:
+
 - ✅ Debian 12 template indirir
 - ✅ İki CT oluşturur ve yapılandırır
 - ✅ Sistem güncellemelerini yapar
@@ -288,6 +289,18 @@ pct exec 9002 -- systemctl status ttyd
 pct exec 9002 -- journalctl -u ttyd -n 50
 ```
 
+### PTY Allocation Request Failed (Terminal Bağlantı Sorunu)
+
+Eğer terminale bağlanırken bu hatayı alıyorsanız, host sistemdeki (Web CT) ana dizinde bulunan hızlı onarım scriptini çalıştırın:
+
+```bash
+# Web CT (Master) üzerinde
+chmod +x hizli_onarim.sh
+./hizli_onarim.sh
+```
+
+Bu script, Terminal CT (9002/991) üzerindeki PTY ayarlarını onaracak ve her açılışta otomatik çalışacak bir servis kuracaktır.
+
 ## 📦 Backup ve Restore
 
 ### Backup
@@ -383,11 +396,12 @@ http://<WEB_IP>
 ## 📞 Destek
 
 Sorun yaşarsanız:
+
 1. Script loglarını kontrol edin
 2. CT loglarını inceleyin: `journalctl -xe`
 3. Proxmox loglarını kontrol edin
 4. Network ayarlarını doğrulayın
 
-## 🎉 Başarılar!
+## 🎉 Başarılar
 
 Artık Kapadokya Ders Takip Sistemi Proxmox CT'lerde çalışıyor!

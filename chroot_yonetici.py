@@ -37,9 +37,73 @@ def _run(cmd, check=True):
     return result
 
 
+def repair_system_pty():
+    """
+    Host sistemdeki (CT 991) PTY ve /dev/pts yapılandırmasını onarır.
+    LXC içinde PTY allocation hatasını (5, 2) çözmek için kritiktir.
+    """
+    log.info("🛠️ Sistem PTY ve /dev/pts onarılıyor...")
+    
+    # 1. /dev/pts mount edilmiş mi kontrol et
+    if not os.path.ismount("/dev/pts"):
+        log.warning("⚠️ /dev/pts mount edilmemiş! Mount ediliyor...")
+        _run(["mount", "-t", "devpts", "devpts", "/dev/pts", "-o", "rw,nosuid,noexec,relatime,gid=5,mode=620,ptmxmode=000"], check=False)
+    
+    # 2. /dev/ptmx kontrolü ve onarımı
+    ptmx = Path("/dev/ptmx")
+    if ptmx.exists():
+        # Eğer symlink değilse ve karakter cihazıysa, bazen symlink olması daha iyidir (LXC)
+        # Ama önce izinleri düzeltmeyi deneyelim
+        _run(["chmod", "666", "/dev/ptmx"], check=False)
+        _run(["chown", "root:tty", "/dev/ptmx"], check=False)
+    else:
+        # Ptmx yoksa oluştur (mknod veya ln)
+        log.warning("⚠️ /dev/ptmx bulunamadı! Oluşturuluyor...")
+        # Önce symlink dene (LXC için önerilen)
+        _run(["ln", "-s", "/dev/pts/ptmx", "/dev/ptmx"], check=False)
+        _run(["chmod", "666", "/dev/ptmx"], check=False)
+
+    # 3. /dev/tty izinleri
+    _run(["chmod", "666", "/dev/tty"], check=False)
+    
+    log.info("✅ Sistem PTY onarımı tamamlandı.")
+
+
+def setup_persistence():
+    """
+    Onarım işlemini her açılışta çalışacak bir systemd servisi olarak kurar.
+    """
+    service_content = f"""[Unit]
+Description=Chroot PTY Repair Service
+After=network.target
+
+[Service]
+Type=oneshot
+ExecStart={os.path.abspath(__file__)} repair
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target
+"""
+    service_path = Path("/etc/systemd/system/chroot-pty-fix.service")
+    log.info(f"📝 Servis dosyası oluşturuluyor: {service_path}")
+    
+    try:
+        service_path.write_text(service_content)
+        _run(["systemctl", "daemon-reload"])
+        _run(["systemctl", "enable", "chroot-pty-fix.service"])
+        _run(["systemctl", "start", "chroot-pty-fix.service"])
+        log.info("✅ PTY onarım servisi başarıyla kuruldu ve başlatıldı.")
+    except Exception as e:
+        log.error(f"❌ Servis kurulum hatası: {e}")
+
+
 def setup_template():
     """Şablon chroot ortamı oluştur."""
     log.info("Şablon chroot ortamı kuruluyor...")
+
+    # ÖNCE SİSTEM PTY ONAR (V14)
+    repair_system_pty()
 
     # Mimari Tespiti (V13)
     import platform
@@ -556,12 +620,20 @@ def main():
         print("  python3 chroot_yonetici.py list          # Listele")
         print("  python3 chroot_yonetici.py mount <user>  # Mount et")
         print("  python3 chroot_yonetici.py delete <user> # Sil")
+        print("  python3 chroot_yonetici.py repair        # PTY Onar")
+        print("  python3 chroot_yonetici.py persist       # Kalıcı yap (Service kur)")
         return
 
     command = sys.argv[1]
 
     if command == "init":
         setup_template()
+
+    elif command == "repair":
+        repair_system_pty()
+
+    elif command == "persist":
+        setup_persistence()
 
     elif command == "create":
         if len(sys.argv) < 3:
