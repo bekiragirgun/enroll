@@ -307,6 +307,18 @@
               edilir.</small>
           </div>
           <div>
+            <label style="display:block; color:#90cdf4; font-size:0.9rem; margin-bottom:0.5rem;">🔒 Sınav/Kilit Modu
+              (SEB)</label>
+            <select id="config-kiosk-modu"
+              style="width:100%; padding:0.6rem; background:#2d3748; border:1px solid #4a5568; border-radius:6px; color:#fff;">
+              <option value="1" {% if config.kiosk_modu=='1' %}selected{% endif %}>Açık (Sadece SEB ile girilebilir)
+              </option>
+              <option value="0" {% if config.kiosk_modu=='0' %}selected{% endif %}>Kapalı (Herhangi bir tarayıcı ile
+                girilebilir)</option>
+            </select>
+            <small style="color:#718096;">Öğrencilerin sadece Safe Exam Browser ile girmesini zorunlu kılar.</small>
+          </div>
+          <div>
             <label style="display:block; color:#90cdf4; font-size:0.9rem; margin-bottom:0.5rem;">📡 Terminal (TTYD)
               Yayını URL</label>
             <input type="text" id="config-ttyd-url" value="{{ config.terminal_url }}"

@@ -69,6 +69,10 @@ async function ayarlariKaydet() {
   const systemHost = document.getElementById('config-system-host').value;
   const ttydUrl = document.getElementById('config-ttyd-url').value;
 
+  // Kiosk Modu Toggle
+  const kioskModuSelect = document.getElementById('config-kiosk-modu');
+  const kioskModu = kioskModuSelect ? kioskModuSelect.value : '1'; // Default: Açık
+
   const yanit = await safeFetch('/api/config', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -78,7 +82,8 @@ async function ayarlariKaydet() {
       chroot_user: chrootUser,
       chroot_pass: chrootPass,
       system_host: systemHost,
-      ttyd_url: ttydUrl
+      ttyd_url: ttydUrl,
+      kiosk_modu: kioskModu
     })
   });
 

@@ -578,6 +578,11 @@ def api_config():
         url = veri['ttyd_url']
         ders_durumu['terminal_url'] = url
         ayar_kaydet('terminal_url', url)
+
+    if 'kiosk_modu' in veri:
+        kiosk = str(veri['kiosk_modu'])
+        ders_durumu['kiosk_modu'] = kiosk
+        ayar_kaydet('kiosk_modu', kiosk)
         
     return jsonify({'durum': 'ok'})
 
