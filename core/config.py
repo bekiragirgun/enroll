@@ -12,7 +12,9 @@ ders_durumu = {
     'chroot_user': 'root',
     'chroot_pass': '',
     'system_host': '', # Boş ise otomatik IP kullanılır (V14.2)
-    'kiosk_modu': '1'
+    'kiosk_modu': '1',
+    'cikis_izni': '0',
+    'ip_kontrol': '1'
 }
 
 def ayar_kaydet(anahtar, deger):
@@ -38,6 +40,8 @@ def ayarlari_yukle():
     chroot_user = ayar_getir('chroot_user', 'root')
     chroot_pass = ayar_getir('chroot_pass', '')
     kiosk_modu  = ayar_getir('kiosk_modu', '1')
+    cikis_izni  = ayar_getir('cikis_izni', '0')
+    ip_kontrol  = ayar_getir('ip_kontrol', '1')
     
     ders_durumu['chroot_host'] = chroot_host
     ders_durumu['chroot_port'] = chroot_port
@@ -46,6 +50,8 @@ def ayarlari_yukle():
     ders_durumu['chroot_user'] = chroot_user
     ders_durumu['chroot_pass'] = chroot_pass
     ders_durumu['kiosk_modu'] = kiosk_modu
+    ders_durumu['cikis_izni'] = cikis_izni
+    ders_durumu['ip_kontrol'] = ip_kontrol
     
     try:
         import chroot_terminal

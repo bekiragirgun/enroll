@@ -18,11 +18,21 @@ def api_durum():
     if hash_param:
         ders_durumu['slayt_hash'] = hash_param
 
+    cikis_onaylandi = False
+    from flask import session
+    numara = session.get('numara')
+    if numara:
+        with db_baglantisi() as db:
+            kayit = db.execute("SELECT durum FROM seb_cikis_talepleri WHERE numara=? AND tarih=? ORDER BY id DESC LIMIT 1", (numara, bugun())).fetchone()
+            if kayit and kayit['durum'] == 'onaylandi':
+                cikis_onaylandi = True
+
     response = {
         'mod': ders_durumu['mod'],
         'dosya': ders_durumu['dosya'],
         'slayt_hash': ders_durumu.get('slayt_hash', ''),
-        'terminal_url': ders_durumu.get('terminal_url', '')
+        'terminal_url': ders_durumu.get('terminal_url', ''),
+        'cikis_onaylandi': cikis_onaylandi
     }
     return jsonify(response)
 
@@ -104,8 +114,54 @@ def api_config():
         kiosk = str(veri['kiosk_modu'])
         ders_durumu['kiosk_modu'] = kiosk
         ayar_kaydet('kiosk_modu', kiosk)
-        
+
+    if 'ip_kontrol' in veri:
+        ip_k = str(veri['ip_kontrol'])
+        ders_durumu['ip_kontrol'] = ip_k
+        ayar_kaydet('ip_kontrol', ip_k)
+
     return jsonify({'durum': 'ok'})
+
+@api_bp.route('/healthcheck', methods=['POST'])
+@ogretmen_giris_gerekli
+def api_healthcheck():
+    veri = request.get_json()
+    host = veri.get('chroot_host', '')
+    port = veri.get('chroot_port', 22)
+    user = veri.get('chroot_user', 'root')
+    password = veri.get('chroot_pass', '')
+
+    try:
+        from chroot_terminal import _is_local
+        if _is_local(host):
+            return jsonify({'durum': 'ok', 'mesaj': 'Bağlantı Başarılı (Yerel Sistem)'})
+
+        import subprocess
+        ssh_cmd = [
+            "ssh", "-o", "ConnectTimeout=5",
+            "-o", "StrictHostKeyChecking=no",
+            "-o", "BatchMode=yes" if not password else "BatchMode=no",
+            "-p", str(port),
+            f"{user}@{host}",
+            "echo ok"
+        ]
+
+        if password:
+            import shutil
+            if not shutil.which("sshpass"):
+                return jsonify({'durum': 'hata', 'mesaj': 'sshpass yüklü değil, şifreli giriş yapılamaz.'})
+            ssh_cmd = ["sshpass", "-p", password] + ssh_cmd
+
+        result = subprocess.run(ssh_cmd, capture_output=True, text=True, timeout=10)
+        
+        if result.returncode == 0:
+            return jsonify({'durum': 'ok', 'mesaj': 'Bağlantı Başarılı'})
+        else:
+            return jsonify({'durum': 'hata', 'mesaj': f"Bağlantı Hatası: {result.stderr.strip().splitlines()[-1] if result.stderr.strip() else 'Bilinmeyen Hata'}"})
+    except subprocess.TimeoutExpired:
+        return jsonify({'durum': 'hata', 'mesaj': 'Bağlantı zaman aşımına uğradı.'})
+    except Exception as e:
+        return jsonify({'durum': 'hata', 'mesaj': str(e)})
 
 @api_bp.route('/yoklama')
 @ogretmen_giris_gerekli
@@ -306,3 +362,181 @@ def api_seb_cikis_log():
     with db_baglantisi() as db:
         loglar = db.execute("SELECT * FROM seb_cikis_log WHERE tarih=? ORDER BY id DESC", (bugun(),)).fetchall()
     return jsonify({'loglar': [dict(l) for l in loglar]})
+
+@api_bp.route('/seb_cikis_talep', methods=['POST'])
+def api_seb_cikis_talep():
+    from flask import session
+    numara = session.get('numara')
+    if not numara:
+        return jsonify({'durum': 'hata', 'mesaj': 'Oturum yok'})
+        
+    ad_soyad = f"{session.get('ad', '')} {session.get('soyad', '')}".strip()
+    
+    with db_baglantisi() as db:
+        mevcut = db.execute("SELECT id, durum FROM seb_cikis_talepleri WHERE numara=? AND tarih=? AND durum != 'reddedildi'", (numara, bugun())).fetchone()
+        if mevcut:
+            return jsonify({'durum': 'ok', 'mesaj': 'Zaten talebiniz var.'})
+            
+        db.execute(
+            'INSERT INTO seb_cikis_talepleri (tarih, saat, numara, ad_soyad, durum) VALUES (?, ?, ?, ?, ?)',
+            (bugun(), simdi(), numara, ad_soyad, 'bekliyor')
+        )
+        db.commit()
+    return jsonify({'durum': 'ok'})
+
+@api_bp.route('/seb_cikis_talepler', methods=['GET'])
+@ogretmen_giris_gerekli
+def api_seb_cikis_talepler():
+    with db_baglantisi() as db:
+        liste = db.execute("SELECT * FROM seb_cikis_talepleri WHERE tarih=? AND durum='bekliyor' ORDER BY id ASC", (bugun(),)).fetchall()
+    return jsonify({'talepler': [dict(l) for l in liste]})
+
+@api_bp.route('/seb_cikis_onayla', methods=['POST'])
+@ogretmen_giris_gerekli
+def api_seb_cikis_onayla():
+    data = request.json
+    talep_id = data.get('id')
+    durum_val = data.get('durum', 'onaylandi')
+    
+    with db_baglantisi() as db:
+        db.execute("UPDATE seb_cikis_talepleri SET durum=? WHERE id=?", (durum_val, talep_id))
+        db.commit()
+    return jsonify({'durum': 'ok'})
+
+@api_bp.route('/seb_cikis_toplu_onayla', methods=['POST'])
+@ogretmen_giris_gerekli
+def api_seb_cikis_toplu_onayla():
+    with db_baglantisi() as db:
+        db.execute("UPDATE seb_cikis_talepleri SET durum='onaylandi' WHERE tarih=? AND durum='bekliyor'", (bugun(),))
+        db.commit()
+    return jsonify({'durum': 'ok'})
+
+@api_bp.route('/yardim_talep', methods=['POST'])
+def api_yardim_talep():
+    from flask import session
+    numara = session.get('numara')
+    if not numara:
+        return jsonify({'durum': 'hata', 'mesaj': 'Oturum yok'})
+        
+    ad_soyad = f"{session.get('ad', '')} {session.get('soyad', '')}".strip()
+    
+    with db_baglantisi() as db:
+        mevcut = db.execute("SELECT id, durum FROM yardim_talepleri WHERE numara=? AND tarih=? AND durum != 'tamamlandi'", (numara, bugun())).fetchone()
+        if mevcut:
+            return jsonify({'durum': 'ok', 'mesaj': 'Zaten aktif bir yardım talebiniz var.'})
+            
+        db.execute(
+            'INSERT INTO yardim_talepleri (tarih, saat, numara, ad_soyad, durum) VALUES (?, ?, ?, ?, ?)',
+            (bugun(), simdi(), numara, ad_soyad, 'bekliyor')
+        )
+        db.commit()
+    return jsonify({'durum': 'ok'})
+
+@api_bp.route('/yardim_talepler', methods=['GET'])
+@ogretmen_giris_gerekli
+def api_yardim_talepler():
+    with db_baglantisi() as db:
+        liste = db.execute("SELECT * FROM yardim_talepleri WHERE tarih=? AND (durum='bekliyor' OR durum='kabul_edildi') ORDER BY CASE WHEN durum='bekliyor' THEN 0 ELSE 1 END, id ASC", (bugun(),)).fetchall()
+    return jsonify({'talepler': [dict(l) for l in liste]})
+
+@api_bp.route('/yardim_kabul', methods=['POST'])
+@ogretmen_giris_gerekli
+def api_yardim_kabul():
+    data = request.json
+    talep_id = data.get('id')
+    durum_val = data.get('durum', 'kabul_edildi') # 'kabul_edildi' veya 'tamamlandi' / 'reddedildi'
+    
+    with db_baglantisi() as db:
+        db.execute("UPDATE yardim_talepleri SET durum=? WHERE id=?", (durum_val, talep_id))
+        db.commit()
+    return jsonify({'durum': 'ok'})
+
+
+# ── Öğrenci Yönetimi ─────────────────────────────────────────────
+
+@api_bp.route('/ogrenci_ekle', methods=['POST'])
+@ogretmen_giris_gerekli
+def api_ogrenci_ekle():
+    veri = request.get_json()
+    sinif_id = veri.get('sinif_id')
+    numara = veri.get('numara', '').strip()
+    ad = veri.get('ad', '').strip().upper()
+    soyad = veri.get('soyad', '').strip().upper()
+    if not sinif_id or not numara or not ad or not soyad:
+        return jsonify({'durum': 'hata', 'mesaj': 'Tüm alanlar gerekli (sınıf, numara, ad, soyad)'}), 400
+    with db_baglantisi() as db:
+        mevcut = db.execute('SELECT id FROM ogrenciler WHERE numara=?', (numara,)).fetchone()
+        if mevcut:
+            return jsonify({'durum': 'hata', 'mesaj': f'{numara} numaralı öğrenci zaten kayıtlı'}), 409
+        db.execute('INSERT INTO ogrenciler (sinif_id, numara, ad, soyad, sifre) VALUES (?,?,?,?,?)',
+                   (sinif_id, numara, ad, soyad, numara))
+        db.commit()
+    return jsonify({'durum': 'ok', 'mesaj': f'{ad} {soyad} ({numara}) eklendi'})
+
+@api_bp.route('/ogrenci_sil', methods=['POST'])
+@ogretmen_giris_gerekli
+def api_ogrenci_sil():
+    veri = request.get_json()
+    numara = veri.get('numara', '').strip() if veri else ''
+    if not numara:
+        return jsonify({'durum': 'hata', 'mesaj': 'Numara gerekli'}), 400
+    with db_baglantisi() as db:
+        silinen = db.execute('DELETE FROM ogrenciler WHERE numara=?', (numara,))
+        db.commit()
+    if silinen.rowcount == 0:
+        return jsonify({'durum': 'hata', 'mesaj': 'Öğrenci bulunamadı'}), 404
+    return jsonify({'durum': 'ok', 'mesaj': f'{numara} numaralı öğrenci silindi'})
+
+@api_bp.route('/ogrenci_guncelle', methods=['POST'])
+@ogretmen_giris_gerekli
+def api_ogrenci_guncelle():
+    veri = request.get_json()
+    numara = veri.get('numara', '').strip()
+    yeni_ad = veri.get('ad', '').strip().upper()
+    yeni_soyad = veri.get('soyad', '').strip().upper()
+    yeni_sinif_id = veri.get('sinif_id')
+    if not numara:
+        return jsonify({'durum': 'hata', 'mesaj': 'Numara gerekli'}), 400
+    with db_baglantisi() as db:
+        mevcut = db.execute('SELECT id FROM ogrenciler WHERE numara=?', (numara,)).fetchone()
+        if not mevcut:
+            return jsonify({'durum': 'hata', 'mesaj': 'Öğrenci bulunamadı'}), 404
+        if yeni_ad and yeni_soyad:
+            db.execute('UPDATE ogrenciler SET ad=?, soyad=? WHERE numara=?', (yeni_ad, yeni_soyad, numara))
+        if yeni_sinif_id:
+            db.execute('UPDATE ogrenciler SET sinif_id=? WHERE numara=?', (yeni_sinif_id, numara))
+        db.commit()
+    return jsonify({'durum': 'ok', 'mesaj': 'Öğrenci güncellendi'})
+
+@api_bp.route('/sinif_ekle', methods=['POST'])
+@ogretmen_giris_gerekli
+def api_sinif_ekle():
+    veri = request.get_json()
+    ad = veri.get('ad', '').strip() if veri else ''
+    if not ad:
+        return jsonify({'durum': 'hata', 'mesaj': 'Sınıf adı gerekli'}), 400
+    with db_baglantisi() as db:
+        mevcut = db.execute('SELECT id FROM siniflar WHERE ad=?', (ad,)).fetchone()
+        if mevcut:
+            return jsonify({'durum': 'hata', 'mesaj': f'"{ad}" sınıfı zaten var'}), 409
+        db.execute('INSERT INTO siniflar (ad) VALUES (?)', (ad,))
+        db.commit()
+    return jsonify({'durum': 'ok', 'mesaj': f'"{ad}" sınıfı eklendi'})
+
+@api_bp.route('/sinif_sil', methods=['POST'])
+@ogretmen_giris_gerekli
+def api_sinif_sil():
+    veri = request.get_json()
+    sinif_id = veri.get('sinif_id') if veri else None
+    if not sinif_id:
+        return jsonify({'durum': 'hata', 'mesaj': 'Sınıf ID gerekli'}), 400
+    with db_baglantisi() as db:
+        ogrenci_sayisi = db.execute('SELECT COUNT(*) as sayi FROM ogrenciler WHERE sinif_id=?', (sinif_id,)).fetchone()['sayi']
+        if ogrenci_sayisi > 0:
+            return jsonify({'durum': 'hata', 'mesaj': f'Bu sınıfta {ogrenci_sayisi} öğrenci var. Önce öğrencileri silin veya taşıyın.'}), 409
+        silinen = db.execute('DELETE FROM siniflar WHERE id=?', (sinif_id,))
+        db.commit()
+    if silinen.rowcount == 0:
+        return jsonify({'durum': 'hata', 'mesaj': 'Sınıf bulunamadı'}), 404
+    return jsonify({'durum': 'ok', 'mesaj': 'Sınıf silindi'})
+

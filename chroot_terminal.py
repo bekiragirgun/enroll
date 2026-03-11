@@ -5,11 +5,24 @@ CT 991 (ogrenci-vm) üzerindeki chroot ortamlarını yönetir
 
 import subprocess
 import os
+import time
+import threading
 from pathlib import Path
 import logging
-import requests
 
 log = logging.getLogger("chroot_terminal")
+
+# ── SSH Kuyruk Sistemi ─────────────────────────────────────────
+# Eş zamanlı SSH bağlantı sayısını sınırla (MaxSessions/MaxStartups aşımını önler)
+_ssh_semaphore = threading.Semaphore(10)  # Aynı anda max 10 SSH bağlantısı
+_sync_lock = threading.Lock()
+_last_sync_time = 0
+_SYNC_INTERVAL = 60  # Sync script'i en fazla 60 saniyede bir gönder
+
+# Chroot listesi cache (her seferinde SSH ile sorgulamayı önler)
+_chroot_cache = set()
+_chroot_cache_time = 0
+_CHROOT_CACHE_TTL = 30  # 30 saniye cache
 
 # CT 991 (ogrenci-vm) bilgileri
 CT_991_HOST = "192.168.111.51"  # CT 991 IP adresi
@@ -75,51 +88,82 @@ def _is_local(host):
     
     return False
 
-def _ct991_exec(command: list) -> subprocess.CompletedProcess:
-    """CT 991 üzerinde komut çalıştır (Local veya SSH üzerinden)."""
-    
+def _ct991_exec(command: list, retries: int = 2) -> subprocess.CompletedProcess:
+    """CT 991 üzerinde komut çalıştır (Local veya SSH üzerinden).
+
+    SSH bağlantıları semaphore ile sınırlandırılır (max 3 eşzamanlı).
+    Başarısız bağlantılarda retry + backoff uygulanır.
+    """
     if _is_local(CT_991_HOST):
         log.debug(f"Executing locally: {' '.join(command)}")
         return subprocess.run(command, capture_output=True, text=True)
 
-    # Chroot komutları genellikle root yetkisi gerektirir
     final_command = command
     if CT_991_USER != "root":
-        # Sudo kullanırken -S (stdin'den şifre okuma) ve -n (non-interactive) gerekebilir
-        # Ama biz sshpass kullandığımızda remote tarafta password istiyorsa o sorun olabilir.
         final_command = ["sudo"] + command
 
-    # SSH üzerinden bağlat
     ssh_cmd = [
-        "ssh", "-o", "ConnectTimeout=5", 
-        "-o", "StrictHostKeyChecking=no",  # SSH anahtar onayını atla
+        "ssh", "-o", "ConnectTimeout=10",
+        "-o", "StrictHostKeyChecking=no",
         "-o", "BatchMode=yes" if not CT_991_PASS else "BatchMode=no",
+        "-o", "ControlPath=none",
         "-p", str(CT_991_REAL_SSH_PORT),
         f"{CT_991_USER}@{CT_991_HOST}"
     ]
-    
-    # Şifre varsa sshpass kullan
+
     if CT_991_PASS:
         import shutil
         if not shutil.which("sshpass"):
-            log.error("❌ HATA: Şifre ile bağlanmak için 'sshpass' paketi yüklü olmalıdır! 'sudo apt install sshpass' komutunu çalıştırın.")
+            log.error("sshpass paketi yüklü değil!")
             return subprocess.CompletedProcess(ssh_cmd, 1, stderr="sshpass not found")
         ssh_cmd = ["sshpass", "-p", CT_991_PASS] + ssh_cmd
 
     ssh_cmd += final_command
-    
-    log.debug(f"Remoting (PCT 991): {' '.join(ssh_cmd)}")
-    result = subprocess.run(ssh_cmd, capture_output=True, text=True)
-    
-    if result.returncode != 0:
-        log.error(f"Remote command failed: {' '.join(command)}")
-        if result.stderr: log.error(f"Stderr: {result.stderr.strip()}")
-    
-    return result
+
+    for attempt in range(retries + 1):
+        _ssh_semaphore.acquire()
+        try:
+            log.debug(f"SSH exec (attempt {attempt+1}): {' '.join(command)}")
+            result = subprocess.run(ssh_cmd, capture_output=True, text=True, timeout=30)
+
+            if result.returncode == 0:
+                return result
+
+            # SSH bağlantı hatası (exit 255) → retry
+            if result.returncode == 255 and attempt < retries:
+                wait = (attempt + 1) * 2
+                log.warning(f"SSH bağlantı hatası, {wait}s sonra tekrar denenecek ({attempt+1}/{retries})")
+                time.sleep(wait)
+                continue
+
+            if result.returncode != 0:
+                log.error(f"Remote command failed: {' '.join(command)}")
+                if result.stderr:
+                    log.error(f"Stderr: {result.stderr.strip()[:200]}")
+            return result
+        except subprocess.TimeoutExpired:
+            log.error(f"SSH zaman aşımı: {' '.join(command)}")
+            if attempt < retries:
+                time.sleep((attempt + 1) * 2)
+                continue
+            return subprocess.CompletedProcess(ssh_cmd, 1, stderr="Timeout")
+        finally:
+            _ssh_semaphore.release()
+
+    return subprocess.CompletedProcess(ssh_cmd, 1, stderr="Max retries exceeded")
 
 
 def sync_manager_script():
-    """Local chroot_yonetici.py dosyasını PCT 991'e senkronize et."""
+    """Local chroot_yonetici.py dosyasını PCT 991'e senkronize et.
+
+    Son senkronizasyondan bu yana _SYNC_INTERVAL saniye geçmediyse atlar.
+    """
+    global _last_sync_time
+    with _sync_lock:
+        now = time.time()
+        if now - _last_sync_time < _SYNC_INTERVAL:
+            return True  # Son sync yeterince yakın, atla
+        _last_sync_time = now
     try:
         local_path = Path(__file__).parent / "chroot_yonetici.py"
         if not local_path.exists():
@@ -194,20 +238,31 @@ def chroot_persist() -> bool:
 
 
 def chroot_var_mi(username: str) -> bool:
-    """Öğrenci chroot ortamı var mı?"""
-    # Script güncel olduğundan emin ol
-    sync_manager_script()
-    
-    username = _slugify(username)
-    result = _ct991_exec([PYTHON_PATH, CHROOT_MANAGE_SCRIPT, "list"])
-    if result.returncode != 0:
-        log.error(f"Chroot listesi alınamadı: {result.stderr}")
-        return False
+    """Öğrenci chroot ortamı var mı? (Cache'li)"""
+    global _chroot_cache, _chroot_cache_time
 
-    output = result.stdout.strip()
-    # "  - ogrenci1" formatını temizle
-    chroots = [line.strip().replace("- ", "").strip() for line in output.split('\n')]
-    return username in chroots
+    sync_manager_script()  # Cache'li, gereksiz yere çağırmaz
+
+    username = _slugify(username)
+
+    # Cache'de varsa ve güncel ise hemen dön
+    now = time.time()
+    if username in _chroot_cache and (now - _chroot_cache_time) < _CHROOT_CACHE_TTL:
+        return True
+
+    # Cache süresi dolmuşsa veya kullanıcı bulunamadıysa listeyi güncelle
+    if (now - _chroot_cache_time) >= _CHROOT_CACHE_TTL:
+        result = _ct991_exec([PYTHON_PATH, CHROOT_MANAGE_SCRIPT, "list"])
+        if result.returncode != 0:
+            log.error(f"Chroot listesi alınamadı: {result.stderr}")
+            return False
+
+        output = result.stdout.strip()
+        chroots = {line.strip().replace("- ", "").strip() for line in output.split('\n') if line.strip()}
+        _chroot_cache = chroots
+        _chroot_cache_time = now
+
+    return username in _chroot_cache
 
 
 def chroot_olustur(username: str, ad: str = "", soyad: str = "") -> bool:
@@ -227,6 +282,7 @@ def chroot_olustur(username: str, ad: str = "", soyad: str = "") -> bool:
 
         if result.returncode == 0:
             log.info(f"✅ Chroot oluşturuldu: {username}")
+            _chroot_cache.add(username)  # Cache'e ekle
             # Mount işlemini tetikle
             _ct991_exec([PYTHON_PATH, CHROOT_MANAGE_SCRIPT, "mount", username])
             return True

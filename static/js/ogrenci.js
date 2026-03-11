@@ -44,9 +44,11 @@ function modalGoster(mod, ekstra) {
   const terminal = document.getElementById('terminal-ekrani');
   const sinav = document.getElementById('sinav-ekrani');
   const overlay = document.getElementById('join-overlay');
+  const cikisAlani = document.getElementById('cikis-talep-alani');
 
   // Hepsini gizle
   [bekleme, slayt, terminal, sinav].forEach(el => { if (el) el.style.display = 'none'; });
+  if (cikisAlani) cikisAlani.style.display = 'none';
 
   // Eğer mod 'bekleme' DEĞİLSE ve tam ekran DEĞİLSE overlay göster
   if (mod !== 'bekleme' && !document.fullscreenElement) {
@@ -57,6 +59,10 @@ function modalGoster(mod, ekstra) {
 
   // Overlay'i kapat (Eğer tam ekransa veya bekleme modundaysa)
   if (overlay) overlay.style.display = 'none';
+  // Eğer bekleme modunda değilsek çıkış butonunu göster
+  if (mod !== 'bekleme' && cikisAlani) {
+    cikisAlani.style.display = 'block';
+  }
 
   if (mod === 'bekleme') {
     if (bekleme) bekleme.style.display = 'flex';
@@ -227,6 +233,12 @@ async function durumKontrol() {
 
     const veri = await yanit.json();
 
+    if (veri.cikis_onaylandi) {
+      document.body.innerHTML = '<h2 style="color:white; text-align:center; margin-top:50px;">Öğretmen çıkışınızı onayladı. Tarayıcı kapatılıyor...</h2>';
+      window.location.href = '/seb-quit';
+      return;
+    }
+
     const degisti =
       veri.mod !== suAnkiDurum.mod ||
       veri.dosya !== suAnkiDurum.dosya ||
@@ -256,6 +268,68 @@ document.addEventListener('DOMContentLoaded', () => {
   durumKontrol();
   setInterval(durumKontrol, POLLING_ARALIK);
 });
+
+async function yardimTalepEt() {
+  const btn = document.getElementById('btn-yardim-talep');
+  if (!btn) return;
+
+  try {
+    btn.innerHTML = '⏳ Gönderiliyor...';
+    btn.disabled = true;
+    btn.style.backgroundColor = '#718096';
+    btn.style.transform = 'none';
+
+    const res = await fetch('/api/yardim_talep', { method: 'POST' });
+    const data = await res.json();
+
+    if (data.durum === 'ok') {
+      btn.innerHTML = '✅ Yardım Bekleniyor...';
+      btn.style.backgroundColor = '#48bb78';
+    } else {
+      alert('Hata: ' + data.mesaj);
+      btn.disabled = false;
+      btn.innerHTML = '🙋‍♂️ Yardım İste';
+      btn.style.backgroundColor = '#2b6cb0';
+    }
+  } catch (e) {
+    alert("Hata oluştu.");
+    btn.disabled = false;
+    btn.innerHTML = '🙋‍♂️ Yardım İste';
+    btn.style.backgroundColor = '#2b6cb0';
+  }
+}
+
+
+async function cikisTalepEt() {
+  const btn = document.getElementById('btn-cikis-talep');
+  if (!btn) return;
+
+  if (!confirm("Sınavı bitirmek ve Güvenli Tarayıcıdan çıkış yapmak istediğinize emin misiniz?")) return;
+
+  try {
+    btn.innerHTML = '⏳ Bekleniyor...';
+    btn.disabled = true;
+    btn.style.backgroundColor = '#718096';
+    btn.style.transform = 'none';
+
+    const res = await fetch('/api/seb_cikis_talep', { method: 'POST' });
+    const data = await res.json();
+
+    if (data.durum === 'ok') {
+      btn.innerHTML = 'Öğretmen onayı bekleniyor...';
+    } else {
+      alert('Hata: ' + data.mesaj);
+      btn.disabled = false;
+      btn.innerHTML = '🚪 Çıkış Talep Et';
+      btn.style.backgroundColor = '#c53030';
+    }
+  } catch (e) {
+    alert("Hata oluştu.");
+    btn.disabled = false;
+    btn.innerHTML = '🚪 Çıkış Talep Et';
+    btn.style.backgroundColor = '#c53030';
+  }
+}
 
 // SEB kapandığında / Sayfa tazelendiğinde arka plana log at
 window.addEventListener('beforeunload', function (e) {

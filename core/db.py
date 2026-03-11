@@ -146,3 +146,29 @@ def db_olustur():
                 ip TEXT NOT NULL
             )
         """)
+
+        # SEB Çıkış Talepleri
+        db.execute("""
+            CREATE TABLE IF NOT EXISTS seb_cikis_talepleri (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                tarih TEXT NOT NULL,
+                saat TEXT NOT NULL,
+                numara TEXT NOT NULL,
+                ad_soyad TEXT NOT NULL,
+                durum TEXT DEFAULT 'bekliyor'
+            )
+        """)
+
+        # Yardım Talepleri
+        db.execute("""
+            CREATE TABLE IF NOT EXISTS yardim_talepleri (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                tarih TEXT NOT NULL,
+                saat TEXT NOT NULL,
+                numara TEXT NOT NULL,
+                ad_soyad TEXT NOT NULL,
+                durum TEXT DEFAULT 'bekliyor'
+            )
+        """)
+
+

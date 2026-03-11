@@ -179,18 +179,25 @@
     <div class="tab-butonlar">
       <button class="tab-btn aktif" onclick="tabGec('yoklama', this)">📋 Yoklama Listesi</button>
       <button class="tab-btn" onclick="tabGec('siniflar', this)">👥 Sınıf Durumu</button>
+      <button class="tab-btn" onclick="tabGec('yardim', this); yardimTalepleriCek();">
+        🙋‍♂️ Yardım Talepleri
+        <span id="yardim-rozet"
+          style="display:none;background:#2b6cb0;color:#fff;border-radius:10px;padding:0 6px;font-size:0.72rem;margin-left:4px;">0</span>
+      </button>
       <button class="tab-btn" onclick="tabGec('sahte', this); sahteCek();">
         🚨 Şüpheli Girişler
         <span id="sahte-rozet"
           style="display:none;background:#c53030;color:#fff;border-radius:10px;padding:0 6px;font-size:0.72rem;margin-left:4px;">0</span>
       </button>
-      <button class="tab-btn" onclick="tabGec('guvenlik', this); guvenlikLogCek(); sebCikisCek();">
+      <button class="tab-btn" onclick="tabGec('guvenlik', this); guvenlikLogCek(); sebCikisCek(); cikisTalepleriCek();">
         🔐 Güvenlik Log
         <span id="guvenlik-rozet"
           style="display:none;background:#c53030;color:#fff;border-radius:10px;padding:0 6px;font-size:0.72rem;margin-left:4px;">0</span>
       </button>
       <button class="tab-btn" onclick="tabGec('arsiv', this)">📁 Arşiv</button>
       <button class="tab-btn" onclick="tabGec('sinav', this); sinavListesiniGuncelle();">📝 Sınavlar</button>
+      <button class="tab-btn" onclick="tabGec('ogrenci_yonetim', this); ogrenciYonetimCek();">🎓 Öğrenci
+        Yönetimi</button>
       <button class="tab-btn" onclick="tabGec('ayarlar', this)">⚙️ Ayarlar</button>
     </div>
 
@@ -216,6 +223,21 @@
       <h3>👥 Sınıf Bazlı Durum</h3>
       <div class="sinif-grid" id="sinif-grid">
         <div style="color:#718096; font-size:0.9rem;">Yükleniyor...</div>
+      </div>
+    </div>
+
+    <!-- Yardım Talepleri -->
+    <div id="tab-yardim" class="panel-bolum" style="margin-top:1rem;">
+      <div class="kutu-baslik">
+        <div style="display:flex; justify-content:space-between; align-items:center; width:100%;">
+          <div>
+            <h3>🙋‍♂️ Yardım Talepleri</h3>
+            <span style="color:#4a5568;font-size:0.8rem;">Öğrencilerden gelen yardım istekleri</span>
+          </div>
+        </div>
+      </div>
+      <div id="yardim-talepleri-kutu" style="margin-top:0.75rem; margin-bottom:2rem;">
+        <div style="color:#718096;text-align:center;padding:1rem;">Henüz yardım talebi yok.</div>
       </div>
     </div>
 
@@ -257,6 +279,20 @@
         <span style="color:#4a5568;font-size:0.8rem;">Terminal erişim denemeleri</span>
       </div>
       <div id="guvenlik-log-kutu" style="margin-top:0.75rem; margin-bottom:2rem;">
+        <div style="color:#718096;text-align:center;padding:1rem;">Yükleniyor...</div>
+      </div>
+
+      <div class="kutu-baslik" style="margin-top:2rem;">
+        <div style="display:flex; justify-content:space-between; align-items:center; width:100%;">
+          <div>
+            <h3>🙋 SEB Çıkış Talepleri</h3>
+            <span style="color:#4a5568;font-size:0.8rem;">Öğrencilerden gelen çıkış onay istekleri</span>
+          </div>
+          <button class="btn-kucuk" style="background:#38a169;border-color:#2f855a;" onclick="cikisTopluOnayla()">✔️
+            Tümüne İzin Ver</button>
+        </div>
+      </div>
+      <div id="seb-cikis-talepleri-kutu" style="margin-top:0.75rem; margin-bottom:2rem;">
         <div style="color:#718096;text-align:center;padding:1rem;">Yükleniyor...</div>
       </div>
 
@@ -342,6 +378,58 @@
       </div>
     </div>
 
+    <!-- Öğrenci Yönetimi -->
+    <div id="tab-ogrenci_yonetim" class="panel-bolum" style="margin-top:1rem;">
+      <div class="kutu-baslik">
+        <h3>🎓 Öğrenci Yönetimi</h3>
+        <span style="color:#4a5568;font-size:0.8rem;">Öğrenci ve sınıf ekleme/çıkarma</span>
+      </div>
+
+      <!-- Sınıf Ekleme -->
+      <div class="kontrol-kutu" style="margin-top:1rem; background:#1a202c;">
+        <h4 style="color:#90cdf4; margin-top:0; margin-bottom:0.75rem;">📂 Sınıf Ekle</h4>
+        <div style="display:flex;gap:0.5rem;align-items:center;">
+          <input type="text" id="yeni-sinif-adi" placeholder="Sınıf adı (Örn: 1-A Yazılım Geliştirme)"
+            style="flex:1;padding:0.5rem;border-radius:6px;border:1px solid #4a5568;background:#2d3748;color:#fff;">
+          <button class="btn-kucuk yeşil" onclick="sinifEkle()">+ Sınıf Ekle</button>
+        </div>
+      </div>
+
+      <!-- Öğrenci Ekleme -->
+      <div class="kontrol-kutu" style="margin-top:1rem; background:#1a202c;">
+        <h4 style="color:#90cdf4; margin-top:0; margin-bottom:0.75rem;">➕ Öğrenci Ekle</h4>
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:0.5rem; margin-bottom:0.5rem;">
+          <select id="ekle-sinif-id"
+            style="padding:0.5rem;border-radius:6px;border:1px solid #4a5568;background:#2d3748;color:#fff;">
+            <option value="">Sınıf seçin...</option>
+          </select>
+          <input type="text" id="ekle-numara" placeholder="Öğrenci No"
+            style="padding:0.5rem;border-radius:6px;border:1px solid #4a5568;background:#2d3748;color:#fff;">
+        </div>
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:0.5rem; margin-bottom:0.5rem;">
+          <input type="text" id="ekle-ad" placeholder="Ad"
+            style="padding:0.5rem;border-radius:6px;border:1px solid #4a5568;background:#2d3748;color:#fff;">
+          <input type="text" id="ekle-soyad" placeholder="Soyad"
+            style="padding:0.5rem;border-radius:6px;border:1px solid #4a5568;background:#2d3748;color:#fff;">
+        </div>
+        <button class="btn-kucuk yeşil" onclick="ogrenciEkle()">+ Öğrenci Ekle</button>
+      </div>
+
+      <!-- Sınıf ve Öğrenci Listesi -->
+      <div class="kontrol-kutu" style="margin-top:1rem; background:#1a202c;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.75rem;">
+          <h4 style="color:#90cdf4; margin:0;">📋 Kayıtlı Öğrenciler</h4>
+          <select id="yonetim-sinif-filtre" onchange="ogrenciYonetimListele(this.value)"
+            style="padding:0.4rem;border-radius:6px;border:1px solid #4a5568;background:#2d3748;color:#fff;font-size:0.85rem;">
+            <option value="">Tüm sınıflar</option>
+          </select>
+        </div>
+        <div id="ogrenci-yonetim-listesi" style="max-height:500px;overflow-y:auto;">
+          <div style="color:#718096;text-align:center;padding:1rem;">Yükleniyor...</div>
+        </div>
+      </div>
+    </div>
+
     <!-- Ayarlar -->
     <div id="tab-ayarlar" class="panel-bolum" style="margin-top:1rem;">
       <div class="kutu-baslik">
@@ -401,14 +489,31 @@
             <small style="color:#718096;">Öğrencilerin sadece Safe Exam Browser ile girmesini zorunlu kılar.</small>
           </div>
           <div>
+            <label style="display:block; color:#90cdf4; font-size:0.9rem; margin-bottom:0.5rem;">🌐 Aynı IP Kontrolü
+              (Fraud Detection)</label>
+            <select id="config-ip-kontrol"
+              style="width:100%; padding:0.6rem; background:#2d3748; border:1px solid #4a5568; border-radius:6px; color:#fff;">
+              <option value="1" {% if config.ip_kontrol|default('1')=='1' %}selected{% endif %}>Açık (Aynı IP'den farklı
+                öğrenci girişini engelle)</option>
+              <option value="0" {% if config.ip_kontrol|default('1')=='0' %}selected{% endif %}>Kapalı (IP kontrolü
+                yapma)</option>
+            </select>
+            <small style="color:#718096;">Aynı cihazdan farklı öğrenci numaralarıyla giriş yapılmasını engeller. Sorun
+              çıkarırsa kapatın.</small>
+          </div>
+          <div>
             <label style="display:block; color:#90cdf4; font-size:0.9rem; margin-bottom:0.5rem;">📡 Terminal (TTYD)
               Yayını URL</label>
             <input type="text" id="config-ttyd-url" value="{{ config.terminal_url }}"
               style="width:100%; padding:0.6rem; background:#2d3748; border:1px solid #4a5568; border-radius:6px; color:#fff;">
             <small style="color:#718096;">Öğrenci ekranında gösterilecek terminal adresi (/terminal bırakın).</small>
           </div>
-          <button class="btn-kucuk" style="background:#48bb78; align-self:start;" onclick="ayarlariKaydet()">💾 Ayarları
-            Kaydet</button>
+          <div style="display:flex; gap:1rem; align-items:center;">
+            <button class="btn-kucuk" style="background:#48bb78;" onclick="ayarlariKaydet()">💾 Ayarları Kaydet</button>
+            <button class="btn-kucuk" style="background:#2b6cb0;" onclick="baglantiTestEt()">🩺 Bağlantıyı Test
+              Et</button>
+            <span id="healthcheck-sonuc" style="font-size:0.85rem; font-weight:bold;"></span>
+          </div>
         </div>
       </div>
     </div>

@@ -64,6 +64,18 @@
       onclick="sinavCevaplariniGonder()">Cevapları Gönder</button>
   </div>
 
+  <div id="cikis-talep-alani"
+    style="position:fixed; bottom:20px; right:20px; z-index:9999; display:none; flex-direction:column; gap:10px;">
+    <button onclick="yardimTalepEt()" id="btn-yardim-talep"
+      style="background:#2b6cb0; color:white; border:none; padding:10px 15px; border-radius:8px; font-weight:bold; cursor:pointer; box-shadow:0 4px 6px rgba(0,0,0,0.3);">
+      🙋‍♂️ Yardım İste
+    </button>
+    <button onclick="cikisTalepEt()" id="btn-cikis-talep"
+      style="background:#c53030; color:white; border:none; padding:10px 15px; border-radius:8px; font-weight:bold; cursor:pointer; box-shadow:0 4px 6px rgba(0,0,0,0.3);">
+      🚪 Çıkış Talep Et
+    </button>
+  </div>
+
   <script src="/static/js/ogrenci.js"></script>
 </body>
 

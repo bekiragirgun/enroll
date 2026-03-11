@@ -79,18 +79,30 @@ ogretmen_pty_pid  = None
 ogretmen_pty_lock = threading.Lock()
 ogretmen_sid = None
 ogretmen_komut_tampon = ""
+_ogretmen_pty_kapaniyor = False  # Eski PTY'nin kapandığını reader thread'e bildir
 
 def _pty_oku_ve_yayinla(fd, hedef_event, hedef_room=None, broadcast=False):
+    """PTY fd'den oku ve SocketIO üzerinden yayınla.
+
+    fd kapandığında veya hata oluştuğunda sessizce çıkar.
+    """
+    import select
     while True:
         try:
+            # select ile bekle - fd kapanırsa hemen çıkar
+            ready, _, _ = select.select([fd], [], [], 1.0)
+            if not ready:
+                continue
             data = os.read(fd, 4096)
-            if not data: break
+            if not data:
+                break
             text = data.decode('utf-8', errors='replace')
             if broadcast:
                 socketio.emit(hedef_event, text, namespace='/terminal')
             elif hedef_room:
                 socketio.emit(hedef_event, text, room=hedef_room, namespace='/terminal')
-        except (OSError, IOError, EOFError): break
+        except (OSError, IOError, EOFError, ValueError):
+            break
         except Exception as e:
             log.error(f"PTY Okuma hatası: {e}")
             break
@@ -134,16 +146,26 @@ def ogretmen_baglan_event(veri=None):
     ogretmen_sid = request.sid
     ogretmen_numara = 'ogretmen'
 
-    if ogretmen_pty_pid:
-        try: os.killpg(os.getpgid(ogretmen_pty_pid), signal.SIGTERM)
-        except: pass
-    if ogretmen_pty_fd:
-        try: os.close(ogretmen_pty_fd)
-        except: pass
+    # Eski PTY'yi temizle - önce process'i öldür, sonra fd'yi kapat
+    # fd kapatılınca reader thread otomatik çıkar (select/read hata verir)
+    eski_fd = ogretmen_pty_fd
+    eski_pid = ogretmen_pty_pid
+    ogretmen_pty_fd = None
+    ogretmen_pty_pid = None
+
+    if eski_pid:
+        try: os.killpg(os.getpgid(eski_pid), signal.SIGTERM)
+        except ProcessLookupError: pass
+        except Exception: pass
+    if eski_fd is not None:
+        try: os.close(eski_fd)
+        except OSError: pass
+        import time
+        time.sleep(0.3)  # Reader thread'in çıkmasını bekle
 
     from chroot_terminal import chroot_var_mi, chroot_olustur, CT_991_HOST, CT_991_REAL_SSH_PORT, CHROOT_BASE, _slugify
     ogretmen_numara = _slugify(ogretmen_numara)
-    
+
     try:
         if not chroot_var_mi(ogretmen_numara):
             log.info(f"Öğretmen chroot ortamı oluşturuluyor...")
@@ -152,12 +174,16 @@ def ogretmen_baglan_event(veri=None):
         master_fd, slave_fd = pty.openpty()
         safe_username = ogretmen_numara.replace("'", "'\\''")
         safe_chroot_path = f"{CHROOT_BASE}/{safe_username}".replace("'", "'\\''")
-        
+
         ssh_cmd = [
-            'ssh', '-t', '-o', 'StrictHostKeyChecking=no', '-p', str(CT_991_REAL_SSH_PORT), f'root@{CT_991_HOST}',
+            'ssh', '-t',
+            '-o', 'StrictHostKeyChecking=no',
+            '-o', 'ControlPath=none',
+            '-p', str(CT_991_REAL_SSH_PORT),
+            f'root@{CT_991_HOST}',
             f"/bin/bash -c \"while true; do chroot '{safe_chroot_path}' /bin/su - '{safe_username}'; echo 'Oturum kapatılamaz, yeniden başlatılıyor...'; sleep 1; done\""
         ]
-        
+
         proc = subprocess.Popen(ssh_cmd, stdin=slave_fd, stdout=slave_fd, stderr=slave_fd, preexec_fn=os.setsid)
         os.close(slave_fd)
 
@@ -166,13 +192,13 @@ def ogretmen_baglan_event(veri=None):
 
         t = threading.Thread(target=_pty_oku_ve_yayinla, args=(master_fd, 'ogretmen_cikti', None, True), daemon=True)
         t.start()
-        
+
         if ders_durumu['mod'] != 'terminal':
             log.info(f"Otomatik mod değişimi tetiklendi: {ders_durumu['mod']} -> terminal")
             ders_durumu['mod'] = 'terminal'
             if not ders_durumu.get('terminal_url'):
                 ders_durumu['terminal_url'] = '/terminal'
-            
+
         emit('bagli_ogrenci_sayisi', len(ogrenci_sidleri))
 
     except Exception as e:
@@ -272,6 +298,9 @@ def ogrenci_girdi_event(veri):
             except OSError: pass
 
 
+# ── HTTPS bağlantılarını zararsız şekilde kapat ─────────────
+
+
 # ── Başlat ────────────────────────────────────────────────────
 if __name__ == '__main__':
     import socket
@@ -291,7 +320,7 @@ if __name__ == '__main__':
     print(f'  Öğrenciler için    : http://{yerel_ip}:3333')
     print(f'  Öğretmen paneli    : http://localhost:3333/teacher')
     print(f'  Öğretmen terminal  : http://localhost:3333/teacher/terminal')
-    
+
     from chroot_terminal import CT_991_HOST, CT_991_REAL_SSH_PORT, _is_local
     is_local = _is_local(CT_991_HOST)
     mode_text = "🏠 LOCAL MODE" if is_local else "🌐 REMOTE MODE"
@@ -299,4 +328,4 @@ if __name__ == '__main__':
     print(f'  Sistem IP          : 🛠️ {yerel_ip}')
     print('=' * 55 + '\n')
 
-    socketio.run(app, host='0.0.0.0', port=3333, debug=False)
+    socketio.run(app, host='0.0.0.0', port=3333, log_output=False)

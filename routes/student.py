@@ -1,6 +1,6 @@
 from flask import Blueprint, render_template, request, redirect, url_for, session, Response
 from core.db import db_baglantisi
-from core.config import ayar_getir
+from core.config import ayar_getir, ders_durumu
 from core.utils import bugun, simdi, istemci_ip, paket_hesapla, sinif_listesi
 from core.security import seb_gerekli
 import threading
@@ -67,7 +67,7 @@ def giris():
 
     with db_baglantisi() as db:
         ogrenci = db.execute(
-            'SELECT ad, soyad, numara FROM ogrenciler WHERE ad || " " || soyad=? AND sinif_id=?',
+            'SELECT ad, soyad, numara FROM ogrenciler WHERE UPPER(ad || " " || soyad)=? AND sinif_id=?',
             (ad_soyad, sinif_id)
         ).fetchone()
 
@@ -85,22 +85,24 @@ def giris():
         sinif_row = db.execute('SELECT ad FROM siniflar WHERE id=?', (sinif_id,)).fetchone()
         sinif_ad  = sinif_row['ad'] if sinif_row else ''
 
-        ip_var_mi = db.execute(
-            "SELECT DISTINCT numara FROM yoklama WHERE tarih=? AND ip=? AND paket=? AND kaynak='web'",
-            (tarih, istemci, ders_paketi)
-        ).fetchall()
+        # IP kontrol ayarı açıksa fraud kontrolü yap
+        if ders_durumu.get('ip_kontrol', '1') == '1':
+            ip_var_mi = db.execute(
+                "SELECT DISTINCT numara FROM yoklama WHERE tarih=? AND ip=? AND paket=? AND kaynak='web'",
+                (tarih, istemci, ders_paketi)
+            ).fetchall()
 
-        if ip_var_mi:
-            ip_numaralar = {row['numara'] for row in ip_var_mi}
-            if numara not in ip_numaralar and len(ip_numaralar) > 0:
-                db.execute(
-                    'INSERT INTO sahte_giris_log '
-                    '(tarih, saat, ip, gercek_numara, gercek_ad, girilen_numara, denenen_ad, denenen_numara, sinif) '
-                    'VALUES (?,?,?,?,?,?,?,?,?)',
-                    (tarih, saat, istemci, list(ip_numaralar)[0], 'Aynı IP', numara, ad_soyad, numara, sinif_ad)
-                )
-                db.commit()
-                return hata_goster(f'Bu cihazdan bugün başka öğrenci numaraları girildi: {", ".join(ip_numaralar)}. Başkası adına giriş yapılamaz.')
+            if ip_var_mi:
+                ip_numaralar = {row['numara'] for row in ip_var_mi}
+                if numara not in ip_numaralar and len(ip_numaralar) > 0:
+                    db.execute(
+                        'INSERT INTO sahte_giris_log '
+                        '(tarih, saat, ip, gercek_numara, gercek_ad, denenen_numara, denenen_ad, sinif) '
+                        'VALUES (?,?,?,?,?,?,?,?)',
+                        (tarih, saat, istemci, list(ip_numaralar)[0], 'Aynı IP', numara, ad_soyad, sinif_ad)
+                    )
+                    db.commit()
+                    return hata_goster(f'Bu cihazdan bugün başka öğrenci numaraları girildi: {", ".join(ip_numaralar)}. Başkası adına giriş yapılamaz.')
 
         var_mi = db.execute(
             'SELECT id, saat FROM yoklama WHERE tarih=? AND numara=? AND paket=?',
@@ -174,6 +176,10 @@ def seb_config():
     <true/>
     <key>allowQuit</key>
     <true/>
+    <key>quitURL</key>
+    <string>{url}seb-quit</string>
+    <key>quitURLConfirm</key>
+    <false/>
     <key>quitPassword</key>
     <string>linux2024</string>
     <key>hashedQuitPassword</key>

@@ -1,0 +1,452 @@
+17nci Ünite
+
+
+Ownership and permissions
+
+
+17.1 Introduction
+File ownership is critical for file security. Every file has a user owner and a group owner.
+This chapter focuses on how to specify the user and group ownership of a file. In addition, the concept of file and directory permissions is explored, including how to change the permissions on files and directories. Default permissions are the permissions given to files and directories when they are initially created.
+
+17.2 File Ownership By default, users own the files that they create. While 
+this ownership can be changed, this function requires administrative 
+privileges. Although most commands usually show the user owner as a name, the 
+operating system is associating the user ownership with the UID for that 
+username. Every file also has a group owner. By default, the primary group of 
+the user who creates the file is the group owner of any new files. Users are 
+allowed to change the group owner of files they own to any group that they 
+belong to. Similar to user ownership, the association of a file with a group is 
+not done internally by the operating system by name, but by the GID of the 
+group. Since ownership is determined by the UID and GID associated with a file, 
+changing the UID of a user (or deleting the user) has the effect of making a 
+file that was originally owned by that user have no real user owner. When there 
+is no UID in the /etc/passwd file that matches the UID of the owner of the 
+file, then the UID (the number) is displayed as the user owner of the file 
+instead of the username (which no longer exists). The same occurs for groups. 
+The id command can be useful for verifying which user account you are using and 
+which groups you have available to use. By viewing the output of this command, 
+you can see the user's identity information expressed both as a number and as a 
+name. The output of the id command displays the UID and user account name of 
+the current user followed by the GID and group name of the primary group and 
+the GIDs and group names of all group memberships: sysadmin@localhost:~$ id 
+uid=1001(sysadmin) gid=1001(sysadmin) 
+groups=1001(sysadmin),4(adm),27(sudo),1005(research),1006(development) The 
+above example shows the user has a UID of 1001 for the user account sysadmin. 
+It also shows that the primary group for this user has a GID of 1001 for the 
+group sysadmin. Because the user account and primary group account have the 
+same numeric identifier and name, this indicates that this user is in a User 
+Private Group (UPG). In addition, the user in this example belongs to four 
+supplemental groups: the adm group with a GID of 4, the sudo group with a GID 
+of 27, the research group with a GID of 1005 and the development group with a 
+GID of 1006. When a file is created, it belongs to the current user and their 
+current primary group. If the user from the previous example executes the touch 
+command to create a file, then the user owner of the file is the sysadmin user, 
+and the group owner is the sysadmin group:
+‌⁠ ⁠  
+sysadmin@localhost:~$ touch /tmp/filetest1
+The file ownership can be confirmed using the long listing -l option of the ls command.
+sysadmin@localhost:~$ ls -l /tmp/filetest1
+-rw-rw-r--. 1 sysadmin sysadmin 0 Oct 21 10:18 /tmp/filetest1
+File ownership also applies to hidden files in the system. Hidden files, which begin with the period . character are listed using the -a option of the ls command. The first two hidden files listed are the current . and parent .. directories respectively. The ownership of all files and subdirectories within the current directory can be listed using the ls -la command.
+sysadmin@localhost:~$ ls -la                                                    
+total 60                                                                        
+drwxr-xr-x 1 sysadmin sysadmin 4096 Nov  3 22:29 .                              
+drwxr-xr-x 1 root     root     4096 Mar 14  2016 ..                             
+-rw-r--r-- 1 sysadmin sysadmin  220 Apr  3  2012 .bash_logout                   
+-rw-r--r-- 1 sysadmin sysadmin 3768 Mar 14  2016 .bashrc                        
+drwx------ 2 sysadmin sysadmin 4096 Nov  3 22:29 .cache                         
+-rw-r--r-- 1 sysadmin sysadmin  675 Apr  3  2012 .profile                       
+-rw-r--r-- 1 sysadmin sysadmin   74 Mar 14  2016 .selected_editor               
+drwxr-xr-x 2 sysadmin sysadmin 4096 Mar 14  2016 Desktop                        
+drwxr-xr-x 2 sysadmin sysadmin 4096 Mar 14  2016 Documents                      
+drwxr-xr-x 2 sysadmin sysadmin 4096 Mar 14  2016 Downloads                      
+drwxr-xr-x 2 sysadmin sysadmin 4096 Mar 14  2016 Music                          
+drwxr-xr-x 2 sysadmin sysadmin 4096 Mar 14  2016 Pictures                       
+drwxr-xr-x 2 sysadmin sysadmin 4096 Mar 14  2016 Public                         
+drwxr-xr-x 2 sysadmin sysadmin 4096 Mar 14  2016 Templates                      
+drwxr-xr-x 2 sysadmin sysadmin 4096 Mar 14  2016 Videos  
+Consider This
+The output of the ls -l command includes multiple pieces of information that are relevant to this chapter including:
+* 		Permissions -rw-rw-r--. 1 sysadmin sysadmin 0 Oct 21 10:18 /tmp/filetest1
+* 		User Owner -rw-rw-r--. 1 sysadmin sysadmin 0 Oct 21 10:18 /tmp/filetest1
+* 		Group Owner -rw-rw-r--. 1 sysadmin sysadmin 0 Oct 21 10:18 /tmp/filetest1
+
+
+17.3 Changing Groups
+If you know that the file you are about to create should belong to a group different from your current primary group, then you can use the newgrp command to change your current primary group.
+newgrp group_name
+The id command lists your identity information, including your group memberships. If you are only interested in knowing what groups you belong to, then you can execute the groups command:
+sysadmin@localhost:~$ groups
+sysadmin adm sudo research development 
+The output of the groups command may not be as detailed as the output of the id command, but if all you need to know is what groups you can switch to by using the newgrp command, then the groups command provides the information that you need. The id command output does show your current primary group, so it is useful for verifying that the newgrp command succeeded.
+For example, if the sysadmin user was planning on having a file owned by the group research, but that wasn't the user's primary group, then the user could use the newgrp command and then verify the correct primary group with the id command before creating the new file:
+sysadmin@localhost:~$ id
+uid=1001(sysadmin) gid=1001(sysadmin) groups=1001(sysadmin),4(adm),27(sudo),1005(research),1006(development)
+sysadmin@localhost:~$ newgrp research
+sysadmin@localhost:~$ id
+uid=1001(sysadmin) gid=1005(research) groups=1005(research),4(adm),27(sudo),1001(sysadmin),1006(development)
+According to the output of the previous commands, initially the user's GID is 1001 for the sysadmin user, then the newgrp command is executed, and the user's primary GID becomes 1005, the research group. After these commands were executed, if the user were to create another file and view its details, the new file would be owned by the research group:
+sysadmin@localhost:~$ touch /tmp/filetest2
+sysadmin@localhost:~$ ls -l /tmp/filetest2
+-rw-r--r--. 1 sysadmin research 0 Oct 21 10:53 /tmp/filetest2
+The newgrp command opens a new shell; as long as the user stays in that shell, the primary group won't change. To switch the primary group back to the original, the user can leave the new shell by running the exit command. For example:
+sysadmin@localhost:~$ id
+uid=1001(sysadmin) gid=1005(research) groups=1005(research),4(adm),27(sudo),1001
+(sysadmin),1006(development)
+sysadmin@localhost:~$ exit
+exit
+sysadmin@localhost:~$ id
+uid=1001(sysadmin) gid=1001(sysadmin) groups=1001(sysadmin),4(adm),27(sudo),1005(research),1006(development)
+Consider This
+Administrative privileges are required to change the primary group of the user permanently. The root user would execute the following command:
+
+usermod -g groupname username
+
+17.4 Changing Group Ownership
+To change the group owner of an existing file the chgrp command can be used.
+chgrp group_name file
+As the root user, the chgrp command can be used to change the group owner of any file to any group. As a user without administrative privileges, the chgrp command can only be used to change the group owner of a file to a group that the user is already a member of:
+sysadmin@localhost:~$ touch sample                                            
+sysadmin@localhost:~$ ls -l sample                                            
+-rw-rw-r-- 1 sysadmin sysadmin 0 Oct 23 22:12 sample‌⁠​​⁠​                           
+sysadmin@localhost:~$ chgrp research sample
+sysadmin@localhost:~$ ls -l sample 
+-rw-rw-r--. 1 sysadmin research 0 Oct 23 22:12 sample‌⁠​​⁠​ 
+If a user attempts to modify the group ownership of a file that the user doesn't own, they receive an error message:
+sysadmin@localhost:~$ chgrp development /etc/passwd
+chgrp: changing group of '/etc/passwd': Operation not permitted
+To change the group ownership of all of the files of a directory structure, use the recursive -R option to the chgrp command. For example, the command in the following example would change the group ownership of the test_dir directory and all files and subdirectories of the test_dir directory.
+sysadmin@localhost:~$ chgrp -R development test_dir
+Consider This
+While you can view the ownership of a file with the -l option to the ls command, the system provides another command that is useful when viewing ownership and file permissions: the stat command. The stat command displays more detailed information about a file, including providing the group ownership both by group name and GID number:
+
+sysadmin@localhost:~$ stat /tmp/filetest1
+  File: `/tmp/filetest1'
+  Size: 0         	Blocks: 0          IO Block: 4096   regular empty file
+Device: fd00h/64768d	Inode: 31477       Links: 1
+Access: (0664/-rw-rw-r--)  Uid: ( 1001/sysadmin)   Gid: ( 1001/sysadmin) 
+Access: 2013-10-21 10:18:02.809118163 -0700
+Modify: 2013-10-21 10:18:02.809118163 -0700
+Change: 2013-10-21 10:18:02.809118163 -0700
+
+17.5 Changing User Ownership
+The chown command allows the root user to change the user ownership of files and directories. A regular user cannot use this command to change the user owner of a file, even to give the ownership of one of their own files to another user. However, the chown command also permits changing group ownership, which can be accomplished by either root or the owner of the file.
+There are three different ways the chown command can be executed. The first method is used to change just the user owner of the file.
+chown user /path/to/file
+For example, if the root user wanted to change the user ownership of the filetest1 file to the user jane, then the following command could be executed:
+root@localhost:~# chown jane /tmp/filetest1
+root@localhost:~# ls -l /tmp/filetest1
+-rw-rw-r-- 1 jane sysadmin 0 Dec 19 18:44 /tmp/filetest1
+The second method is to change both the user and the group; this also requires root privileges. To accomplish this, you separate the user and group by either a colon or a period character. For example:
+chown user:group /path/to/file
+chown user.group /path/to/file
+root@localhost:~# chown jane:users /tmp/filetest2
+root@localhost:~# ls -l /tmp/filetest2
+-rw-r--r-- 1 jane users 0 Dec 19 18:53 /tmp/filetest2
+If a user doesn't have root privileges, they can use the third method to change the group owner of a file just like the chgrp command. To use chown only to change the group ownership of the file, use a colon or a period as a prefix to the group name:
+chown :group /path/to/file
+chown .group /path/to/file
+jane@localhost:~$ chown .users /tmp/filetest1
+jane@localhost:~$ ls -l /tmp/filetest1
+-rw-rw-r-- 1 jane users 0 Dec 19 18:44 /tmp/filetest1
+17.6 Permissions
+The output of the ls -l command displays ten characters at the beginning of each line. These characters indicate the type of file and the permissions of the file. For example, consider the output of the following command:
+root@localhost:~# ls -l /etc/passwd
+-rw-r--r--. 1 root root 4135 May 27 21:08 /etc/passwd
+File Type
+The first character of each line indicates the type of file:
+-rw-r--r-- 1 root root 4135 May 27 21:08 /etc/passwd 
+The following table describes the possible values for the file type:
+Character	Type of the File
+-	A regular file, which may be empty, or contain text or binary data.
+d	A directory file, which contains the names of other files and links to them.
+l	A symbolic link is a file name that refers (points) to another file.
+b	A block file is one that relates to a block hardware device where data is read in blocks of data.
+c	A character file is one that relates to a character hardware device where data is read one byte at a time.
+p	A pipe file works similar to the pipe symbol, allowing for the output of one process to communicate to another process through the pipe file, where the output of the one process is used as input for the other process.
+s	A socket file allows two processes to communicate, where both processes are allowed to either send or receive data.
+Consider This
+Although all the file types are listed in the table above, typically you don’t encounter anything but regular, directory and link files unless you explore the /dev directory.
+Permission Groups
+The next nine characters demonstrate the permissions of the file.
+-rw-r--r-- 1 root root 4135 May 27 21:08 /etc/passwd
+The permissions set on these files determine the level of access that a user has on the file. When a user runs a program and the program accesses a file, then the permissions are checked to determine whether the user has the correct access rights to the file.
+The permissions are grouped into three different roles, representing the different users that may try to access the file.
+If you aren't the owner and you're not a member of the file/directory group, then your permissions would be others.
+User Owner
+-rw-r--r-- 1 root root 4135 May 27 21:08 /etc/passwd
+Characters 2-4 indicate the permissions for the user that owns the file. If you are the owner of the file, then only the user owner permissions are used to determine access to that file.
+Group Owner
+-rw-r--r-- 1 root root 4135 May 27 21:08 /etc/passwd
+Characters 5-7 indicate the permissions for the group that owns the file. If you are not the owner but are a member of the group that owns the file, then only group owner permissions are used to determine access to that file.
+Other Permissions
+-rw-r--r-- 1 root root 4135 May 27 21:08 /etc/passwd
+Characters 8-10 indicate the permissions for others or what is sometimes referred to as the world's permissions. This group includes all users who are not the file owner or a member of the file's group.
+Permission Types
+Each group is attributed three basic types of permissions: read, write, and execute.
+User Owner	Group Owner	Other
+		
+Read	Write	Execute
+r	w	x
+Read	Write	Execute
+r	w	x
+Read	Write	Execute
+r	w	x
+The permissions themselves are deceptively simple and have a different meaning depending on whether they are applied to a file or a directory.
+Read
+The first character of each group represents the read permission. There is an r character if the group has the read permission, or a - character if the group does not.
+* On a file, this allows processes to read the contents of the file, meaning the contents can be viewed and copied.
+* On a directory, file names in the directory can be listed, but other details are not available.
+Write
+The second character of each group represents the write permission. There is a w character if the group has the write permission, or a - character if the group does not.
+* A file can be written to by the process, so changes to a file can be saved. Note that w permission really requires r permission on the file to work correctly.
+* On a directory, files can be added to or removed from the directory. Note that w permission requires x permission on the directory to work correctly.
+Execute
+The third character of each group represents the execute permission. There is an x character if the group has the execute permission, or a - character if the group does not.
+* A file can be executed or run as a process.
+	•	On a directory, the user can use the cd command to "get into" the directory and use the directory in a pathname to access files and, potentially, subdirectories under this directory.
+
+17.7 Understanding Permissions The descriptions of the permission types can be 
+handy, but just themselves, they don't provide a clear description of how 
+permissions work. To better understand how permissions work, consider the 
+following scenarios. To understand these scenarios, you should first understand 
+the following diagram: drwxr-xr-x. 17 root root 4096 23:38 / drwxr-xr-x. 10 
+root root 128 03:38 /data -rwxr-xr--.  1 bob bob 100 21:08 /data/abc.txt
+‌⁠ ⁠  
+The relevant information is highlighted. The first line represents the / directory, with a user owner of root, a group owner of root and permissions of rwxr-xr-x. The second line represents the /data directory, a directory that is under the / directory. The third line represents the abc.txt file, which is stored in the /data directory.
+
+
+
+17.7.1 Scenario #1 - Directory Access
+Question: Based on the following information, what access would the user bob have on the file abc.txt?
+drwxr-xr-x. 17 root root 4096 23:38 /
+drwxr-xr--. 10 root root 128  03:38 /data
+-rwxr-xr--.  1 bob  bob  100  21:08 /data/abc.txt
+
+
+17.7.1.1 Scenario #1 - Answer
+Question: Based on the following information, what access would the user bob have on the file abc.txt?
+drwxr-xr-x. 17 root root 4096 23:38 /
+drwxr-xr--. 10 root root 128  03:38 /data
+-rwxr-xr--.  1 bob  bob  100  21:08 /data/abc.txt
+Answer: None.
+Explanation: Initially it would appear that the user bob can view the contents of the abc.txt file as well as copy the file, modify its contents and run it like a program. This erroneous conclusion would be the result of looking solely at the file's permissions (rwx for the user bob in this case).
+However, to do anything with the file, the user must first "get into" the /data directory. The permissions for bob for the /data directory are the permissions for "others" (r--), which means bob can't even use the cd command to get into the directory. If the execute permission (--x) were set for the directory, then the user bob would be able to "get into" the directory, meaning the permissions of the file itself would apply.
+Lesson Learned: The permissions of all parent directories must be considered before considering the permissions on a specific file.
+
+17.7.2 Scenario #2 - Viewing Directory Contents
+Question: Based on the following information, who can use the ls command to display the contents of the /data directory (ls /data)?
+drwxr-xr-x. 17 root root 4096 23:38 /
+drwxr-xr--. 10 root root 128  03:38 /data
+-rwxr-xr--.  1 bob  bob  100  21:08 /data/abc.txt
+
+17.7.2.1 Scenario #2 - Answer
+Question: Based on the following information, who can use the ls command to display the contents of the /data directory (ls /data)?
+drwxr-xr-x. 17 root root 4096 23:38 /
+drwxr-xr--. 10 root root 128  03:38 /data
+-rwxr-xr--.  1 bob  bob  100  21:08 /data/abc.txt
+Answer: All users.
+Explanation: All that is required to be able to view a directory's contents is r permission on the directory (and the ability to access the parent directories). The x permission for all users in the / directory means all users can use / as part of a path, so everyone can get through the / directory to get to the /data directory. The r permission for all users in the /data directory means all users can use the ls command to view the contents. This includes hidden files, so the ls -a command also works on this directory.
+However, note that in order to see file details (ls -l), the directory would also require x permission. So while the root user and members of the root group have this access on the /data directory, no other users would be able to execute ls -l /data.
+Lesson Learned: The r permission allows a user to view a listing of the directory.
+
+17.7.3 Scenario #3 - Deleting Directory Contents
+Question: Based on the following information, who can delete the /data/abc.txt file?
+drwxr-xr-x. 17 root root 4096 23:38 /
+drwxrw-rw-. 10 root root 128  03:38 /data
+-rwxr-xr--.  1 bob  bob  100  21:08 /data/abc.txt
+
+17.7.3.1 Scenario #3 - Answer Question: Based on the following information, who 
+can delete the /data/abc.txt file? drwxr-xr-x. 17 root root 4096 23:38 / 
+drwxrw-rw-. 10 root root 128 03:38 /data -rwxr-xr--.  1 bob bob 100 21:08 
+/data/abc.txt Answer: Only the root user. Explanation: A user needs no 
+permissions at all on the file itself to delete a file. The w permission on the 
+directory that the file is stored in is required to delete a file in a 
+directory. Based on that, it would seem that all users could delete the 
+/data/abc.txt file, since everyone has w permission on the directory.
+‌⁠ ⁠  
+However, to delete a file, you must also be able to "get into" the directory. Since only the root user has x permission on the /data directory, only root can "get into" that directory to delete files in this directory.
+Lesson Learned: The w permission allows a user to delete files from a directory, but only if the user also has x permission on the directory.
+
+17.7.4 Scenario #4 - Accessing the Contents of a Directory
+Question: True or False: Based on the following information the user bob can successfully execute the following command: more /data/abc.txt?
+drwxr-xr-x. 17 root root 4096 23:38 /
+dr-xr-x--x. 10 root root 128  03:38 /data
+-rwxr-xr--.  1 bob  bob  100  21:08 /data/abc.txt
+
+
+17.7.4.1 Scenario #4 - Answer
+Question: True or False: Based on the following information the user bob can successfully execute the following command: more /data/abc.txt?
+drwxr-xr-x. 17 root root 4096 23:38 /
+dr-xr-x--x. 10 root root 128  03:38 /data
+-rwxr-xr--.  1 bob  bob  100  21:08 /data/abc.txt
+Answer: True.
+Explanation: As previously mentioned, to access a file, the user must have access to the directory. The access to the directory only requires x permission; even though r permission would be useful to list files in a directory, it isn't required to "get into" the directory and access files within the directory.
+When the command more /data/abc.txt is executed, the following permissions are checked: x permission on the / directory, x permission on the data directory and r permission on the abc.txt file. Since the user bob has all of these permissions, the command executes successfully.
+Lesson Learned: The x permission is required to "get into" a directory, but the r permission on the directory is not necessary unless you want to list the directory's contents.
+
+17.7.5 Scenario #5 - The Complexity of Users and Groups
+Question: True or False: Based on the following information the user bob can successfully execute the following command: more /data/abc.txt?
+Note that the /data directory has different user and group owners than previous examples
+drwxr-xr-x. 17 root root    4096 23:38 /
+dr-xr-x---. 10 sue  payroll 128  03:38 /data
+-rwxr-xr--.  1 bob  bob     100  21:08 /data/abc.txt
+
+17.7.5.1 Scenario #5 - Answer Question: True or False: Based on the following 
+information the user bob can successfully execute the following command: more 
+/data/abc.txt? Note that the /data directory has different user and group 
+owners than previous examples drwxr-xr-x. 17 root root 4096 23:38 / dr-xr-x---. 
+10 sue payroll 128 03:38 /data -rwxr-xr--.  1 bob bob 100 21:08 /data/abc.txt
+‌⁠ ⁠  
+Answer: Not enough information to determine.
+Explanation: In order to access the /data/abc.txt file, the user bob needs to be able to "get into" the /data directory. This requires x permission, which bob may or may not have, depending on whether he is a member of the payroll group.
+If bob is a member of the payroll group, then his permissions on the /data directory are r-x, and the command more will execute successfully (bob also needs x on / and r on abc.txt, which he already has).
+If he isn't a member of the payroll group, his permissions on the /data directory are ---, and the more command will fail.
+Lesson Learned: You must look at each file and directory permissions separately and be aware of which groups the user account belongs to.
+
+
+17.7.6 Scenario #6 - Permission Priority
+Question: True or False: Based on the following information the user bob can successfully execute the following command: more /data/abc.txt?
+Note that the /data directory has different user and group owners than the previous example
+drwxr-xr-x. 17 root root 4096 23:38 /
+dr-xr-x---. 10 bob  bob  128  03:38 /data
+----rw-rwx.  1 bob  bob  100  21:08 /data/abc.txt
+
+
+17.7.6.1 Scenario #6 - Answer
+Question: True or False: Based on the following information the user bob can successfully execute the following command: more /data/abc.txt?
+Note that the /data directory has different user and group owners than the previous example
+drwxr-xr-x. 17 root root 4096 23:38 /
+dr-xr-x---. 10 bob  bob  128  03:38 /data
+----rw-rwx.  1 bob  bob  100  21:08 /data/abc.txt
+Answer: False.
+Explanation: Recall that if you are the owner of a file, then the only permissions that are checked are the user owner permissions. In this case, that would be --- for bob on the /data/abc.txt file.
+In this case, members of the bob group and "others" have more permissions on the file than bob has.
+Lesson Learned: Don't provide permissions to the group owner and "others" without applying at least the same level of access to the owner of the file.
+
+17.8 Changing Permissions
+The chmod (change mode) command is used to change permissions on files and directories. There are two techniques that can be used with this command: symbolic and numeric. Both techniques use the following basic syntax:
+chmod new_permission file_name
+Important
+To change a file's permissions, you either need to own the file or log in as the root user.
+The following examples will use a sample file:
+root@localhost:~# touch abc.txt
+root@localhost:~# ls -l abc.txt                                                 
+-rw-r--r-- 1 root root 0 Dec 19 18:58 abc.txt
+
+17.8.1 Symbolic Method If you want to modify some of the current permissions, 
+the symbolic method is usually easier to use. With this method, you specify 
+which permissions you want to change on the file, and the other permissions 
+remain as they are. When specifying the new_permission argument of the chmod 
+command using the symbolic method three types of information are required. 
+Start by using one or more of the following characters to indicate which 
+permission group(s) to apply the changes to: u user owner g group owner o 
+others a all (user owner, group owner, and others)
+‌⁠ ⁠Then choose one of the following operators to indicate how to modify the permissions:
++	add
+-	remove
+=	equals
+Lastly, use the following characters to specify the permissions type(s) to change:
+r	read
+w	write
+x	execute
+For example, to give the group owner write permission on a file named abc.txt, you could use the following command:
+root@localhost:~# chmod g+w abc.txt
+root@localhost:~# ls -l abc.txt                                                 
+-rw-rw-r-- 1 root root 0 Dec 19 18:58 abc.txt
+Only the group owner's permission was changed. All other permissions remained as they were prior to the execution of the chmod command.
+You can combine values to make multiple changes to the file's permissions. For example, consider the following command which adds the execute permission to the user owner and group owner and removes the read permission for others:
+root@localhost:~# chmod ug+x,o-r abc.txt
+root@localhost:~# ls -l abc.txt                                                 
+-rwxrwx--- 1 root root 0 Dec 19 18:58 abc.txt
+Lastly, you could use the = character, which adds specified permissions and causes unmentioned ones to be removed. For example, to give the user owner only read and execute permissions, removing the write permission:
+root@localhost:~# chmod u=rx abc.txt
+root@localhost:~# ls -l abc.txt                                                 
+-r-xrwx--- 1 root root 0 Dec 19 18:58 abc.txt
+
+17.8.2 Numeric Method
+The numeric method (also called the octal method) is useful when changing many permissions on a file. It is based on the octal numbering system in which each permission type is assigned a numeric value:
+4	Read
+2	Write
+1	Execute
+By using a combination of numbers from 0 to 7, any possible combination of read, write and execute permissions can be specified for a single permission group set. For example:
+7	rwx
+6	rw-
+5	r-x
+4	r--
+3	-wx
+2	-w-
+1	--x
+0	---
+The new_permission argument is specified as three numbers, one number for each permission group. When the numeric method is used to change permissions, all nine permissions must be specified. Because of this, the symbolic method is generally easier for changing a few permissions while the numeric method is better for changes that are more drastic.
+For example, to set the permissions of a file named abc.txt to be rwxr-xr-- you could use the following command:
+root@localhost:~# chmod 754 abc.txt
+root@localhost:~# ls -l abc.txt                                                 
+-rwxr-xr-- 1 root root 0 Dec 19 18:58 abc.txt
+Consider This
+Recall the stat command provides more detailed information than the ls -l command. Because of this, you may consider using the stat command instead of the ls -l command when viewing permissions on a file. One big advantage of the stat command is that it shows permissions using both the symbolic and numeric methods, as highlighted below:
+
+sysadmin@localhost:~$ stat /tmp/filetest1
+  File: `/tmp/filetest1'
+  Size: 0         	Blocks: 0          IO Block: 4096   regular empty file
+Device: fd00h/64768d	Inode: 31477       Links: 1
+Access: (0664/-rw-rw-r--)  Uid: (  502/sysadmin)   Gid: (  503/sysadmin)
+Access: 2013-10-21 10:18:02.809118163 -0700
+Modify: 2013-10-21 10:18:02.809118163 -0700
+Change: 2013-10-21 10:18:02.809118163 -0700
+
+
+
+17.9 Default Permissions
+The umask command is a feature that is used to determine default permissions that are set when a file or directory is created. Default permissions are determined when the umask value is subtracted from the maximum allowable default permissions. The maximum default permissions are different for files and directories:
+file	rw-rw-rw-
+directories	rwxrwxrwx
+The permissions that are initially set on a file when it is created cannot exceed rw-rw-rw-. To have the execute permission set on a file, you first need to create the file and then change the permissions.
+The umask command can be used to display the current umask value:
+sysadmin@localhost:~$ umask
+0002
+A breakdown of the output:
+* The first 0 indicates that the umask is given as an octal number.
+* The second 0 indicates which permissions to subtract from the default user owner's permissions.
+* The third 0 indicates which permissions to subtract from the default group owner's permissions.
+* The last number 2 indicates which permissions to subtract from the default other's permissions.
+Note that different users may have different umasks. Typically the root user has a more restrictive umask than normal user accounts:
+root@localhost:~# umask
+0022
+To understand how umask works, assume that the umask of a file is set to 027 and consider the following:
+File Default	666
+Umask	-027
+Result	640
+The 027 umask means that new files would receive 640 or rw-r----- permissions by default, as demonstrated below:
+sysadmin@localhost:~$ umask 027
+sysadmin@localhost:~$ touch sample
+sysadmin@localhost:~$ ls -l sample
+-rw-r-----. 1 sysadmin sysadmin 0 Oct 28 20:14 sample
+Because the default permissions for directories are different than for files, a umask of 027 would result in different initial permissions on new directories:
+Directory Default	777
+Umask	-027
+Result	750
+The 027 umask means that directories files would receive 750 or rwxr-x--- permissions by default, as demonstrated below:
+sysadmin@localhost:~$ umask 027
+sysadmin@localhost:~$ mkdir test-dir
+sysadmin@localhost:~$ ls -ld test-dir
+drwxr-x---. 1 sysadmin sysadmin 4096 Oct 28 20:25 test-dir
+The new umask is only applied to file and directories created during that session. When a new shell is started, the default umask will again be in effect.
+Permanently changing a user's umask requires modifying the .bashrc file located in that user's home directory.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

@@ -73,6 +73,10 @@ async function ayarlariKaydet() {
   const kioskModuSelect = document.getElementById('config-kiosk-modu');
   const kioskModu = kioskModuSelect ? kioskModuSelect.value : '1'; // Default: Açık
 
+  // IP Kontrol Toggle
+  const ipKontrolSelect = document.getElementById('config-ip-kontrol');
+  const ipKontrol = ipKontrolSelect ? ipKontrolSelect.value : '1';
+
   const yanit = await safeFetch('/api/config', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -83,7 +87,8 @@ async function ayarlariKaydet() {
       chroot_pass: chrootPass,
       system_host: systemHost,
       ttyd_url: ttydUrl,
-      kiosk_modu: kioskModu
+      kiosk_modu: kioskModu,
+      ip_kontrol: ipKontrol
     })
   });
 
@@ -92,6 +97,40 @@ async function ayarlariKaydet() {
     alert('Ayarlar başarıyla kaydedildi!');
   } else {
     alert('Ayarlar kaydedilirken hata oluştu!');
+  }
+}
+
+async function baglantiTestEt() {
+  const sonucSpan = document.getElementById('healthcheck-sonuc');
+  sonucSpan.style.color = '#a0aec0';
+  sonucSpan.textContent = 'Test ediliyor... ⏳';
+
+  const data = {
+    chroot_host: document.getElementById('config-chroot-ip').value.trim(),
+    chroot_port: document.getElementById('config-chroot-port').value.trim(),
+    chroot_user: document.getElementById('config-chroot-user').value.trim(),
+    chroot_pass: document.getElementById('config-chroot-pass').value.trim()
+  };
+
+  try {
+    const r = await safeFetch('/api/healthcheck', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data)
+    });
+    const res = await r.json();
+
+    if (res.durum === 'ok') {
+      sonucSpan.style.color = '#48bb78';
+      sonucSpan.textContent = res.mesaj || 'Bağlantı Başarılı ✅';
+    } else {
+      sonucSpan.style.color = '#e53e3e';
+      sonucSpan.textContent = res.mesaj || 'Bağlantı Hatası ❌';
+    }
+  } catch (err) {
+    sonucSpan.style.color = '#e53e3e';
+    sonucSpan.textContent = 'İstek gönderilemedi ❌';
+    console.error('Bağlantı test hatası:', err);
   }
 }
 
@@ -624,6 +663,156 @@ async function sebCikisCek() {
   }
 }
 
+async function cikisTalepleriCek() {
+  try {
+    const yanit = await safeFetch('/api/seb_cikis_talepler');
+    const veri = await yanit.json();
+
+    const div = document.getElementById('seb-cikis-talepleri-kutu');
+    if (!div) return;
+
+    if (!veri.talepler || veri.talepler.length === 0) {
+      div.innerHTML = '<div style="color:#718096;text-align:center;padding:1rem;">Bekleyen çıkış talebi yok.</div>';
+      return;
+    }
+
+    let html = '<table class="veri-tablosu" style="width:100%; border-collapse:collapse;">';
+    html += '<thead><tr style="border-bottom:1px solid #4a5568;"><th style="padding:0.5rem;text-align:left;">Zaman</th><th style="padding:0.5rem;text-align:left;">Öğrenci No</th><th style="padding:0.5rem;text-align:left;">Ad Soyad</th><th style="padding:0.5rem;text-align:right;">İşlem</th></tr></thead>';
+    html += '<tbody>';
+
+    veri.talepler.forEach(t => {
+      html += `<tr style="border-bottom:1px solid #2d3748; background:rgba(237,137,54,0.1);">
+            <td style="padding:0.5rem;color:#fbd38d;">${t.tarih} ${t.saat.substring(0, 5)}</td>
+            <td style="padding:0.5rem;">${t.numara}</td>
+            <td style="padding:0.5rem;">${t.ad_soyad}</td>
+            <td style="padding:0.5rem;text-align:right;">
+              <button onclick="cikisOnayla(${t.id}, 'onaylandi')" style="background:#38a169; border:none; padding:4px 8px; border-radius:4px; color:white; cursor:pointer; margin-right:4px;">İzin Ver</button>
+              <button onclick="cikisOnayla(${t.id}, 'reddedildi')" style="background:#c53030; border:none; padding:4px 8px; border-radius:4px; color:white; cursor:pointer;">Reddet</button>
+            </td>
+        </tr>`;
+    });
+
+    html += '</tbody></table>';
+    div.innerHTML = html;
+  } catch (e) {
+    console.error('SEB çıkış talepleri çekme hatası:', e);
+  }
+}
+
+async function cikisOnayla(id, durum) {
+  try {
+    const yanit = await safeFetch('/api/seb_cikis_onayla', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id, durum })
+    });
+    const veri = await yanit.json();
+    if (veri.durum === 'ok') {
+      cikisTalepleriCek();
+      sebCikisCek(); // Update the lower table if it's approved
+    } else alert('Hata: ' + veri.mesaj);
+  } catch (e) {
+    alert('Bağlantı hatası: ' + e.message);
+  }
+}
+
+async function cikisTopluOnayla() {
+  if (!confirm("Bekleyen BÜTÜN taleplere izin vermek istiyor musunuz?")) return;
+  try {
+    const yanit = await safeFetch('/api/seb_cikis_toplu_onayla', { method: 'POST' });
+    const veri = await yanit.json();
+    if (veri.durum === 'ok') {
+      cikisTalepleriCek();
+      sebCikisCek();
+    } else alert('Hata: ' + veri.mesaj);
+  } catch (e) {
+    alert('Bağlantı hatası: ' + e.message);
+  }
+}
+
+// ── Yardım Talepleri ──────────────────────────────────────────────
+
+async function yardimTalepleriCek() {
+  try {
+    const yanit = await safeFetch('/api/yardim_talepler');
+    const veri = await yanit.json();
+
+    const div = document.getElementById('yardim-talepleri-kutu');
+    const rozet = document.getElementById('yardim-rozet');
+    if (!div) return;
+
+    if (!veri.talepler || veri.talepler.length === 0) {
+      if (rozet) {
+        rozet.style.display = 'none';
+        rozet.innerText = '0';
+      }
+      div.innerHTML = '<div style="color:#718096;text-align:center;padding:1rem;">Bekleyen yardım talebi yok.</div>';
+      return;
+    }
+
+    let bekleyenSayisi = 0;
+
+    let html = '<table class="veri-tablosu" style="width:100%; border-collapse:collapse;">';
+    html += '<thead><tr style="border-bottom:1px solid #4a5568;"><th style="padding:0.5rem;text-align:left;">Zaman</th><th style="padding:0.5rem;text-align:left;">Öğrenci No</th><th style="padding:0.5rem;text-align:left;">Ad Soyad</th><th style="padding:0.5rem;text-align:left;">Durum</th><th style="padding:0.5rem;text-align:right;">İşlem</th></tr></thead>';
+    html += '<tbody>';
+
+    veri.talepler.forEach(t => {
+      let bg = t.durum === 'bekliyor' ? 'rgba(43,108,176,0.1)' : 'rgba(72,187,120,0.1)';
+      let yaziFormat = t.durum === 'bekliyor' ? '<span style="color:#63b3ed; font-weight:bold;">Bekliyor</span>' : '<span style="color:#48bb78; font-weight:bold;">Kabul Edildi</span>';
+
+      if (t.durum === 'bekliyor') bekleyenSayisi++;
+
+      html += `<tr style="border-bottom:1px solid #2d3748; background:${bg};">
+            <td style="padding:0.5rem;color:#a0aec0;">${t.tarih} ${t.saat.substring(0, 5)}</td>
+            <td style="padding:0.5rem;">${t.numara}</td>
+            <td style="padding:0.5rem;">${t.ad_soyad}</td>
+            <td style="padding:0.5rem;">${yaziFormat}</td>
+            <td style="padding:0.5rem;text-align:right;">
+              ${t.durum === 'bekliyor' ? `<button onclick="yardimKabul(${t.id}, 'kabul_edildi')" style="background:#2b6cb0; border:none; padding:4px 8px; border-radius:4px; color:white; cursor:pointer; margin-right:4px;">Kabul Et (Bağlan)</button>` : ''}
+              <button onclick="yardimKabul(${t.id}, 'tamamlandi')" style="background:#48bb78; border:none; padding:4px 8px; border-radius:4px; color:white; cursor:pointer;">Tamamla</button>
+            </td>
+        </tr>`;
+    });
+
+    html += '</tbody></table>';
+    div.innerHTML = html;
+
+    if (rozet) {
+      if (bekleyenSayisi > 0) {
+        rozet.style.display = 'inline-block';
+        rozet.innerText = bekleyenSayisi;
+      } else {
+        rozet.style.display = 'none';
+        rozet.innerText = '0';
+      }
+    }
+  } catch (e) {
+    console.error('Yardım talepleri çekme hatası:', e);
+  }
+}
+
+async function yardimKabul(id, durum) {
+  try {
+    const yanit = await safeFetch('/api/yardim_kabul', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id, durum })
+    });
+    const veri = await yanit.json();
+    if (veri.durum === 'ok') {
+      yardimTalepleriCek();
+      if (durum === 'kabul_edildi') {
+        // İleride burada terminal devralma (bağlanma) penceresi fırlatılacak
+        alert("Bağlantı kabul edildi. Terminal devralma özelliği bir sonraki aşamada eklenecektir.");
+      }
+    } else alert('Hata: ' + veri.mesaj);
+  } catch (e) {
+    alert('Bağlantı hatası: ' + e.message);
+  }
+}
+
+
+
 // ── Slayt Hash Takibi ─────────────────────────────────────────────
 let sonHash = '';
 
@@ -716,6 +905,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   setInterval(yoklamaCek, YOKLAMA_ARALIK);
   setInterval(sahteCek, 30_000);   // 30 saniyede bir kontrol
+  setInterval(yardimTalepleriCek, 5000); // 5 saniyede bir kontrol
 });
 
 // ── Sınav / Quiz Yönetimi ──
@@ -885,6 +1075,217 @@ async function soruKaydet() {
     const v = await yanit.json();
     alert("Hata: " + (v.mesaj || 'Bilinmeyen hata'));
   }
+}
+
+// ── Öğrenci Yönetimi ──────────────────────────────────────────────
+
+let _yonetimSiniflari = [];
+let _yonetimOgrencileri = [];
+
+async function ogrenciYonetimCek() {
+  try {
+    const yanit = await safeFetch('/api/siniflar');
+    const veri = await yanit.json();
+    _yonetimSiniflari = veri.siniflar || [];
+
+    const ekleSinif = document.getElementById('ekle-sinif-id');
+    const filtreSinif = document.getElementById('yonetim-sinif-filtre');
+
+    if (ekleSinif) {
+      ekleSinif.innerHTML = '<option value="">Sınıf seçin...</option>' +
+        _yonetimSiniflari.map(s => '<option value="' + s.id + '">' + s.ad + ' (' + s.kayitli + ')</option>').join('');
+    }
+    if (filtreSinif) {
+      const secili = filtreSinif.value;
+      filtreSinif.innerHTML = '<option value="">Tüm sınıflar</option>' +
+        _yonetimSiniflari.map(s => '<option value="' + s.id + '"' + (s.id == secili ? ' selected' : '') + '>' + s.ad + ' (' + s.kayitli + ')</option>').join('');
+    }
+
+    ogrenciYonetimListele(filtreSinif ? filtreSinif.value : '');
+  } catch (e) { console.error('Öğrenci yönetimi yükleme hatası:', e); }
+}
+
+async function ogrenciYonetimListele(sinifId) {
+  const kutu = document.getElementById('ogrenci-yonetim-listesi');
+  if (!kutu) return;
+
+  try {
+    let tumOgrenciler = [];
+
+    if (sinifId) {
+      const yanit = await safeFetch('/api/sinif_ogrencileri/' + sinifId);
+      const veri = await yanit.json();
+      const sinifAdi = (_yonetimSiniflari.find(function (s) { return s.id == sinifId; }) || {}).ad || '';
+      tumOgrenciler = veri.ogrenciler.map(function (o) { return Object.assign({}, o, { sinif_ad: sinifAdi, sinif_id: sinifId }); });
+    } else {
+      for (const sinif of _yonetimSiniflari) {
+        const yanit = await safeFetch('/api/sinif_ogrencileri/' + sinif.id);
+        const veri = await yanit.json();
+        tumOgrenciler.push.apply(tumOgrenciler, veri.ogrenciler.map(function (o) { return Object.assign({}, o, { sinif_ad: sinif.ad, sinif_id: sinif.id }); }));
+      }
+    }
+
+    _yonetimOgrencileri = tumOgrenciler;
+
+    if (tumOgrenciler.length === 0) {
+      kutu.textContent = 'Kayıtlı öğrenci yok.';
+      kutu.style.color = '#718096';
+      kutu.style.textAlign = 'center';
+      kutu.style.padding = '1rem';
+      return;
+    }
+
+    // Build DOM safely
+    kutu.innerHTML = '';
+
+    // Sınıf silme butonları
+    if (!sinifId) {
+      var sinifDiv = document.createElement('div');
+      sinifDiv.style.cssText = 'margin-bottom:1rem;display:flex;flex-wrap:wrap;gap:0.3rem;';
+      _yonetimSiniflari.forEach(function (s) {
+        var span = document.createElement('span');
+        span.style.cssText = 'display:inline-flex;align-items:center;gap:0.3rem;background:#2d3748;border:1px solid #4a5568;border-radius:6px;padding:0.2rem 0.5rem;font-size:0.8rem;';
+        span.textContent = s.ad + ' (' + s.kayitli + ')';
+        if (s.kayitli === 0) {
+          var btn = document.createElement('button');
+          btn.style.cssText = 'background:#742a2a;border:1px solid #9b2c2c;border-radius:3px;color:#feb2b2;cursor:pointer;font-size:0.7rem;padding:0 4px;';
+          btn.textContent = 'x';
+          btn.title = 'Sınıfı sil';
+          btn.addEventListener('click', (function (id, ad) { return function () { sinifSil(id, ad); }; })(s.id, s.ad));
+          span.appendChild(btn);
+        }
+        sinifDiv.appendChild(span);
+      });
+      kutu.appendChild(sinifDiv);
+    }
+
+    var toplamDiv = document.createElement('div');
+    toplamDiv.style.cssText = 'color:#a0aec0;font-size:0.8rem;margin-bottom:0.5rem;';
+    toplamDiv.textContent = 'Toplam: ' + tumOgrenciler.length + ' öğrenci';
+    kutu.appendChild(toplamDiv);
+
+    tumOgrenciler.forEach(function (o) {
+      var row = document.createElement('div');
+      row.className = 'ogrenci-mini';
+      row.style.cssText = 'padding:6px 0;display:flex;align-items:center;gap:8px;';
+
+      var sinifSpan = document.createElement('span');
+      sinifSpan.style.cssText = 'color:#90cdf4;font-size:0.75rem;min-width:100px;';
+      sinifSpan.textContent = o.sinif_ad || '';
+      row.appendChild(sinifSpan);
+
+      var numaraSpan = document.createElement('span');
+      numaraSpan.style.cssText = 'min-width:90px;color:#a0aec0;font-size:0.8rem;';
+      numaraSpan.textContent = o.numara;
+      row.appendChild(numaraSpan);
+
+      var adSpan = document.createElement('span');
+      adSpan.style.cssText = 'flex:1;font-size:0.85rem;';
+      adSpan.textContent = o.ad_soyad;
+      row.appendChild(adSpan);
+
+      var silBtn = document.createElement('button');
+      silBtn.style.cssText = 'padding:0.15rem 0.5rem;font-size:0.7rem;background:#742a2a;border:1px solid #9b2c2c;border-radius:4px;color:#feb2b2;cursor:pointer;';
+      silBtn.title = 'Öğrenciyi sil';
+      silBtn.textContent = '🗑️';
+      silBtn.addEventListener('click', (function (num, ad) { return function () { ogrenciSil(num, ad); }; })(o.numara, o.ad_soyad));
+      row.appendChild(silBtn);
+
+      kutu.appendChild(row);
+    });
+  } catch (e) { console.error('Liste yükleme hatası:', e); }
+}
+
+async function ogrenciEkle() {
+  var sinifId = document.getElementById('ekle-sinif-id').value;
+  var numara = document.getElementById('ekle-numara').value.trim();
+  var ad = document.getElementById('ekle-ad').value.trim();
+  var soyad = document.getElementById('ekle-soyad').value.trim();
+
+  if (!sinifId || !numara || !ad || !soyad) {
+    alert('Lütfen tüm alanları doldurun.');
+    return;
+  }
+
+  try {
+    var yanit = await safeFetch('/api/ogrenci_ekle', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ sinif_id: sinifId, numara: numara, ad: ad, soyad: soyad })
+    });
+    var veri = await yanit.json();
+    if (veri.durum === 'ok') {
+      document.getElementById('ekle-numara').value = '';
+      document.getElementById('ekle-ad').value = '';
+      document.getElementById('ekle-soyad').value = '';
+      ogrenciYonetimCek();
+      sinifDurumCek();
+    } else {
+      alert('Hata: ' + veri.mesaj);
+    }
+  } catch (e) { alert('Bağlantı hatası: ' + e.message); }
+}
+
+async function ogrenciSil(numara, adSoyad) {
+  if (!confirm(adSoyad + ' (' + numara + ') silinecek. Emin misiniz?')) return;
+
+  try {
+    var yanit = await safeFetch('/api/ogrenci_sil', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ numara: numara })
+    });
+    var veri = await yanit.json();
+    if (veri.durum === 'ok') {
+      ogrenciYonetimCek();
+      sinifDurumCek();
+    } else {
+      alert('Hata: ' + veri.mesaj);
+    }
+  } catch (e) { alert('Bağlantı hatası: ' + e.message); }
+}
+
+async function sinifEkle() {
+  var ad = document.getElementById('yeni-sinif-adi').value.trim();
+  if (!ad) {
+    alert('Sınıf adı boş olamaz.');
+    return;
+  }
+
+  try {
+    var yanit = await safeFetch('/api/sinif_ekle', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ad: ad })
+    });
+    var veri = await yanit.json();
+    if (veri.durum === 'ok') {
+      document.getElementById('yeni-sinif-adi').value = '';
+      ogrenciYonetimCek();
+      sinifDurumCek();
+    } else {
+      alert('Hata: ' + veri.mesaj);
+    }
+  } catch (e) { alert('Bağlantı hatası: ' + e.message); }
+}
+
+async function sinifSil(sinifId, sinifAdi) {
+  if (!confirm('"' + sinifAdi + '" sınıfını silmek istediğinize emin misiniz?')) return;
+
+  try {
+    var yanit = await safeFetch('/api/sinif_sil', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ sinif_id: sinifId })
+    });
+    var veri = await yanit.json();
+    if (veri.durum === 'ok') {
+      ogrenciYonetimCek();
+      sinifDurumCek();
+    } else {
+      alert('Hata: ' + veri.mesaj);
+    }
+  } catch (e) { alert('Bağlantı hatası: ' + e.message); }
 }
 
 async function sinavSonuclariniAc(sinavId, baslik) {
