@@ -10,6 +10,8 @@ Başlatmak için:
 
 import eventlet
 eventlet.monkey_patch()
+from eventlet.debug import hub_prevent_multiple_readers
+hub_prevent_multiple_readers(False)
 
 import os
 import pty
@@ -129,14 +131,13 @@ def terminal_kopma(*args):
         ogrenci_sidleri.pop(sid, None)
         if sid in ogrenci_surecleri:
             proc, fd = ogrenci_surecleri.pop(sid)
+            ogrenci_pty_locks.pop(fd, None)
             try: os.close(fd)
             except OSError: pass
             try: os.killpg(os.getpgid(proc.pid), signal.SIGTERM)
             except Exception:
                 try: proc.terminate()
                 except: pass
-        to_delete = [k for k, v in ogrenci_pty_locks.items() if k == fd]
-        for k in to_delete: ogrenci_pty_locks.pop(k, None)
         if ogretmen_sid:
             socketio.emit('bagli_ogrenci_sayisi', len(ogrenci_sidleri), room=ogretmen_sid, namespace='/terminal')
 
@@ -264,10 +265,13 @@ def ogrenci_baglan_event(veri):
         safe_username = username.replace("'", "'\\''")
         safe_chroot_path = f"{CHROOT_BASE}/{safe_username}".replace("'", "'\\''")
         ssh_cmd = [
-            'ssh', '-t', '-o', 'StrictHostKeyChecking=no', '-p', str(CT_991_REAL_SSH_PORT), f'root@{CT_991_HOST}',
+            'ssh', '-t',
+            '-o', 'StrictHostKeyChecking=no',
+            '-o', 'ControlPath=none',
+            '-p', str(CT_991_REAL_SSH_PORT), f'root@{CT_991_HOST}',
             f"/bin/bash -c \"while true; do chroot '{safe_chroot_path}' /bin/su - '{safe_username}'; echo 'Oturum kapatılamaz, yeniden başlatılıyor...'; sleep 1; done\""
         ]
-        
+
         proc = subprocess.Popen(ssh_cmd, stdin=slave_fd, stdout=slave_fd, stderr=slave_fd, preexec_fn=os.setsid)
         os.close(slave_fd)
 

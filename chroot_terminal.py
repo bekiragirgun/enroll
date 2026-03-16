@@ -191,7 +191,9 @@ def sync_manager_script():
 
         # Dizin varlığından emin ol ve dosyayı SSH üzerinden pipe ile gönder
         ssh_cmd = [
-            "ssh", "-o", "ConnectTimeout=5", "-o", "BatchMode=yes" if not CT_991_PASS else "BatchMode=no",
+            "ssh", "-o", "ConnectTimeout=5",
+            "-o", "BatchMode=yes" if not CT_991_PASS else "BatchMode=no",
+            "-o", "ControlPath=none",
             "-p", str(CT_991_REAL_SSH_PORT),
             f"{CT_991_USER}@{CT_991_HOST}",
             remote_cmd

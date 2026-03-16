@@ -1,0 +1,25 @@
+#!/bin/bash
+set -e
+
+echo "=== Chroot Terminal System kurulumu ==="
+
+# Sysctl uygula (PTY limitleri)
+sysctl -p /etc/sysctl.d/99-pty-limits.conf 2>/dev/null || true
+
+# Ogrenciler grubunu oluştur
+groupadd -f ogrenciler
+
+# Systemd servislerini aktifle
+systemctl daemon-reload
+systemctl enable --now chroot-pty-fix.service
+systemctl enable --now chroot-cleanup.timer
+
+# SSH'ı yeniden yükle (config eklendi)
+systemctl reload sshd 2>/dev/null || systemctl reload ssh 2>/dev/null || true
+
+echo "=== Kurulum tamamlandı ==="
+echo "  PTY limitleri artırıldı (max: 8192)"
+echo "  Otomatik PTY temizleme aktif (her 10dk)"
+echo "  SSH MaxSessions: 50, MaxStartups: 30"
+echo ""
+echo "  Kullanım: chroot-yonetici init|create|list|mount|cleanup|health"
