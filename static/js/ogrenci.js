@@ -234,8 +234,17 @@ async function durumKontrol() {
     const veri = await yanit.json();
 
     if (veri.cikis_onaylandi) {
-      document.body.innerHTML = '<h2 style="color:white; text-align:center; margin-top:50px;">Öğretmen çıkışınızı onayladı. Tarayıcı kapatılıyor...</h2>';
+      document.body.textContent = '';
+      const h = document.createElement('h2');
+      h.style.cssText = 'color:white; text-align:center; margin-top:50px;';
+      h.textContent = 'Öğretmen çıkışınızı onayladı. Tarayıcı kapatılıyor...';
+      document.body.appendChild(h);
       window.location.href = '/seb-quit';
+      return;
+    }
+
+    if (veri.toplu_cikis) {
+      window.location.href = '/';
       return;
     }
 

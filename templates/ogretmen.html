@@ -128,6 +128,7 @@
       <div style="display:flex;gap:0.5rem;">
         <button onclick="bekletModu()" class="btn-kucuk" style="background:#48bb78;">⏸️ Beklet</button>
         <button onclick="slaytModu()" class="btn-kucuk" style="background:#ed8936;">📊 Slayt</button>
+        <button onclick="topluCikis()" class="btn-kucuk" style="background:#c53030;">🚪 Toplu Çıkış</button>
         <button class="btn-kucuk yeşil" onclick="csvIndir()">📥 CSV</button>
         <a href="/teacher/logout" class="btn-kucuk" style="text-decoration:none;color:inherit;">🚪</a>
       </div>
@@ -204,9 +205,15 @@
     <!-- Yoklama Listesi -->
     <div id="tab-yoklama" class="panel-bolum goster yoklama-kutu">
       <div class="kutu-baslik">
-        <div style="display:flex;justify-content:space-between;align-items:center;">
+        <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:0.5rem;">
           <h3>📋 Yoklama Listesi</h3>
-          <div style="display:flex;gap:0.5rem;align-items:center;">
+          <div style="display:flex;gap:0.5rem;align-items:center;flex-wrap:wrap;">
+            <input type="date" id="yoklama-tarih" style="padding:0.3rem 0.5rem;background:#2d3748;color:#e2e8f0;border:1px solid #4a5568;border-radius:6px;font-size:0.8rem;"
+              onchange="yoklamaTarihDegisti()">
+            <select id="yoklama-paket-filtre" style="padding:0.3rem 0.5rem;background:#2d3748;color:#e2e8f0;border:1px solid #4a5568;border-radius:6px;font-size:0.8rem;"
+              onchange="yoklamaCek()">
+              <option value="">Tüm Paketler</option>
+            </select>
             <span style="color:#4a5568; font-size:0.8rem;">Otomatik yenileniyor</span>
             <button class="btn-kucuk" style="background:#742a2a;border-color:#9b2c2c;color:#feb2b2;"
               onclick="yoklamaTemizle()">🗑️ Temizle</button>

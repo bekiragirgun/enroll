@@ -27,12 +27,21 @@ def api_durum():
             if kayit and kayit['durum'] == 'onaylandi':
                 cikis_onaylandi = True
 
+    # Toplu çıkış kontrolü
+    toplu_cikis = False
+    giris_zamani = session.get('giris_zamani', 0)
+    toplu_cikis_zamani = ders_durumu.get('toplu_cikis_zamani', 0)
+    if toplu_cikis_zamani and giris_zamani and toplu_cikis_zamani > giris_zamani:
+        toplu_cikis = True
+        session.clear()
+
     response = {
         'mod': ders_durumu['mod'],
         'dosya': ders_durumu['dosya'],
         'slayt_hash': ders_durumu.get('slayt_hash', ''),
         'terminal_url': ders_durumu.get('terminal_url', ''),
-        'cikis_onaylandi': cikis_onaylandi
+        'cikis_onaylandi': cikis_onaylandi,
+        'toplu_cikis': toplu_cikis
     }
     return jsonify(response)
 
@@ -166,13 +175,22 @@ def api_healthcheck():
 @api_bp.route('/yoklama')
 @ogretmen_giris_gerekli
 def api_yoklama():
+    paket = request.args.get('paket', '')
+    tarih = request.args.get('tarih', bugun())
     with db_baglantisi() as db:
-        satirlar = db.execute(
-            'SELECT ad_soyad, numara, saat, sinif, paket, kaynak, ip FROM yoklama WHERE tarih=? ORDER BY saat',
-            (bugun(),)
-        ).fetchall()
+        if paket:
+            satirlar = db.execute(
+                'SELECT ad_soyad, numara, saat, sinif, paket, kaynak, ip FROM yoklama WHERE tarih=? AND paket=? ORDER BY saat',
+                (tarih, paket)
+            ).fetchall()
+        else:
+            satirlar = db.execute(
+                'SELECT ad_soyad, numara, saat, sinif, paket, kaynak, ip FROM yoklama WHERE tarih=? ORDER BY saat',
+                (tarih,)
+            ).fetchall()
     return jsonify({
-        'tarih': bugun(),
+        'tarih': tarih,
+        'paket': paket,
         'ogrenciler': [dict(s) for s in satirlar]
     })
 
@@ -240,6 +258,28 @@ def api_sahte_log_sil_tek():
         db.commit()
     if silinen.rowcount == 0: return jsonify({'durum': 'hata', 'mesaj': 'Kayıt bulunamadı'}), 404
     return jsonify({'durum': 'ok', 'silinen': 1})
+
+@api_bp.route('/yoklama/tarihler')
+@ogretmen_giris_gerekli
+def api_yoklama_tarihler():
+    """Yoklama kaydı olan tüm tarihleri listele."""
+    with db_baglantisi() as db:
+        tarihler = db.execute(
+            'SELECT DISTINCT tarih, COUNT(*) as sayi FROM yoklama GROUP BY tarih ORDER BY tarih DESC'
+        ).fetchall()
+    return jsonify({'tarihler': [{'tarih': t['tarih'], 'sayi': t['sayi']} for t in tarihler]})
+
+@api_bp.route('/yoklama/paketler')
+@ogretmen_giris_gerekli
+def api_yoklama_paketler():
+    """Bugünkü yoklamadaki paketleri listele."""
+    tarih = request.args.get('tarih', bugun())
+    with db_baglantisi() as db:
+        paketler = db.execute(
+            'SELECT DISTINCT paket, COUNT(*) as sayi FROM yoklama WHERE tarih=? GROUP BY paket ORDER BY paket',
+            (tarih,)
+        ).fetchall()
+    return jsonify({'paketler': [{'paket': p['paket'], 'sayi': p['sayi']} for p in paketler]})
 
 @api_bp.route('/yoklama/csv')
 @ogretmen_giris_gerekli
@@ -402,6 +442,17 @@ def api_seb_cikis_onayla():
         db.execute("UPDATE seb_cikis_talepleri SET durum=? WHERE id=?", (durum_val, talep_id))
         db.commit()
     return jsonify({'durum': 'ok'})
+
+@api_bp.route('/toplu_cikis', methods=['POST'])
+@ogretmen_giris_gerekli
+def api_toplu_cikis():
+    """Tüm öğrencileri çıkış yaptır (paket değişimi vb.)."""
+    import time
+    ders_durumu['toplu_cikis_zamani'] = time.time()
+    ders_durumu['mod'] = 'bekleme'
+    ders_durumu['dosya'] = ''
+    log.info(f"🚪 Toplu çıkış tetiklendi - tüm öğrenci oturumları sonlandırılıyor")
+    return jsonify({'durum': 'ok', 'mesaj': 'Tüm öğrenciler çıkış yapacak'})
 
 @api_bp.route('/seb_cikis_toplu_onayla', methods=['POST'])
 @ogretmen_giris_gerekli

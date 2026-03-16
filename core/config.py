@@ -14,7 +14,8 @@ ders_durumu = {
     'system_host': '', # Boş ise otomatik IP kullanılır (V14.2)
     'kiosk_modu': '1',
     'cikis_izni': '0',
-    'ip_kontrol': '1'
+    'ip_kontrol': '1',
+    'toplu_cikis_zamani': 0
 }
 
 def ayar_kaydet(anahtar, deger):

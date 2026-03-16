@@ -242,9 +242,43 @@ function slaytOnizleme(dosya) {
   }
 }
 
+async function yoklamaPaketleriCek() {
+  try {
+    const tarih = document.getElementById('yoklama-tarih')?.value || '';
+    const url = tarih ? '/api/yoklama/paketler?tarih=' + tarih : '/api/yoklama/paketler';
+    const yanit = await safeFetch(url);
+    const veri = await yanit.json();
+    const select = document.getElementById('yoklama-paket-filtre');
+    if (!select) return;
+    const mevcut = select.value;
+    select.textContent = '';
+    const tumOpt = document.createElement('option');
+    tumOpt.value = '';
+    tumOpt.textContent = 'Tüm Paketler';
+    select.appendChild(tumOpt);
+    veri.paketler.forEach(p => {
+      const opt = document.createElement('option');
+      opt.value = p.paket;
+      opt.textContent = p.paket + ' (' + p.sayi + ')';
+      select.appendChild(opt);
+    });
+    if (mevcut) select.value = mevcut;
+  } catch (e) { /* sessiz */ }
+}
+
+function yoklamaTarihDegisti() {
+  yoklamaPaketleriCek();
+  yoklamaCek();
+}
+
 async function yoklamaCek() {
   try {
-    const yanit = await safeFetch('/api/yoklama');
+    const paket = document.getElementById('yoklama-paket-filtre')?.value || '';
+    const tarih = document.getElementById('yoklama-tarih')?.value || '';
+    let url = '/api/yoklama?';
+    if (paket) url += 'paket=' + encodeURIComponent(paket) + '&';
+    if (tarih) url += 'tarih=' + tarih + '&';
+    const yanit = await safeFetch(url);
     const veri = await yanit.json();
 
     const sayac = document.getElementById('ogrenci-sayisi');
@@ -891,7 +925,22 @@ function slaytModu() {
   modDegistir('slayt');
 }
 
+async function topluCikis() {
+  if (!confirm('Tüm öğrencilerin oturumunu kapatmak istediğinize emin misiniz?\n\nBu işlem tüm öğrencileri giriş sayfasına yönlendirecektir.')) return;
+  try {
+    const res = await safeFetch('/api/toplu_cikis', { method: 'POST', headers: { 'Content-Type': 'application/json' } });
+    const data = await res.json();
+    if (data.durum === 'ok') {
+      alert('Tüm öğrenci oturumları kapatılıyor. Öğrenciler giriş sayfasına yönlendirilecek.');
+      yoklamaCek();
+    }
+  } catch (e) {
+    alert('Hata: ' + e.message);
+  }
+}
+
 document.addEventListener('DOMContentLoaded', () => {
+  yoklamaPaketleriCek();
   yoklamaCek();
   sahteCek();
   guvenlikSoketBaslat();  // Güvenlik uyarılarını dinle

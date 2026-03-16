@@ -5,6 +5,7 @@ from core.utils import bugun, simdi, istemci_ip, paket_hesapla, sinif_listesi
 from core.security import seb_gerekli
 import threading
 import logging
+import time as _time
 
 log = logging.getLogger('app')
 student_bp = Blueprint('student_bp', __name__)
@@ -113,6 +114,7 @@ def giris():
             session['numara'] = numara
             session['ad'] = ogrenci['ad']
             session['soyad'] = ogrenci['soyad']
+            session['giris_zamani'] = _time.time()
             return redirect(url_for('student_bp.ana'))
 
         db.execute(
@@ -125,6 +127,7 @@ def giris():
     session['numara'] = numara
     session['ad'] = ogrenci['ad']
     session['soyad'] = ogrenci['soyad']
+    session['giris_zamani'] = _time.time()
 
     try:
         from chroot_terminal import chroot_var_mi, chroot_olustur
