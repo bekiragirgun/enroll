@@ -380,22 +380,26 @@ if __name__ == '__main__':
     import socket
 
     # --test flag kontrolü
+    # Kullanım: python app.py --test              (varsayılan IP)
+    #           python app.py 10.211.55.19 --test  (IP belirtilerek)
     if '--test' in sys.argv:
+        # IP adresini argümanlardan bul (--test ve app.py dışındaki ilk argüman)
+        test_ip = None
+        for arg in sys.argv[1:]:
+            if arg != '--test' and not arg.startswith('-'):
+                test_ip = arg
+                break
+
         os.environ['DERS_TAKIP_TEST'] = '1'
-        # paths modülünü yeniden yükle (test DB aktif olsun)
         import importlib
         import core.paths
         importlib.reload(core.paths)
-        from core.paths import DB_YOLU, TEST_MODE
-        # db modülünü de yeniden yükle
         import core.db
         importlib.reload(core.db)
-        from core.db import db_olustur, db_baglantisi
+        from core.db import db_olustur
         db_olustur()
-        # Test seed data
         from tests.test_seed import seed_test_db
-        seed_test_db()
-        # Ayarları test DB'den yeniden yükle
+        seed_test_db(host_ip=test_ip) if test_ip else seed_test_db()
         ayarlari_yukle()
         print('\n  ⚠️  TEST MODU — data/test_yoklama.db kullanılıyor\n')
 

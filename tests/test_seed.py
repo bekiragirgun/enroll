@@ -1,9 +1,10 @@
 """
 Test DB seed data — 40 öğrenci + test sınıfı + ayarlar
-python app.py --test ile başlatıldığında otomatik çağrılır.
+python app.py 10.211.55.19 --test ile başlatıldığında otomatik çağrılır.
+IP adresi komut satırından alınır.
 """
 
-def seed_test_db():
+def seed_test_db(host_ip='10.211.55.17'):
     """Test DB'sine 40 öğrenci, test sınıfı ve ayarları yükle."""
     from core.db import db_baglantisi
 
@@ -21,8 +22,8 @@ def seed_test_db():
                 (99, numara, ad, soyad, numara)
             )
 
-        # Chroot host ayarı (yeni VM IP)
-        db.execute("INSERT OR REPLACE INTO ayarlar (anahtar, deger) VALUES ('chroot_host', '10.211.55.17')")
+        # Chroot host ayarı (parametre olarak gelen IP)
+        db.execute("INSERT OR REPLACE INTO ayarlar (anahtar, deger) VALUES ('chroot_host', ?)", (host_ip,))
         db.execute("INSERT OR REPLACE INTO ayarlar (anahtar, deger) VALUES ('chroot_port', '22')")
         db.execute("INSERT OR REPLACE INTO ayarlar (anahtar, deger) VALUES ('chroot_user', 'bekir')")
         db.execute("INSERT OR REPLACE INTO ayarlar (anahtar, deger) VALUES ('chroot_pass', '123123!!')")
@@ -31,6 +32,6 @@ def seed_test_db():
 
         db.commit()
 
-    print('  ✅ Test DB seed tamamlandı: 40 öğrenci (T0001-T0040), sınıf: YUK-TEST')
-    print('  📡 Chroot Host: 10.211.55.17 (bekir/123123!!)')
-    print('  🔓 Kiosk modu: Kapalı, IP kontrol: Kapalı')
+    print(f'  ✅ Test DB seed tamamlandı: 40 öğrenci (T0001-T0040), sınıf: YUK-TEST')
+    print(f'  📡 Chroot Host: {host_ip} (bekir/123123!!)')
+    print(f'  🔓 Kiosk modu: Kapalı, IP kontrol: Kapalı')
