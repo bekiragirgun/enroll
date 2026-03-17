@@ -218,6 +218,22 @@
       socket.emit('terminal_girdi', { data: data });
     });
 
+    // ─── Toplu Çıkış / Paket Sonu Kontrolü ───
+    // Öğretmen toplu çıkış tetiklediğinde terminal sayfasından da çıkış yap
+    let _girisZamani = Date.now();
+    function _dersKontrol() {
+      fetch('/api/durum')
+        .then(r => r.json())
+        .then(veri => {
+          if (veri.toplu_cikis) {
+            // Toplu çıkış tetiklendi, giriş sayfasına yönlendir
+            window.location.href = '/';
+          }
+        })
+        .catch(() => {});
+    }
+    setInterval(_dersKontrol, 5000);
+
     // ─── Yardım İsteği ───
     async function yardimIste() {
       const btn = document.getElementById('btn-yardim');

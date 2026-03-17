@@ -402,7 +402,7 @@ def api_terminal_guvenlik_log():
 def api_terminal_aktif_oturumlar():
     """Aktif terminal oturumlarının listesi."""
     try:
-        from app import ogrenci_sidleri, ogrenci_surecleri
+        from core.state import ogrenci_sidleri, ogrenci_surecleri
         oturumlar = []
         for sid, username in ogrenci_sidleri.items():
             oturumlar.append({

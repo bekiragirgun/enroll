@@ -126,8 +126,9 @@ var izlemeTerminal = new Terminal({
   cursorBlink: false,
   scrollback: 2000,
   theme: { background:'#0d1117', foreground:'#c9d1d9', cursor:'#3182ce' },
-  fontSize: 13,
-  disableStdin: true
+  fontSize: 13
+  // disableStdin kaldırıldı: xterm.js v5'te dinamik değiştirilemiyor
+  // Girdi kontrolü onData handler'da mudahaleAktif flag'i ile yapılıyor
 });
 izlemeTerminal.loadAddon(izlemeFitAddon);
 izlemeTerminal.open(document.getElementById('izleme-terminal-container'));
@@ -244,13 +245,11 @@ function mudahaleToggle() {
     document.getElementById('izleme-terminal-container').style.borderColor = '#ed8936';
     document.getElementById('mudahale-btn').textContent = 'Mudahale Kapat';
     document.getElementById('mudahale-btn').style.background = '#e53e3e';
-    izlemeTerminal.options.disableStdin = false;
     izlemeTerminal.focus();
   } else {
     document.getElementById('izleme-terminal-container').style.borderColor = '#3182ce';
     document.getElementById('mudahale-btn').textContent = 'Mudahale Et';
     document.getElementById('mudahale-btn').style.background = '#2b6cb0';
-    izlemeTerminal.options.disableStdin = true;
   }
 }
 

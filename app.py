@@ -85,6 +85,13 @@ _ogretmen_pty_kapaniyor = False  # Eski PTY'nin kapandığını reader thread'e 
 ogretmen_izlenen_sid = None  # Öğretmenin şu an izlediği öğrenci SID'i
 ogretmen_mudahale = False     # Müdahale modu açık mı
 
+# Blueprint'lerin aynı dict nesnelerini görmesi için core.state'e bağla
+# (double-import tuzağını önler: app.py __main__ olarak çalışır)
+import core.state as _state
+_state.ogrenci_surecleri = ogrenci_surecleri
+_state.ogrenci_sidleri   = ogrenci_sidleri
+_state.ogrenci_pty_locks = ogrenci_pty_locks
+
 def _pty_oku_ve_yayinla(fd, hedef_event, hedef_room=None, broadcast=False):
     """PTY fd'den oku ve SocketIO üzerinden yayınla.
 
