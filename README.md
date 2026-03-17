@@ -215,4 +215,4 @@ ders_takip/
 
 ---
 
-*Kapadokya Universitesi — Bilgi Guvenligi Teknolojisi*
+*Kapadokya Universitesi — Veri Bilimi ve Analizi*
