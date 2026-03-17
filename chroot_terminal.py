@@ -466,6 +466,63 @@ def chroot_olustur_batch(users: list) -> dict:
     return sonuclar
 
 
+def chroot_sil(username: str) -> bool:
+    """Öğrenci chroot ortamını sil (paket sonu / ders sonu temizliği)."""
+    username = _slugify(username)
+    log.info(f"Chroot siliniyor: {username}")
+    result = _ct991_exec([PYTHON_PATH, CHROOT_MANAGE_SCRIPT, "delete", username])
+    if result.returncode == 0:
+        _chroot_cache.discard(username)
+        log.info(f"✅ Chroot silindi: {username}")
+        return True
+    else:
+        log.error(f"Chroot silme hatası ({username}): {result.stderr}")
+        return False
+
+
+def chroot_sil_batch(usernames: list) -> dict:
+    """Birden fazla chroot'u tek SSH bağlantısında sil.
+
+    Args:
+        usernames: Silinecek kullanıcı adları listesi
+
+    Returns:
+        {"username": True/False, ...}
+    """
+    if not usernames:
+        return {}
+
+    slugged = [_slugify(u) for u in usernames if _slugify(u)]
+    if not slugged:
+        return {}
+
+    # Tek SSH oturumunda hepsini sil
+    loop_lines = []
+    for slug in slugged:
+        loop_lines.append(
+            f"{PYTHON_PATH} {CHROOT_MANAGE_SCRIPT} delete '{slug}' "
+            f"&& echo 'OK:{slug}' || echo 'ERR:{slug}'"
+        )
+
+    batch_script = "\n".join(loop_lines)
+    result = _ct991_exec(["bash", "-c", batch_script])
+
+    sonuclar = {slug: False for slug in slugged}
+
+    for line in result.stdout.splitlines():
+        line = line.strip()
+        if line.startswith("OK:"):
+            slug = line[3:]
+            sonuclar[slug] = True
+            _chroot_cache.discard(slug)
+            log.info(f"✅ Chroot silindi (batch): {slug}")
+        elif line.startswith("ERR:"):
+            slug = line[4:]
+            log.warning(f"⚠️ Chroot silinemedi (batch): {slug} (zaten yok olabilir)")
+
+    return sonuclar
+
+
 def chroot_ip_al(username: str) -> str:
     """SSH IP adresini döndür (CT 991 IP)."""
     return CT_991_HOST

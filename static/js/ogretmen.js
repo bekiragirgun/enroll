@@ -1029,6 +1029,39 @@ async function sifreDegistir() {
   }
 }
 
+async function paketSonu() {
+  const onay = confirm(
+    '📦 PAKET SONU\n\n' +
+    'Bu işlem:\n' +
+    '  1. Tüm öğrencilerin oturumunu kapatır\n' +
+    '  2. Mevcut paketin öğrencilerinin VM\'lerini (chroot) siler\n\n' +
+    'Öğrencilerin çalışmaları kaybolacak.\n' +
+    'Devam etmek istiyor musunuz?'
+  );
+  if (!onay) return;
+
+  try {
+    const res = await safeFetch('/api/paket_sonu', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({})
+    });
+    const data = await res.json();
+    if (data.durum === 'ok') {
+      alert(
+        '✅ Paket Sonu işlemi başlatıldı.\n\n' +
+        data.mesaj + '\n\n' +
+        'Paket: ' + data.paket
+      );
+      yoklamaCek();
+    } else {
+      alert('Hata: ' + (data.mesaj || 'Bilinmeyen hata'));
+    }
+  } catch (e) {
+    alert('Bağlantı hatası: ' + e.message);
+  }
+}
+
 async function topluCikis() {
   if (!confirm('Tüm öğrencilerin oturumunu kapatmak istediğinize emin misiniz?\n\nBu işlem tüm öğrencileri giriş sayfasına yönlendirecektir.')) return;
   try {

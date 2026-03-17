@@ -510,6 +510,56 @@ def api_toplu_cikis():
     log.info(f"🚪 Toplu çıkış tetiklendi - tüm öğrenci oturumları sonlandırılıyor")
     return jsonify({'durum': 'ok', 'mesaj': 'Tüm öğrenciler çıkış yapacak'})
 
+
+@api_bp.route('/paket_sonu', methods=['POST'])
+@ogretmen_giris_gerekli
+def api_paket_sonu():
+    """Paket sonu: Toplu çıkış + o paketin öğrencilerinin chroot'larını sil.
+
+    Body (JSON):
+        paket: str — hangi paketin chroot'ları silinecek (boş ise mevcut paket)
+    """
+    import time
+    import threading
+    from core.utils import paket_hesapla
+
+    veri = request.get_json(silent=True) or {}
+    hedef_paket = veri.get('paket', '') or paket_hesapla()
+
+    # 1. Toplu çıkış tetikle (öğrenciler giriş sayfasına yönlendirilir)
+    ders_durumu['toplu_cikis_zamani'] = time.time()
+    ders_durumu['mod'] = 'bekleme'
+    ders_durumu['dosya'] = ''
+
+    # 2. O pakete ait öğrenci numaralarını al
+    with db_baglantisi() as db:
+        kayitlar = db.execute(
+            'SELECT DISTINCT numara FROM yoklama WHERE tarih=? AND paket=?',
+            (bugun(), hedef_paket)
+        ).fetchall()
+
+    numaralar = [r['numara'] for r in kayitlar]
+    log.info(f"📦 Paket sonu: {hedef_paket} — {len(numaralar)} öğrencinin chroot'u silinecek")
+
+    # 3. Chroot silmeyi arka planda çalıştır (API hemen döner)
+    def _chroot_temizle():
+        try:
+            from chroot_terminal import chroot_sil_batch
+            sonuclar = chroot_sil_batch(numaralar)
+            silindi = sum(1 for v in sonuclar.values() if v)
+            log.info(f"✅ Paket sonu temizliği tamamlandı: {silindi}/{len(numaralar)} chroot silindi")
+        except Exception as e:
+            log.error(f"Paket sonu chroot temizliği hatası: {e}")
+
+    threading.Thread(target=_chroot_temizle, daemon=True).start()
+
+    return jsonify({
+        'durum': 'ok',
+        'mesaj': f'{len(numaralar)} öğrencinin VM\'i siliniyor, lütfen bekleyin.',
+        'paket': hedef_paket,
+        'ogrenci_sayisi': len(numaralar)
+    })
+
 @api_bp.route('/seb_cikis_toplu_onayla', methods=['POST'])
 @ogretmen_giris_gerekli
 def api_seb_cikis_toplu_onayla():
