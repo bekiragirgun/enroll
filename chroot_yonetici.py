@@ -788,17 +788,38 @@ def main():
 
     import sys
 
-    if len(sys.argv) < 2:
-        print("Kullanım:")
-        print("  python3 chroot_yonetici.py init          # Şablonu kur")
-        print("  python3 chroot_yonetici.py create <user> # Öğrenci ekle")
-        print("  python3 chroot_yonetici.py list          # Listele")
-        print("  python3 chroot_yonetici.py mount <user>  # Mount et")
-        print("  python3 chroot_yonetici.py delete <user> # Sil")
-        print("  python3 chroot_yonetici.py repair        # PTY Onar")
-        print("  python3 chroot_yonetici.py persist       # Kalıcı yap (Service kur)")
-        print("  python3 chroot_yonetici.py cleanup       # Stale kaynakları temizle")
-        print("  python3 chroot_yonetici.py health        # Sağlık kontrolü")
+    def yardim():
+        print(f"  Version: {VERSION}")
+        print(f"  Chroot dizini: {CHROOT_BASE}")
+        print()
+        print("  Komutlar:")
+        print()
+        print("  Kurulum & Bakim:")
+        print("    init                    Ubuntu chroot sablonunu olustur (ilk kurulum)")
+        print("    repair                  /dev/pts ve PTY izinlerini onar")
+        print("    persist                 PTY onarimi icin systemd servisi kur")
+        print("    cleanup                 Zombie process ve stale mount temizligi")
+        print("    health                  Sistem saglk raporu (PTY, SSH, disk, mount)")
+        print()
+        print("  Ogrenci Yonetimi:")
+        print("    create <user> [ad]      Yeni ogrenci chroot ortami olustur")
+        print("    mount <user>            Chroot icin /dev, /proc, /sys mount et")
+        print("    delete <user>           Ogrenci chroot ortamini sil")
+        print("    list                    Tum chroot ortamlarini listele")
+        print()
+        print("  Ornekler:")
+        print("    chroot-yonetici init")
+        print("    chroot-yonetici create u25901001 'AHMET YILMAZ'")
+        print("    chroot-yonetici health")
+        print("    chroot-yonetici cleanup && chroot-yonetici repair")
+        print()
+        print("  DEB Paketi:")
+        print("    Kurulum:   sudo dpkg -i chroot-terminal_1.1.deb")
+        print("    Kaldirma:  sudo dpkg -r chroot-terminal")
+        print()
+
+    if len(sys.argv) < 2 or sys.argv[1] in ('--help', '-h', 'help'):
+        yardim()
         return
 
     command = sys.argv[1]
@@ -814,7 +835,7 @@ def main():
 
     elif command == "create":
         if len(sys.argv) < 3:
-            print("Kullanıcı adı gerekli")
+            print("Kullanim: chroot-yonetici create <username> [ad soyad]")
             return
         username = sys.argv[2]
         real_name = sys.argv[3] if len(sys.argv) > 3 else ""
@@ -823,19 +844,19 @@ def main():
 
     elif command == "list":
         students = list_student_chroots()
-        print("Öğrenci Chroot'ları:")
+        print("Ogrenci Chroot'lari:")
         for s in students:
             print(f"  - {s}")
 
     elif command == "mount":
         if len(sys.argv) < 3:
-            print("Kullanıcı adı gerekli")
+            print("Kullanim: chroot-yonetici mount <username>")
             return
         mount_student_chroot(sys.argv[2])
 
     elif command == "delete":
         if len(sys.argv) < 3:
-            print("Kullanıcı adı gerekli")
+            print("Kullanim: chroot-yonetici delete <username>")
             return
         delete_student_chroot(sys.argv[2])
 
@@ -845,8 +866,12 @@ def main():
     elif command == "health":
         health_check()
 
+    elif command == "--version":
+        print(f"chroot-yonetici {VERSION}")
+
     else:
         print(f"Bilinmeyen komut: {command}")
+        print("Yardim icin: chroot-yonetici --help")
 
 
 if __name__ == "__main__":
