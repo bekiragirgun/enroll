@@ -124,7 +124,10 @@
       <h1>💻 {{ ad_soyad }} — Terminal</h1>
       <div class="info">Numara: {{ numara }} | IP: {{ container_ip }}</div>
     </div>
-    <a href="/" class="btn-cikis">Geri Dön</a>
+    <div style="display:flex;align-items:center;gap:8px;">
+      <button id="btn-yardim" onclick="yardimIste()" style="padding:4px 14px;background:#2b6cb0;color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:13px;font-weight:600;">🙋 Yardım İste</button>
+      <a href="/" class="btn-cikis">Geri Dön</a>
+    </div>
   </div>
 
   <div class="workspace">
@@ -214,6 +217,41 @@
     termStudent.onData(data => {
       socket.emit('terminal_girdi', { data: data });
     });
+
+    // ─── Yardım İsteği ───
+    async function yardimIste() {
+      const btn = document.getElementById('btn-yardim');
+      btn.disabled = true;
+      btn.textContent = '⏳ Gönderiliyor...';
+      try {
+        const res = await fetch('/api/yardim_talep', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ kategori: 'terminal' })
+        });
+        const veri = await res.json();
+        if (veri.durum === 'ok') {
+          btn.textContent = '✅ İstek Gönderildi';
+          btn.style.background = '#276749';
+          setTimeout(() => {
+            btn.disabled = false;
+            btn.textContent = '🙋 Yardım İste';
+            btn.style.background = '#2b6cb0';
+          }, 30000); // 30 saniye sonra tekrar aktif
+        } else {
+          btn.textContent = veri.mesaj || 'Zaten istek var';
+          btn.style.background = '#744210';
+          setTimeout(() => {
+            btn.disabled = false;
+            btn.textContent = '🙋 Yardım İste';
+            btn.style.background = '#2b6cb0';
+          }, 5000);
+        }
+      } catch(e) {
+        btn.disabled = false;
+        btn.textContent = '🙋 Yardım İste';
+      }
+    }
   </script>
 
 </body>

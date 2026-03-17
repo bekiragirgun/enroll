@@ -34,6 +34,15 @@
   .izleme-liste::-webkit-scrollbar { width:4px; }
   .izleme-liste::-webkit-scrollbar-thumb { background:#4a5568; border-radius:2px; }
 
+  .yardim-bolum { padding:8px; border-top:1px solid #4a5568; flex-shrink:0; max-height:45%; overflow-y:auto; }
+  .yardim-bolum-baslik { font-size:11px; font-weight:700; color:#90cdf4; margin-bottom:6px; display:flex; align-items:center; justify-content:space-between; }
+  .yardim-rozet { background:#e53e3e; color:#fff; border-radius:10px; padding:0 6px; font-size:10px; }
+  .yardim-kart { background:#1a202c; border:1px solid #4a5568; border-radius:6px; padding:6px 8px; margin-bottom:5px; font-size:11px; }
+  .yardim-kart.yeni { border-color:#e53e3e; }
+  .yardim-kart .ad { font-weight:700; color:#e2e8f0; }
+  .yardim-kart .saat { color:#718096; font-size:10px; }
+  .yardim-kart .btn-izle { padding:2px 8px; background:#2b6cb0; color:#fff; border:none; border-radius:3px; cursor:pointer; font-size:10px; margin-top:4px; margin-right:3px; }
+  .yardim-kart .btn-tamam { padding:2px 8px; background:#276749; color:#fff; border:none; border-radius:3px; cursor:pointer; font-size:10px; margin-top:4px; }
   .izleme-panel-alani { flex:1; display:flex; flex-direction:column; border-top:1px solid #4a5568; min-height:0; }
   .izleme-panel-baslik { padding:6px 12px; background:#1a365d; color:#90cdf4; font-size:12px; font-weight:600; display:flex; align-items:center; justify-content:space-between; flex-shrink:0; }
   .izleme-panel-baslik .izleme-butonlar { display:flex; gap:4px; }
@@ -69,6 +78,14 @@
     <div class="izleme-sidebar-baslik">Ogrenci Terminalleri</div>
     <div class="izleme-liste" id="izleme-ogrenci-listesi">
       <div style="color:#718096; font-size:12px; padding:8px;">Oturum yok</div>
+    </div>
+
+    <!-- Yardım Talepleri -->
+    <div class="yardim-bolum">
+      <div class="yardim-bolum-baslik">
+        <span>🙋 Yardım Talepleri <span class="yardim-rozet" id="yardim-rozet" style="display:none;">0</span></span>
+      </div>
+      <div id="yardim-liste"><div style="color:#718096;font-size:11px;">Yok</div></div>
     </div>
 
     <div class="izleme-panel-alani" id="izleme-panel" style="border-color:#4a5568;">
@@ -266,6 +283,76 @@ socket.on('izleme_hata', function(msg) {
 
 // Ogrenci listesini her 5 saniyede guncelle
 setInterval(ogrenciListesiGuncelle, 5000);
+
+// ─── Yardım Talepleri ───
+function yardimTalepleriCek() {
+  fetch('/api/yardim_talepler')
+    .then(function(r) { return r.json(); })
+    .then(function(veri) {
+      var liste = document.getElementById('yardim-liste');
+      var rozet = document.getElementById('yardim-rozet');
+      if (!liste) return;
+
+      var talepler = veri.talepler || [];
+      var bekleyenler = talepler.filter(function(t) { return t.durum === 'bekliyor'; });
+
+      if (bekleyenler.length > 0) {
+        rozet.textContent = bekleyenler.length;
+        rozet.style.display = 'inline';
+      } else {
+        rozet.style.display = 'none';
+      }
+
+      while (liste.firstChild) { liste.removeChild(liste.firstChild); }
+
+      if (talepler.length === 0) {
+        var bos = document.createElement('div');
+        bos.style.cssText = 'color:#718096;font-size:11px;';
+        bos.textContent = 'Yok';
+        liste.appendChild(bos);
+        return;
+      }
+
+      talepler.forEach(function(t) {
+        var kart = document.createElement('div');
+        kart.className = 'yardim-kart' + (t.durum === 'bekliyor' ? ' yeni' : '');
+
+        var ad = document.createElement('div');
+        ad.className = 'ad';
+        ad.textContent = (t.ad_soyad || t.numara) + (t.kategori ? ' [' + t.kategori + ']' : '');
+
+        var saat = document.createElement('div');
+        saat.className = 'saat';
+        saat.textContent = t.saat + ' — ' + t.numara;
+
+        var btnIzle = document.createElement('button');
+        btnIzle.className = 'btn-izle';
+        btnIzle.textContent = '👁 İzle';
+        btnIzle.addEventListener('click', function() { izlemeBaslat(t.numara); });
+
+        var btnTamam = document.createElement('button');
+        btnTamam.className = 'btn-tamam';
+        btnTamam.textContent = '✔ Tamamlandı';
+        btnTamam.addEventListener('click', function() {
+          fetch('/api/yardim_kabul', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ id: t.id, durum: 'tamamlandi' })
+          }).then(function() { yardimTalepleriCek(); });
+        });
+
+        kart.appendChild(ad);
+        kart.appendChild(saat);
+        kart.appendChild(btnIzle);
+        kart.appendChild(btnTamam);
+        liste.appendChild(kart);
+      });
+    })
+    .catch(function() {});
+}
+
+yardimTalepleriCek();
+setInterval(yardimTalepleriCek, 10000);
 </script>
 </body>
 </html>
