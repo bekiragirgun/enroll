@@ -272,38 +272,143 @@ document.addEventListener('fullscreenchange', () => {
   }
 });
 
+// ── Devam Bilgisi ──────────────────────────────────────────────
+async function devamBilgisiCek() {
+  try {
+    var yanit = await fetch('/api/ogrenci/devam', { credentials: 'same-origin' });
+    if (!yanit.ok) return;
+    var veri = await yanit.json();
+    var ozet = veri.ozet;
+    var gecmis = veri.gecmis;
+
+    var ozetDiv = document.getElementById('devam-ozet');
+    var ozetMetin = document.getElementById('devam-ozet-metin');
+    if (!ozetDiv || !ozetMetin) return;
+
+    // Renk belirleme
+    var renk = '#48bb78'; // yesil >=70
+    if (ozet.yuzde < 50) renk = '#fc8181'; // kirmizi
+    else if (ozet.yuzde < 70) renk = '#f6ad55'; // turuncu
+
+    ozetMetin.textContent = ozet.katilim + '/' + ozet.toplam_ders + ' derse katildiniz (%' + ozet.yuzde + ')';
+    ozetMetin.style.color = renk;
+    ozetDiv.style.display = 'block';
+
+    // Tablo olustur (sadece createElement + textContent)
+    var tablo = document.getElementById('devam-tablo');
+    if (!tablo) return;
+
+    // Onceki icerigi temizle
+    while (tablo.firstChild) {
+      tablo.removeChild(tablo.firstChild);
+    }
+
+    // Baslik satiri
+    var thead = document.createElement('thead');
+    var baslikSatir = document.createElement('tr');
+    var basliklar = ['Tarih', 'Paket', 'Durum'];
+    for (var b = 0; b < basliklar.length; b++) {
+      var th = document.createElement('th');
+      th.textContent = basliklar[b];
+      th.style.cssText = 'text-align:left; padding:0.3rem 0.5rem; border-bottom:1px solid #4a5568; color:#90cdf4;';
+      baslikSatir.appendChild(th);
+    }
+    thead.appendChild(baslikSatir);
+    tablo.appendChild(thead);
+
+    // Veri satirlari
+    var tbody = document.createElement('tbody');
+    for (var i = 0; i < gecmis.length; i++) {
+      var satir = gecmis[i];
+      var tr = document.createElement('tr');
+
+      var tdTarih = document.createElement('td');
+      tdTarih.textContent = satir.tarih;
+      tdTarih.style.cssText = 'padding:0.3rem 0.5rem; border-bottom:1px solid #2d3748;';
+      tr.appendChild(tdTarih);
+
+      var tdPaket = document.createElement('td');
+      tdPaket.textContent = satir.paket;
+      tdPaket.style.cssText = 'padding:0.3rem 0.5rem; border-bottom:1px solid #2d3748;';
+      tr.appendChild(tdPaket);
+
+      var tdDurum = document.createElement('td');
+      tdDurum.style.cssText = 'padding:0.3rem 0.5rem; border-bottom:1px solid #2d3748; font-weight:bold;';
+      if (satir.durum === 'geldi') {
+        tdDurum.textContent = 'Geldi';
+        tdDurum.style.color = '#48bb78';
+      } else {
+        tdDurum.textContent = 'Gelmedi';
+        tdDurum.style.color = '#fc8181';
+      }
+      tr.appendChild(tdDurum);
+
+      tbody.appendChild(tr);
+    }
+    tablo.appendChild(tbody);
+
+  } catch (e) {
+    console.error('[Devam] Bilgi cekilemedi:', e);
+  }
+}
+
+function devamDetayToggle() {
+  var detay = document.getElementById('devam-detay');
+  if (!detay) return;
+  detay.style.display = detay.style.display === 'none' ? 'block' : 'none';
+}
+
 // Polling başlat
 document.addEventListener('DOMContentLoaded', () => {
   durumKontrol();
   setInterval(durumKontrol, POLLING_ARALIK);
+  devamBilgisiCek();
 });
 
-async function yardimTalepEt() {
+function yardimTalepEt() {
+  // Kategori seçim modalını göster
+  const modal = document.getElementById('yardim-kategori-modal');
+  if (modal) modal.style.display = 'flex';
+}
+
+function yardimModalKapat() {
+  const modal = document.getElementById('yardim-kategori-modal');
+  if (modal) modal.style.display = 'none';
+}
+
+async function yardimGonder(kategori) {
+  // Modalı kapat
+  yardimModalKapat();
+
   const btn = document.getElementById('btn-yardim-talep');
   if (!btn) return;
 
   try {
-    btn.innerHTML = '⏳ Gönderiliyor...';
+    btn.textContent = '⏳ Gönderiliyor...';
     btn.disabled = true;
     btn.style.backgroundColor = '#718096';
     btn.style.transform = 'none';
 
-    const res = await fetch('/api/yardim_talep', { method: 'POST' });
+    const res = await fetch('/api/yardim_talep', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ kategori: kategori })
+    });
     const data = await res.json();
 
     if (data.durum === 'ok') {
-      btn.innerHTML = '✅ Yardım Bekleniyor...';
+      btn.textContent = '✅ Yardım Bekleniyor...';
       btn.style.backgroundColor = '#48bb78';
     } else {
       alert('Hata: ' + data.mesaj);
       btn.disabled = false;
-      btn.innerHTML = '🙋‍♂️ Yardım İste';
+      btn.textContent = '🙋‍♂️ Yardım İste';
       btn.style.backgroundColor = '#2b6cb0';
     }
   } catch (e) {
     alert("Hata oluştu.");
     btn.disabled = false;
-    btn.innerHTML = '🙋‍♂️ Yardım İste';
+    btn.textContent = '🙋‍♂️ Yardım İste';
     btn.style.backgroundColor = '#2b6cb0';
   }
 }

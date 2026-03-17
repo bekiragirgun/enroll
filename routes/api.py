@@ -4,7 +4,7 @@ import logging
 from datetime import datetime
 from flask import Blueprint, request, jsonify, send_file
 from core.db import db_baglantisi
-from core.config import ders_durumu, ayar_kaydet
+from core.config import ders_durumu, ayar_kaydet, ayar_getir
 from core.security import ogretmen_giris_gerekli
 from core.utils import bugun, simdi, paket_hesapla
 from docker_terminal import image_var_mi, container_durum
@@ -212,6 +212,45 @@ def api_ogrenci_listesi(sinif_id):
         ogrenciler = db.execute('SELECT numara, ad, soyad FROM ogrenciler WHERE sinif_id=? ORDER BY soyad, ad', (sinif_id,)).fetchall()
     return jsonify({'ogrenciler': [{'numara': o['numara'], 'ad_soyad': (o['ad'] + ' ' + o['soyad']).upper()} for o in ogrenciler]})
 
+@api_bp.route('/ogrenci/devam')
+def api_ogrenci_devam():
+    """Öğrencinin kendi devam durumunu görmesi."""
+    from flask import session
+    numara = session.get('numara')
+    if not numara:
+        return jsonify({'durum': 'hata', 'mesaj': 'Oturum yok'}), 401
+
+    with db_baglantisi() as db:
+        katilimlar = db.execute(
+            'SELECT DISTINCT tarih, paket FROM yoklama WHERE numara=? ORDER BY tarih DESC',
+            (numara,)
+        ).fetchall()
+        tum_gunler = db.execute(
+            'SELECT DISTINCT tarih FROM yoklama ORDER BY tarih DESC'
+        ).fetchall()
+
+    katilim_tarihleri = {r['tarih'] for r in katilimlar}
+    tum_tarihler = [r['tarih'] for r in tum_gunler]
+
+    gecmis = []
+    for tarih in tum_tarihler:
+        if tarih in katilim_tarihleri:
+            for k in katilimlar:
+                if k['tarih'] == tarih:
+                    gecmis.append({'tarih': tarih, 'paket': k['paket'], 'durum': 'geldi'})
+        else:
+            gecmis.append({'tarih': tarih, 'paket': '-', 'durum': 'gelmedi'})
+
+    toplam = len(tum_tarihler)
+    katilim = len(katilim_tarihleri)
+    devamsizlik = toplam - katilim
+    yuzde = round((katilim / toplam * 100)) if toplam > 0 else 0
+
+    return jsonify({
+        'ozet': {'toplam_ders': toplam, 'katilim': katilim, 'devamsizlik': devamsizlik, 'yuzde': yuzde},
+        'gecmis': gecmis
+    })
+
 @api_bp.route('/sinif_ogrencileri/<int:sinif_id>')
 @ogretmen_giris_gerekli
 def api_sinif_ogrencileri(sinif_id):
@@ -358,6 +397,23 @@ def api_terminal_guvenlik_log():
         loglar = db.execute("SELECT * FROM terminal_guvenlik_log ORDER BY id DESC LIMIT 50").fetchall()
     return jsonify({'loglar': [dict(l) for l in loglar]})
 
+@api_bp.route('/terminal/aktif_oturumlar')
+@ogretmen_giris_gerekli
+def api_terminal_aktif_oturumlar():
+    """Aktif terminal oturumlarının listesi."""
+    try:
+        from app import ogrenci_sidleri, ogrenci_surecleri
+        oturumlar = []
+        for sid, username in ogrenci_sidleri.items():
+            oturumlar.append({
+                'sid': sid,
+                'username': username,
+                'aktif': sid in ogrenci_surecleri
+            })
+        return jsonify({'oturumlar': oturumlar})
+    except Exception as e:
+        return jsonify({'oturumlar': [], 'hata': str(e)})
+
 @api_bp.route('/terminal/durum')
 @ogretmen_giris_gerekli
 def api_terminal_durum():
@@ -468,17 +524,24 @@ def api_yardim_talep():
     numara = session.get('numara')
     if not numara:
         return jsonify({'durum': 'hata', 'mesaj': 'Oturum yok'})
-        
+
     ad_soyad = f"{session.get('ad', '')} {session.get('soyad', '')}".strip()
-    
+
+    # Kategori parametresini JSON body'den al
+    gecerli_kategoriler = ('komut', 'dosya', 'terminal', 'soru', 'diger')
+    veri = request.get_json(silent=True) or {}
+    kategori = veri.get('kategori', '')
+    if kategori and kategori not in gecerli_kategoriler:
+        kategori = ''
+
     with db_baglantisi() as db:
         mevcut = db.execute("SELECT id, durum FROM yardim_talepleri WHERE numara=? AND tarih=? AND durum != 'tamamlandi'", (numara, bugun())).fetchone()
         if mevcut:
             return jsonify({'durum': 'ok', 'mesaj': 'Zaten aktif bir yardım talebiniz var.'})
-            
+
         db.execute(
-            'INSERT INTO yardim_talepleri (tarih, saat, numara, ad_soyad, durum) VALUES (?, ?, ?, ?, ?)',
-            (bugun(), simdi(), numara, ad_soyad, 'bekliyor')
+            'INSERT INTO yardim_talepleri (tarih, saat, numara, ad_soyad, durum, kategori) VALUES (?, ?, ?, ?, ?, ?)',
+            (bugun(), simdi(), numara, ad_soyad, 'bekliyor', kategori)
         )
         db.commit()
     return jsonify({'durum': 'ok'})
@@ -590,4 +653,107 @@ def api_sinif_sil():
     if silinen.rowcount == 0:
         return jsonify({'durum': 'hata', 'mesaj': 'Sınıf bulunamadı'}), 404
     return jsonify({'durum': 'ok', 'mesaj': 'Sınıf silindi'})
+
+
+# ── Yoklama Raporlama ────────────────────────────────────────────
+
+@api_bp.route('/yoklama/rapor')
+@ogretmen_giris_gerekli
+def api_yoklama_rapor():
+    """Ogrenci bazinda devam raporu matrisi."""
+    sinif_id = request.args.get('sinif_id', '')
+    baslangic = request.args.get('baslangic', '')
+    bitis = request.args.get('bitis', '')
+    paket = request.args.get('paket', '')
+
+    with db_baglantisi() as db:
+        # Tarih filtrelemeli ders gunleri
+        tarih_sql = 'SELECT DISTINCT tarih FROM yoklama WHERE 1=1'
+        tarih_params = []
+        if baslangic:
+            tarih_sql += ' AND tarih >= ?'
+            tarih_params.append(baslangic)
+        if bitis:
+            tarih_sql += ' AND tarih <= ?'
+            tarih_params.append(bitis)
+        if paket:
+            tarih_sql += ' AND paket = ?'
+            tarih_params.append(paket)
+        tarih_sql += ' ORDER BY tarih'
+        ders_gunleri = [r['tarih'] for r in db.execute(tarih_sql, tarih_params).fetchall()]
+
+        # Ogrenci listesi (sinif filtreli)
+        if sinif_id:
+            ogrenciler = db.execute(
+                'SELECT numara, ad, soyad FROM ogrenciler WHERE sinif_id=? ORDER BY soyad, ad',
+                (sinif_id,)
+            ).fetchall()
+        else:
+            ogrenciler = db.execute(
+                'SELECT numara, ad, soyad FROM ogrenciler ORDER BY soyad, ad'
+            ).fetchall()
+
+        # Yoklama verileri — hangi ogrenci hangi gun gelmis
+        yoklama_sql = 'SELECT DISTINCT numara, tarih FROM yoklama WHERE 1=1'
+        yoklama_params = []
+        if baslangic:
+            yoklama_sql += ' AND tarih >= ?'
+            yoklama_params.append(baslangic)
+        if bitis:
+            yoklama_sql += ' AND tarih <= ?'
+            yoklama_params.append(bitis)
+        if paket:
+            yoklama_sql += ' AND paket = ?'
+            yoklama_params.append(paket)
+        yoklama_kayitlari = db.execute(yoklama_sql, yoklama_params).fetchall()
+
+        # Devamsizlik esigi
+        esik_row = db.execute("SELECT deger FROM ayarlar WHERE anahtar='devamsizlik_esik'").fetchone()
+        esik = int(esik_row['deger']) if esik_row else 3
+
+    # Set olustur: {(numara, tarih)}
+    katilim_set = {(r['numara'], r['tarih']) for r in yoklama_kayitlari}
+    toplam_ders = len(ders_gunleri)
+
+    rapor = []
+    for o in ogrenciler:
+        katilim = sum(1 for t in ders_gunleri if (o['numara'], t) in katilim_set)
+        devamsizlik = toplam_ders - katilim
+        yuzde = round((katilim / toplam_ders * 100)) if toplam_ders > 0 else 0
+        gunler = {}
+        for t in ders_gunleri:
+            gunler[t] = 'geldi' if (o['numara'], t) in katilim_set else 'gelmedi'
+
+        rapor.append({
+            'numara': o['numara'],
+            'ad_soyad': o['ad'] + ' ' + o['soyad'],
+            'katilim': katilim,
+            'devamsizlik': devamsizlik,
+            'yuzde': yuzde,
+            'uyari': devamsizlik >= esik,
+            'gunler': gunler
+        })
+
+    return jsonify({
+        'tarihler': ders_gunleri,
+        'toplam_ders': toplam_ders,
+        'esik': esik,
+        'rapor': rapor
+    })
+
+
+@api_bp.route('/yoklama/devamsizlik_esik', methods=['GET'])
+@ogretmen_giris_gerekli
+def api_devamsizlik_esik_getir():
+    esik = ayar_getir('devamsizlik_esik', '3')
+    return jsonify({'esik': int(esik)})
+
+
+@api_bp.route('/yoklama/devamsizlik_esik', methods=['POST'])
+@ogretmen_giris_gerekli
+def api_devamsizlik_esik_kaydet():
+    veri = request.get_json()
+    esik = veri.get('esik', 3)
+    ayar_kaydet('devamsizlik_esik', str(esik))
+    return jsonify({'durum': 'ok', 'esik': int(esik)})
 

@@ -82,6 +82,8 @@ ogretmen_pty_lock = threading.Lock()
 ogretmen_sid = None
 ogretmen_komut_tampon = ""
 _ogretmen_pty_kapaniyor = False  # Eski PTY'nin kapandığını reader thread'e bildir
+ogretmen_izlenen_sid = None  # Öğretmenin şu an izlediği öğrenci SID'i
+ogretmen_mudahale = False     # Müdahale modu açık mı
 
 def _pty_oku_ve_yayinla(fd, hedef_event, hedef_room=None, broadcast=False):
     """PTY fd'den oku ve SocketIO üzerinden yayınla.
@@ -103,6 +105,9 @@ def _pty_oku_ve_yayinla(fd, hedef_event, hedef_room=None, broadcast=False):
                 socketio.emit(hedef_event, text, namespace='/terminal')
             elif hedef_room:
                 socketio.emit(hedef_event, text, room=hedef_room, namespace='/terminal')
+                # İzleme relay: Eğer bu fd izlenen öğrenciye aitse, öğretmene de gönder
+                if ogretmen_izlenen_sid and hedef_room == ogretmen_izlenen_sid and ogretmen_sid:
+                    socketio.emit('izleme_cikti', text, room=ogretmen_sid, namespace='/terminal')
         except (OSError, IOError, EOFError, ValueError):
             break
         except Exception as e:
@@ -228,6 +233,66 @@ def ogretmen_girdi_event(veri):
 @socketio.on('ogretmen_temizle', namespace='/terminal')
 def ogretmen_temizle_event():
     socketio.emit('ogretmen_temizle', namespace='/terminal')
+
+@socketio.on('ogretmen_izle', namespace='/terminal')
+def ogretmen_izle_event(veri):
+    global ogretmen_izlenen_sid, ogretmen_mudahale
+    if request.sid != ogretmen_sid:
+        return
+
+    username = veri.get('username', '')
+    # SID'i bul
+    hedef_sid = None
+    for sid, uname in ogrenci_sidleri.items():
+        if uname == username:
+            hedef_sid = sid
+            break
+
+    if not hedef_sid or hedef_sid not in ogrenci_surecleri:
+        emit('izleme_hata', 'Bu öğrencinin aktif terminali yok')
+        return
+
+    ogretmen_izlenen_sid = hedef_sid
+    ogretmen_mudahale = False
+    emit('izleme_basladi', {'username': username, 'sid': hedef_sid})
+    log.info(f"Öğretmen izleme başladı: {username}")
+
+@socketio.on('ogretmen_izle_girdi', namespace='/terminal')
+def ogretmen_izle_girdi_event(veri):
+    global ogretmen_mudahale
+    if request.sid != ogretmen_sid or not ogretmen_izlenen_sid:
+        return
+    if not ogretmen_mudahale:
+        return  # Read-only modda yazma yok
+
+    if ogretmen_izlenen_sid in ogrenci_surecleri:
+        _, fd = ogrenci_surecleri[ogretmen_izlenen_sid]
+        lock = ogrenci_pty_locks.get(fd)
+        data = veri.get('data', '')
+        if lock:
+            with lock:
+                try: os.write(fd, data.encode('utf-8'))
+                except OSError: pass
+        else:
+            try: os.write(fd, data.encode('utf-8'))
+            except OSError: pass
+
+@socketio.on('ogretmen_izle_birak', namespace='/terminal')
+def ogretmen_izle_birak_event():
+    global ogretmen_izlenen_sid, ogretmen_mudahale
+    if request.sid != ogretmen_sid:
+        return
+    log.info(f"Öğretmen izleme bıraktı")
+    ogretmen_izlenen_sid = None
+    ogretmen_mudahale = False
+
+@socketio.on('ogretmen_mudahale_toggle', namespace='/terminal')
+def ogretmen_mudahale_toggle_event(veri):
+    global ogretmen_mudahale
+    if request.sid != ogretmen_sid:
+        return
+    ogretmen_mudahale = veri.get('aktif', False)
+    log.info(f"Öğretmen müdahale modu: {'açık' if ogretmen_mudahale else 'kapalı'}")
 
 @socketio.on('ogrenci_baglan', namespace='/terminal')
 def ogrenci_baglan_event(veri):

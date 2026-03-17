@@ -167,8 +167,11 @@ def db_olustur():
                 saat TEXT NOT NULL,
                 numara TEXT NOT NULL,
                 ad_soyad TEXT NOT NULL,
-                durum TEXT DEFAULT 'bekliyor'
+                durum TEXT DEFAULT 'bekliyor',
+                kategori TEXT DEFAULT ''
             )
         """)
+        try: db.execute("ALTER TABLE yardim_talepleri ADD COLUMN kategori TEXT DEFAULT ''")
+        except: pass
 
 

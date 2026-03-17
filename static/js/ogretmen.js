@@ -93,6 +93,17 @@ async function ayarlariKaydet() {
   });
 
   const veri = await yanit.json();
+
+  // Devamsizlik esigi kaydet
+  const esikInput = document.getElementById('config-devamsizlik-esik');
+  if (esikInput) {
+    await safeFetch('/api/yoklama/devamsizlik_esik', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ esik: parseInt(esikInput.value) || 3 })
+    });
+  }
+
   if (veri.durum === 'ok') {
     alert('Ayarlar başarıyla kaydedildi!');
   } else {
@@ -786,30 +797,96 @@ async function yardimTalepleriCek() {
 
     let bekleyenSayisi = 0;
 
-    let html = '<table class="veri-tablosu" style="width:100%; border-collapse:collapse;">';
-    html += '<thead><tr style="border-bottom:1px solid #4a5568;"><th style="padding:0.5rem;text-align:left;">Zaman</th><th style="padding:0.5rem;text-align:left;">Öğrenci No</th><th style="padding:0.5rem;text-align:left;">Ad Soyad</th><th style="padding:0.5rem;text-align:left;">Durum</th><th style="padding:0.5rem;text-align:right;">İşlem</th></tr></thead>';
-    html += '<tbody>';
+    const kategoriMap = { komut: '\u{1F527} Komut', dosya: '\u{1F4C1} Dosya', terminal: '\u{1F4BB} Terminal', soru: '\u{2753} Soru', diger: '\u{1F4CB} Di\u011Fer' };
+
+    const tablo = document.createElement('table');
+    tablo.className = 'veri-tablosu';
+    tablo.style.cssText = 'width:100%; border-collapse:collapse;';
+
+    const thead = document.createElement('thead');
+    const baslikSatir = document.createElement('tr');
+    baslikSatir.style.borderBottom = '1px solid #4a5568';
+    ['Zaman', '\u00D6\u011Frenci No', 'Ad Soyad', 'Kategori', 'Durum', '\u0130\u015Flem'].forEach((txt, i) => {
+      const th = document.createElement('th');
+      th.style.padding = '0.5rem';
+      th.style.textAlign = (i === 5) ? 'right' : 'left';
+      th.textContent = txt;
+      baslikSatir.appendChild(th);
+    });
+    thead.appendChild(baslikSatir);
+    tablo.appendChild(thead);
+
+    const tbody = document.createElement('tbody');
 
     veri.talepler.forEach(t => {
-      let bg = t.durum === 'bekliyor' ? 'rgba(43,108,176,0.1)' : 'rgba(72,187,120,0.1)';
-      let yaziFormat = t.durum === 'bekliyor' ? '<span style="color:#63b3ed; font-weight:bold;">Bekliyor</span>' : '<span style="color:#48bb78; font-weight:bold;">Kabul Edildi</span>';
-
       if (t.durum === 'bekliyor') bekleyenSayisi++;
 
-      html += `<tr style="border-bottom:1px solid #2d3748; background:${bg};">
-            <td style="padding:0.5rem;color:#a0aec0;">${t.tarih} ${t.saat.substring(0, 5)}</td>
-            <td style="padding:0.5rem;">${t.numara}</td>
-            <td style="padding:0.5rem;">${t.ad_soyad}</td>
-            <td style="padding:0.5rem;">${yaziFormat}</td>
-            <td style="padding:0.5rem;text-align:right;">
-              ${t.durum === 'bekliyor' ? `<button onclick="yardimKabul(${t.id}, 'kabul_edildi')" style="background:#2b6cb0; border:none; padding:4px 8px; border-radius:4px; color:white; cursor:pointer; margin-right:4px;">Kabul Et (Bağlan)</button>` : ''}
-              <button onclick="yardimKabul(${t.id}, 'tamamlandi')" style="background:#48bb78; border:none; padding:4px 8px; border-radius:4px; color:white; cursor:pointer;">Tamamla</button>
-            </td>
-        </tr>`;
+      const tr = document.createElement('tr');
+      tr.style.borderBottom = '1px solid #2d3748';
+      tr.style.background = t.durum === 'bekliyor' ? 'rgba(43,108,176,0.1)' : 'rgba(72,187,120,0.1)';
+
+      // Zaman
+      const tdZaman = document.createElement('td');
+      tdZaman.style.cssText = 'padding:0.5rem;color:#a0aec0;';
+      tdZaman.textContent = t.tarih + ' ' + t.saat.substring(0, 5);
+      tr.appendChild(tdZaman);
+
+      // Numara
+      const tdNumara = document.createElement('td');
+      tdNumara.style.padding = '0.5rem';
+      tdNumara.textContent = t.numara;
+      tr.appendChild(tdNumara);
+
+      // Ad Soyad
+      const tdAd = document.createElement('td');
+      tdAd.style.padding = '0.5rem';
+      tdAd.textContent = t.ad_soyad;
+      tr.appendChild(tdAd);
+
+      // Kategori
+      const tdKat = document.createElement('td');
+      tdKat.style.padding = '0.5rem';
+      tdKat.textContent = kategoriMap[t.kategori] || (t.kategori || '—');
+      tr.appendChild(tdKat);
+
+      // Durum
+      const tdDurum = document.createElement('td');
+      tdDurum.style.padding = '0.5rem';
+      const durumSpan = document.createElement('span');
+      durumSpan.style.fontWeight = 'bold';
+      if (t.durum === 'bekliyor') {
+        durumSpan.style.color = '#63b3ed';
+        durumSpan.textContent = 'Bekliyor';
+      } else {
+        durumSpan.style.color = '#48bb78';
+        durumSpan.textContent = 'Kabul Edildi';
+      }
+      tdDurum.appendChild(durumSpan);
+      tr.appendChild(tdDurum);
+
+      // İşlem
+      const tdIslem = document.createElement('td');
+      tdIslem.style.cssText = 'padding:0.5rem;text-align:right;';
+      if (t.durum === 'bekliyor') {
+        const btnKabul = document.createElement('button');
+        btnKabul.textContent = 'Kabul Et (Ba\u011Flan)';
+        btnKabul.style.cssText = 'background:#2b6cb0; border:none; padding:4px 8px; border-radius:4px; color:white; cursor:pointer; margin-right:4px;';
+        btnKabul.addEventListener('click', () => yardimKabul(t.id, 'kabul_edildi'));
+        tdIslem.appendChild(btnKabul);
+      }
+      const btnTamam = document.createElement('button');
+      btnTamam.textContent = 'Tamamla';
+      btnTamam.style.cssText = 'background:#48bb78; border:none; padding:4px 8px; border-radius:4px; color:white; cursor:pointer;';
+      btnTamam.addEventListener('click', () => yardimKabul(t.id, 'tamamlandi'));
+      tdIslem.appendChild(btnTamam);
+      tr.appendChild(tdIslem);
+
+      tbody.appendChild(tr);
     });
 
-    html += '</tbody></table>';
-    div.innerHTML = html;
+    tablo.appendChild(tbody);
+    div.textContent = '';
+    div.appendChild(tablo);
 
     if (rozet) {
       if (bekleyenSayisi > 0) {
@@ -939,11 +1016,179 @@ async function topluCikis() {
   }
 }
 
+// ── Devam Raporu ─────────────────────────────────────────────────
+
+let _devamRaporuVeri = null;
+
+async function devamRaporuCek() {
+  try {
+    // Sinif dropdown'ini doldur (ilk sefer)
+    var sinifSelect = document.getElementById('rapor-sinif');
+    if (sinifSelect && sinifSelect.options.length <= 1) {
+      var sRes = await safeFetch('/api/siniflar');
+      var sVeri = await sRes.json();
+      (sVeri.siniflar || []).forEach(function(s) {
+        var opt = document.createElement('option');
+        opt.value = s.id;
+        opt.textContent = s.ad;
+        sinifSelect.appendChild(opt);
+      });
+    }
+
+    var sinifId = document.getElementById('rapor-sinif') ? document.getElementById('rapor-sinif').value : '';
+    var baslangic = document.getElementById('rapor-baslangic') ? document.getElementById('rapor-baslangic').value : '';
+    var bitis = document.getElementById('rapor-bitis') ? document.getElementById('rapor-bitis').value : '';
+
+    var url = '/api/yoklama/rapor?';
+    if (sinifId) url += 'sinif_id=' + encodeURIComponent(sinifId) + '&';
+    if (baslangic) url += 'baslangic=' + encodeURIComponent(baslangic) + '&';
+    if (bitis) url += 'bitis=' + encodeURIComponent(bitis) + '&';
+
+    var yanit = await safeFetch(url);
+    var veri = await yanit.json();
+    _devamRaporuVeri = veri;
+
+    var div = document.getElementById('devam-raporu-icerik');
+    if (!div) return;
+
+    if (!veri.rapor || veri.rapor.length === 0) {
+      div.textContent = '';
+      var bosMsg = document.createElement('div');
+      bosMsg.style.cssText = 'color:#718096; text-align:center; padding:2rem;';
+      bosMsg.textContent = 'Kayit bulunamadi.';
+      div.appendChild(bosMsg);
+      return;
+    }
+
+    // Tablo olustur
+    var tablo = document.createElement('table');
+    tablo.style.cssText = 'width:100%; border-collapse:collapse; font-size:0.8rem;';
+
+    // Header
+    var thead = document.createElement('tr');
+    thead.style.borderBottom = '2px solid #4a5568';
+
+    var basliklar = ['Ogrenci', '%'];
+    veri.tarihler.forEach(function(t) {
+      basliklar.push(t.substring(5));
+    });
+
+    basliklar.forEach(function(h) {
+      var th = document.createElement('th');
+      th.style.cssText = 'padding:4px 6px; text-align:center; color:#a0aec0; white-space:nowrap;';
+      th.textContent = h;
+      thead.appendChild(th);
+    });
+    tablo.appendChild(thead);
+
+    // Rows
+    veri.rapor.forEach(function(o) {
+      var tr = document.createElement('tr');
+      tr.style.borderBottom = '1px solid #2d3748';
+      if (o.uyari) tr.style.background = 'rgba(229,62,62,0.15)';
+
+      var tdAd = document.createElement('td');
+      tdAd.style.cssText = 'padding:4px 6px; white-space:nowrap;';
+      tdAd.textContent = o.ad_soyad;
+      if (o.uyari) tdAd.style.color = '#fc8181';
+      tr.appendChild(tdAd);
+
+      var tdPct = document.createElement('td');
+      tdPct.style.cssText = 'padding:4px 6px; text-align:center; font-weight:bold;';
+      tdPct.textContent = '%' + o.yuzde;
+      if (o.yuzde >= 70) {
+        tdPct.style.color = '#48bb78';
+      } else if (o.yuzde >= 50) {
+        tdPct.style.color = '#ed8936';
+      } else {
+        tdPct.style.color = '#e53e3e';
+      }
+      tr.appendChild(tdPct);
+
+      veri.tarihler.forEach(function(t) {
+        var td = document.createElement('td');
+        td.style.cssText = 'padding:4px 6px; text-align:center;';
+        if (o.gunler[t] === 'geldi') {
+          td.textContent = '\u2705';
+        } else {
+          td.textContent = '\u274C';
+        }
+        tr.appendChild(td);
+      });
+
+      tablo.appendChild(tr);
+    });
+
+    div.textContent = '';
+    div.appendChild(tablo);
+  } catch (e) {
+    console.error('Devam raporu hatasi:', e);
+  }
+}
+
+async function devamRaporuCSV() {
+  try {
+    var sinifId = document.getElementById('rapor-sinif') ? document.getElementById('rapor-sinif').value : '';
+    var baslangic = document.getElementById('rapor-baslangic') ? document.getElementById('rapor-baslangic').value : '';
+    var bitis = document.getElementById('rapor-bitis') ? document.getElementById('rapor-bitis').value : '';
+
+    var veri = _devamRaporuVeri;
+
+    // Eger veri yoksa tekrar cek
+    if (!veri || !veri.rapor) {
+      var url = '/api/yoklama/rapor?';
+      if (sinifId) url += 'sinif_id=' + encodeURIComponent(sinifId) + '&';
+      if (baslangic) url += 'baslangic=' + encodeURIComponent(baslangic) + '&';
+      if (bitis) url += 'bitis=' + encodeURIComponent(bitis) + '&';
+
+      var yanit = await safeFetch(url);
+      veri = await yanit.json();
+    }
+
+    if (!veri || !veri.rapor || veri.rapor.length === 0) {
+      alert('Disa aktarilacak veri yok.');
+      return;
+    }
+
+    var csv = 'Ogrenci,Numara,Katilim,Devamsizlik,%,' + veri.tarihler.join(',') + '\n';
+    veri.rapor.forEach(function(o) {
+      var satir = '"' + o.ad_soyad + '",' + o.numara + ',' + o.katilim + ',' + o.devamsizlik + ',' + o.yuzde;
+      veri.tarihler.forEach(function(t) {
+        satir += ',' + (o.gunler[t] === 'geldi' ? '1' : '0');
+      });
+      csv += satir + '\n';
+    });
+
+    var blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
+    var a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'devam_raporu.csv';
+    a.click();
+  } catch (e) {
+    console.error('CSV export hatasi:', e);
+    alert('CSV indirme hatasi.');
+  }
+}
+
+async function devamsizlikEsikYukle() {
+  try {
+    var yanit = await safeFetch('/api/yoklama/devamsizlik_esik');
+    var veri = await yanit.json();
+    var input = document.getElementById('config-devamsizlik-esik');
+    if (input && veri.esik !== undefined) {
+      input.value = veri.esik;
+    }
+  } catch (e) {
+    console.error('Devamsizlik esik yukleme hatasi:', e);
+  }
+}
+
 document.addEventListener('DOMContentLoaded', () => {
   yoklamaPaketleriCek();
   yoklamaCek();
   sahteCek();
   guvenlikSoketBaslat();  // Güvenlik uyarılarını dinle
+  devamsizlikEsikYukle(); // Devamsizlik esigini yukle
 
   // Eski URL kontrolü ve otomatik düzeltme (Eskiden /terminal-yayin kullanılıyordu)
   const ttydUrlInput = document.getElementById('config-ttyd-url');

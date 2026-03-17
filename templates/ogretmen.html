@@ -199,6 +199,7 @@
       <button class="tab-btn" onclick="tabGec('sinav', this); sinavListesiniGuncelle();">📝 Sınavlar</button>
       <button class="tab-btn" onclick="tabGec('ogrenci_yonetim', this); ogrenciYonetimCek();">🎓 Öğrenci
         Yönetimi</button>
+      <button class="tab-btn" onclick="tabGec('devam_raporu', this); devamRaporuCek();">📊 Devam Raporu</button>
       <button class="tab-btn" onclick="tabGec('ayarlar', this)">⚙️ Ayarlar</button>
     </div>
 
@@ -437,6 +438,25 @@
       </div>
     </div>
 
+    <!-- Devam Raporu -->
+    <div id="tab-devam_raporu" class="panel-bolum" style="margin-top:1rem;">
+      <div class="kutu-baslik">
+        <h3>📊 Devam Raporu</h3>
+      </div>
+      <div style="display:flex;gap:0.5rem;flex-wrap:wrap;margin-bottom:1rem;margin-top:1rem;">
+        <select id="rapor-sinif" style="padding:0.3rem 0.5rem;background:#2d3748;color:#e2e8f0;border:1px solid #4a5568;border-radius:6px;font-size:0.85rem;">
+          <option value="">Tüm Sınıflar</option>
+        </select>
+        <input type="date" id="rapor-baslangic" style="padding:0.3rem 0.5rem;background:#2d3748;color:#e2e8f0;border:1px solid #4a5568;border-radius:6px;font-size:0.85rem;">
+        <input type="date" id="rapor-bitis" style="padding:0.3rem 0.5rem;background:#2d3748;color:#e2e8f0;border:1px solid #4a5568;border-radius:6px;font-size:0.85rem;">
+        <button onclick="devamRaporuCek()" class="btn-kucuk" style="background:#2b6cb0;">Filtrele</button>
+        <button onclick="devamRaporuCSV()" class="btn-kucuk yeşil">📥 CSV</button>
+      </div>
+      <div id="devam-raporu-icerik" style="overflow-x:auto;">
+        <div style="color:#718096; text-align:center; padding:2rem;">Raporu görmek için Filtrele butonuna tıklayın.</div>
+      </div>
+    </div>
+
     <!-- Ayarlar -->
     <div id="tab-ayarlar" class="panel-bolum" style="margin-top:1rem;">
       <div class="kutu-baslik">
@@ -514,6 +534,14 @@
             <input type="text" id="config-ttyd-url" value="{{ config.terminal_url }}"
               style="width:100%; padding:0.6rem; background:#2d3748; border:1px solid #4a5568; border-radius:6px; color:#fff;">
             <small style="color:#718096;">Öğrenci ekranında gösterilecek terminal adresi (/terminal bırakın).</small>
+          </div>
+          <div>
+            <label style="display:block; color:#90cdf4; font-size:0.9rem; margin-bottom:0.5rem;">⚠️ Devamsızlık Uyarı Eşiği</label>
+            <div style="display:flex;align-items:center;gap:0.5rem;">
+              <input type="number" id="config-devamsizlik-esik" min="1" max="30" value="3"
+                style="width:80px; padding:0.6rem; background:#2d3748; color:#e2e8f0; border:1px solid #4a5568; border-radius:6px;">
+              <small style="color:#718096;">ders (bu kadar veya daha fazla gelmeyenler raporda uyarılır)</small>
+            </div>
           </div>
           <div style="display:flex; gap:1rem; align-items:center;">
             <button class="btn-kucuk" style="background:#48bb78;" onclick="ayarlariKaydet()">💾 Ayarları Kaydet</button>
