@@ -11,11 +11,10 @@ ENV/
 dist/
 build/
 
-# Database (data/yoklama.db hariç - proje veritabanı)
+# Database
 *.db
 *.sqlite
 *.sqlite3
-!data/yoklama.db
 
 # IDE
 .vscode/
