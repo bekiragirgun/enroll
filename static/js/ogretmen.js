@@ -1002,6 +1002,33 @@ function slaytModu() {
   modDegistir('slayt');
 }
 
+async function sifreDegistir() {
+  const mevcut = document.getElementById('sifre-mevcut')?.value || '';
+  const yeni = document.getElementById('sifre-yeni')?.value || '';
+  const sonuc = document.getElementById('sifre-sonuc');
+
+  if (!mevcut || !yeni) { alert('Mevcut ve yeni şifre gerekli'); return; }
+  if (yeni.length < 4) { alert('Yeni şifre en az 4 karakter olmalı'); return; }
+
+  try {
+    const res = await safeFetch('/teacher/sifre_degistir', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ mevcut, yeni })
+    });
+    const data = await res.json();
+    if (data.durum === 'ok') {
+      if (sonuc) { sonuc.style.color = '#48bb78'; sonuc.textContent = 'Şifre değiştirildi'; }
+      document.getElementById('sifre-mevcut').value = '';
+      document.getElementById('sifre-yeni').value = '';
+    } else {
+      if (sonuc) { sonuc.style.color = '#e53e3e'; sonuc.textContent = data.mesaj; }
+    }
+  } catch (e) {
+    if (sonuc) { sonuc.style.color = '#e53e3e'; sonuc.textContent = 'Bağlantı hatası'; }
+  }
+}
+
 async function topluCikis() {
   if (!confirm('Tüm öğrencilerin oturumunu kapatmak istediğinize emin misiniz?\n\nBu işlem tüm öğrencileri giriş sayfasına yönlendirecektir.')) return;
   try {
