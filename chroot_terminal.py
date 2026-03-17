@@ -25,7 +25,7 @@ _chroot_cache_time = 0
 _CHROOT_CACHE_TTL = 30  # 30 saniye cache
 
 # CT 991 (ogrenci-vm) bilgileri
-CT_991_HOST = "10.211.55.18"  # CT 991 IP adresi
+CT_991_HOST = "10.211.55.17"  # CT 991 IP adresi
 CT_991_SSH_PORT = 22            # Chroot içindeki SSH portu (V14 Default: 22)
 CT_991_REAL_SSH_PORT = 22       # CT 991 ana sistem SSH portu (V14 Default: 22)
 CT_991_USER = "root"            # SSH kullanıcı adı (V15 Default: root)

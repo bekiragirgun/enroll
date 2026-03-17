@@ -22,7 +22,7 @@ def seed_test_db():
             )
 
         # Chroot host ayarı (yeni VM IP)
-        db.execute("INSERT OR REPLACE INTO ayarlar (anahtar, deger) VALUES ('chroot_host', '10.211.55.18')")
+        db.execute("INSERT OR REPLACE INTO ayarlar (anahtar, deger) VALUES ('chroot_host', '10.211.55.17')")
         db.execute("INSERT OR REPLACE INTO ayarlar (anahtar, deger) VALUES ('chroot_port', '22')")
         db.execute("INSERT OR REPLACE INTO ayarlar (anahtar, deger) VALUES ('chroot_user', 'bekir')")
         db.execute("INSERT OR REPLACE INTO ayarlar (anahtar, deger) VALUES ('chroot_pass', '123123!!')")
@@ -32,5 +32,5 @@ def seed_test_db():
         db.commit()
 
     print('  ✅ Test DB seed tamamlandı: 40 öğrenci (T0001-T0040), sınıf: YUK-TEST')
-    print('  📡 Chroot Host: 10.211.55.18 (bekir/123123!!)')
+    print('  📡 Chroot Host: 10.211.55.17 (bekir/123123!!)')
     print('  🔓 Kiosk modu: Kapalı, IP kontrol: Kapalı')
