@@ -9,6 +9,7 @@ import time
 import threading
 from pathlib import Path
 import logging
+import atexit
 
 log = logging.getLogger("chroot_terminal")
 
@@ -23,6 +24,13 @@ _SYNC_INTERVAL = 60  # Sync script'i en fazla 60 saniyede bir gönder
 _chroot_cache = set()
 _chroot_cache_time = 0
 _CHROOT_CACHE_TTL = 30  # 30 saniye cache
+
+# ── SSH Connection Pool (ControlMaster) ───────────────────────
+# Tek master bağlantı üzerinden tüm SSH komutları multiplexing ile gider
+_pool_lock = threading.Lock()
+_pool_process = None   # Master SSH süreci
+_pool_socket = None    # ControlPath socket yolu
+_pool_ready = False    # Pool hazır mı?
 
 # CT 991 (ogrenci-vm) bilgileri
 CT_991_HOST = "10.211.55.17"  # CT 991 IP adresi
@@ -89,6 +97,96 @@ def _is_local(host):
     
     return False
 
+def _ssh_pool_baslat() -> bool:
+    """SSH ControlMaster bağlantısını arka planda başlat (yoksa).
+
+    Başarılı olursa sonraki tüm _ct991_exec çağrıları bu socket üzerinden
+    ~5ms latency ile çalışır (handshake yok).
+    """
+    global _pool_process, _pool_socket, _pool_ready
+
+    if _is_local(CT_991_HOST):
+        return False  # Yerel modda pool'a gerek yok
+
+    with _pool_lock:
+        # Zaten çalışıyorsa socket var mı kontrol et
+        if _pool_ready and _pool_socket and Path(_pool_socket).exists():
+            return True
+
+        socket_path = f"/tmp/ssh_pool_{CT_991_HOST}_{CT_991_REAL_SSH_PORT}_{CT_991_USER}"
+        _pool_socket = socket_path
+
+        # Önceki socket temizle
+        try:
+            if Path(socket_path).exists():
+                Path(socket_path).unlink()
+        except Exception:
+            pass
+
+        cmd = [
+            "ssh",
+            "-o", "ConnectTimeout=15",
+            "-o", "StrictHostKeyChecking=no",
+            "-o", "BatchMode=yes" if not CT_991_PASS else "BatchMode=no",
+            "-o", "ControlMaster=yes",
+            "-o", f"ControlPath={socket_path}",
+            "-o", "ControlPersist=120",  # 120 saniye boşta kalırsa kapat
+            "-p", str(CT_991_REAL_SSH_PORT),
+            "-N",  # Komut çalıştırma, sadece bağlantı tut
+            f"{CT_991_USER}@{CT_991_HOST}",
+        ]
+
+        if CT_991_PASS:
+            import shutil
+            if shutil.which("sshpass"):
+                cmd = ["sshpass", "-p", CT_991_PASS] + cmd
+
+        try:
+            proc = subprocess.Popen(
+                cmd,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+            _pool_process = proc
+
+            # Socket oluşana kadar bekle (max 5 saniye)
+            for _ in range(50):
+                if Path(socket_path).exists():
+                    _pool_ready = True
+                    log.info(f"✅ SSH pool hazır: {socket_path}")
+                    return True
+                time.sleep(0.1)
+
+            log.warning("SSH pool socket oluşmadı, fallback moduna geçiliyor")
+            _pool_ready = False
+            return False
+
+        except Exception as e:
+            log.warning(f"SSH pool başlatılamadı: {e}")
+            _pool_ready = False
+            return False
+
+
+def _ssh_pool_kapat():
+    """Uygulama kapanırken pool bağlantısını temizle."""
+    global _pool_process, _pool_ready
+    _pool_ready = False
+    if _pool_process:
+        try:
+            _pool_process.terminate()
+        except Exception:
+            pass
+    if _pool_socket:
+        try:
+            if Path(_pool_socket).exists():
+                Path(_pool_socket).unlink()
+        except Exception:
+            pass
+
+
+atexit.register(_ssh_pool_kapat)
+
+
 def _ct991_exec(command: list, retries: int = 2) -> subprocess.CompletedProcess:
     """CT 991 üzerinde komut çalıştır (Local veya SSH üzerinden).
 
@@ -103,16 +201,22 @@ def _ct991_exec(command: list, retries: int = 2) -> subprocess.CompletedProcess:
     if CT_991_USER != "root":
         final_command = ["sudo"] + command
 
+    # Pool hazırsa ControlPath ile hızlı bağlan, değilse pool'u başlat
+    use_pool = _ssh_pool_baslat()
+    control_path = _pool_socket if use_pool else "none"
+
     ssh_cmd = [
         "ssh", "-o", "ConnectTimeout=10",
         "-o", "StrictHostKeyChecking=no",
         "-o", "BatchMode=yes" if not CT_991_PASS else "BatchMode=no",
-        "-o", "ControlPath=none",
+        "-o", f"ControlPath={control_path}",
+        "-o", "ControlMaster=no",  # Master zaten _pool_process, biz slave olarak bağlanıyoruz
         "-p", str(CT_991_REAL_SSH_PORT),
         f"{CT_991_USER}@{CT_991_HOST}"
     ]
 
-    if CT_991_PASS:
+    if CT_991_PASS and not use_pool:
+        # Pool sshpass kullanıyorsa slave bağlantılarda tekrar gerekmez
         import shutil
         if not shutil.which("sshpass"):
             log.error("sshpass paketi yüklü değil!")
@@ -296,6 +400,70 @@ def chroot_olustur(username: str, ad: str = "", soyad: str = "") -> bool:
     except Exception as e:
         log.error(f"Chroot oluşturma hatası: {e}")
         return False
+
+
+def chroot_olustur_batch(users: list) -> dict:
+    """Birden fazla chroot ortamını tek SSH bağlantısında oluştur.
+
+    Args:
+        users: [{"username": str, "ad": str, "soyad": str}, ...] listesi
+
+    Returns:
+        {"username": True/False, ...} — her kullanıcı için sonuç
+    """
+    if not users:
+        return {}
+
+    sync_manager_script()
+
+    # Slug'lı kullanıcı listesi
+    prepared = []
+    for u in users:
+        slug = _slugify(u.get("username", ""))
+        if not slug:
+            continue
+        tam_ad = f"{u.get('ad', '')} {u.get('soyad', '')}".strip()
+        prepared.append((slug, tam_ad))
+
+    if not prepared:
+        return {}
+
+    # Tek SSH bağlantısında bash loop — tüm create + mount komutları sırayla
+    # JSON çıktısı ile sonuç takibi: "OK:username" veya "ERR:username"
+    loop_lines = []
+    for slug, tam_ad in prepared:
+        safe_ad = tam_ad.replace("'", "'\\''")  # bash single-quote escape
+        loop_lines.append(
+            f"{PYTHON_PATH} {CHROOT_MANAGE_SCRIPT} create '{slug}' '{safe_ad}' "
+            f"&& {PYTHON_PATH} {CHROOT_MANAGE_SCRIPT} mount '{slug}' "
+            f"&& echo 'OK:{slug}' || echo 'ERR:{slug}'"
+        )
+
+    # Hepsini tek ssh ile çalıştır (pool varsa socket üzerinden)
+    batch_script = "\n".join(loop_lines)
+    result = _ct991_exec(["bash", "-c", batch_script])
+
+    sonuclar = {}
+    for slug, _ in prepared:
+        sonuclar[slug] = False  # Varsayılan: başarısız
+
+    if result.returncode == 255:
+        log.error("Batch chroot: SSH bağlantı hatası")
+        return sonuclar
+
+    for line in result.stdout.splitlines():
+        line = line.strip()
+        if line.startswith("OK:"):
+            slug = line[3:]
+            sonuclar[slug] = True
+            _chroot_cache.add(slug)
+            log.info(f"✅ Chroot oluşturuldu (batch): {slug}")
+        elif line.startswith("ERR:"):
+            slug = line[4:]
+            sonuclar[slug] = False
+            log.error(f"❌ Chroot oluşturma hatası (batch): {slug}")
+
+    return sonuclar
 
 
 def chroot_ip_al(username: str) -> str:
