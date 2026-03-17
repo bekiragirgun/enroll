@@ -372,7 +372,27 @@ def ogrenci_girdi_event(veri):
 
 # ── Başlat ────────────────────────────────────────────────────
 if __name__ == '__main__':
+    import sys
     import socket
+
+    # --test flag kontrolü
+    if '--test' in sys.argv:
+        os.environ['DERS_TAKIP_TEST'] = '1'
+        # paths modülünü yeniden yükle (test DB aktif olsun)
+        import importlib
+        import core.paths
+        importlib.reload(core.paths)
+        from core.paths import DB_YOLU, TEST_MODE
+        # db modülünü de yeniden yükle
+        import core.db
+        importlib.reload(core.db)
+        from core.db import db_olustur, db_baglantisi
+        db_olustur()
+        # Test seed data
+        from tests.test_seed import seed_test_db
+        seed_test_db()
+        print('\n  ⚠️  TEST MODU — data/test_yoklama.db kullanılıyor\n')
+
     if ders_durumu.get('system_host'): yerel_ip = ders_durumu['system_host']
     else:
         try:

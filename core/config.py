@@ -7,7 +7,7 @@ ders_durumu = {
     'mod':   'bekleme',   # bekleme | slayt
     'dosya': '',           # aktif slayt dosyası
     'terminal_url': '/terminal',
-    'chroot_host': '192.168.111.51',
+    'chroot_host': '10.211.55.18',
     'chroot_port': 22,
     'chroot_user': 'root',
     'chroot_pass': '',
