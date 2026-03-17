@@ -22,8 +22,15 @@ systemctl enable --now chroot-pty-fix.service
 systemctl enable --now chroot-cleanup.timer
 
 # ── SSH Reload ───────────────────────────────
-echo "[5/5] SSH servisi yeniden yükleniyor..."
+echo "[5/6] SSH servisi yeniden yükleniyor..."
 systemctl reload sshd 2>/dev/null || systemctl reload ssh 2>/dev/null || true
+
+# ── NTP Senkronizasyonu ──────────────────────
+echo "[6/6] NTP zaman senkronizasyonu ayarlanıyor..."
+timedatectl set-ntp true 2>/dev/null || true
+systemctl restart systemd-timesyncd 2>/dev/null || true
+# Timezone Türkiye
+timedatectl set-timezone Europe/Istanbul 2>/dev/null || true
 
 echo ""
 echo "=== Kurulum tamamlandı ==="
@@ -47,6 +54,10 @@ echo "    MaxSessions:    80"
 echo "    MaxStartups:    50:60:100"
 echo "    Compression:    off (LAN performans)"
 echo "    UseDNS:         off (hızlı bağlantı)"
+echo ""
+echo "  NTP:"
+echo "    Timezone:       Europe/Istanbul"
+echo "    NTP Servers:    ntp.ubuntu.com, time.google.com, time.cloudflare.com"
 echo ""
 echo "  Servisler:"
 echo "    chroot-pty-fix: boot'ta PTY onarımı"
