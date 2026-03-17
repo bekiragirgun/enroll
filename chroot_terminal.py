@@ -30,7 +30,8 @@ CT_991_SSH_PORT = 22            # Chroot içindeki SSH portu (V14 Default: 22)
 CT_991_REAL_SSH_PORT = 22       # CT 991 ana sistem SSH portu (V14 Default: 22)
 CT_991_USER = "root"            # SSH kullanıcı adı (V15 Default: root)
 CT_991_PASS = ""                # SSH şifresi (Opsiyonel, sshpass gerektirir)
-CHROOT_MANAGE_SCRIPT = "/root/enroll/chroot_yonetici.py" # PCT 991'deki tam yol
+
+CHROOT_MANAGE_SCRIPT = "/root/enroll/chroot_yonetici.py" # Varsayılan, ayarlari_yukle ile güncellenir
 PYTHON_PATH = "python3" # PCT 991'deki python yolu (Venv yerine sistem python kullanıyoruz)
 CHROOT_BASE = "/home/chroot"
 

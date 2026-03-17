@@ -61,6 +61,11 @@ def ayarlari_yukle():
         chroot_terminal.CT_991_REAL_SSH_PORT = chroot_port
         chroot_terminal.CT_991_USER = chroot_user
         chroot_terminal.CT_991_PASS = chroot_pass
+        # Script yolunu kullanıcıya göre güncelle
+        if chroot_user == "root":
+            chroot_terminal.CHROOT_MANAGE_SCRIPT = "/root/enroll/chroot_yonetici.py"
+        else:
+            chroot_terminal.CHROOT_MANAGE_SCRIPT = f"/home/{chroot_user}/enroll/chroot_yonetici.py"
         log.info(f"✅ Ayarlar yüklendi: Host={chroot_host}, Port={chroot_port}, User={chroot_user}")
     except Exception as e:
         log.error(f"❌ Modül ayarları yüklenirken hata: {e}")

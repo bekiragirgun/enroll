@@ -169,7 +169,7 @@ def ogretmen_baglan_event(veri=None):
         import time
         time.sleep(0.3)  # Reader thread'in çıkmasını bekle
 
-    from chroot_terminal import chroot_var_mi, chroot_olustur, CT_991_HOST, CT_991_REAL_SSH_PORT, CHROOT_BASE, _slugify
+    from chroot_terminal import chroot_var_mi, chroot_olustur, CT_991_HOST, CT_991_REAL_SSH_PORT, CT_991_USER, CT_991_PASS, CHROOT_BASE, _slugify
     ogretmen_numara = _slugify(ogretmen_numara)
 
     try:
@@ -186,9 +186,11 @@ def ogretmen_baglan_event(veri=None):
             '-o', 'StrictHostKeyChecking=no',
             '-o', 'ControlPath=none',
             '-p', str(CT_991_REAL_SSH_PORT),
-            f'root@{CT_991_HOST}',
-            f"/bin/bash -c \"while true; do chroot '{safe_chroot_path}' /bin/su - '{safe_username}'; echo 'Oturum kapatılamaz, yeniden başlatılıyor...'; sleep 1; done\""
+            f'{CT_991_USER}@{CT_991_HOST}',
+            f"sudo /bin/bash -c \"while true; do chroot '{safe_chroot_path}' /bin/su - '{safe_username}'; echo 'Oturum kapatılamaz, yeniden başlatılıyor...'; sleep 1; done\""
         ]
+        if CT_991_PASS:
+            ssh_cmd = ['sshpass', '-p', CT_991_PASS] + ssh_cmd
 
         proc = subprocess.Popen(ssh_cmd, stdin=slave_fd, stdout=slave_fd, stderr=slave_fd, preexec_fn=os.setsid)
         os.close(slave_fd)
@@ -312,7 +314,7 @@ def ogrenci_baglan_event(veri):
 
     ogrenci_sidleri[sid] = username
     try:
-        from chroot_terminal import CT_991_HOST, CT_991_REAL_SSH_PORT, CHROOT_BASE, _slugify, chroot_olustur
+        from chroot_terminal import CT_991_HOST, CT_991_REAL_SSH_PORT, CT_991_USER, CT_991_PASS, CHROOT_BASE, _slugify, chroot_olustur
         username = _slugify(username)
         
         ad_soyad = "Ogrenci"
@@ -333,9 +335,11 @@ def ogrenci_baglan_event(veri):
             'ssh', '-t',
             '-o', 'StrictHostKeyChecking=no',
             '-o', 'ControlPath=none',
-            '-p', str(CT_991_REAL_SSH_PORT), f'root@{CT_991_HOST}',
-            f"/bin/bash -c \"while true; do chroot '{safe_chroot_path}' /bin/su - '{safe_username}'; echo 'Oturum kapatılamaz, yeniden başlatılıyor...'; sleep 1; done\""
+            '-p', str(CT_991_REAL_SSH_PORT), f'{CT_991_USER}@{CT_991_HOST}',
+            f"sudo /bin/bash -c \"while true; do chroot '{safe_chroot_path}' /bin/su - '{safe_username}'; echo 'Oturum kapatılamaz, yeniden başlatılıyor...'; sleep 1; done\""
         ]
+        if CT_991_PASS:
+            ssh_cmd = ['sshpass', '-p', CT_991_PASS] + ssh_cmd
 
         proc = subprocess.Popen(ssh_cmd, stdin=slave_fd, stdout=slave_fd, stderr=slave_fd, preexec_fn=os.setsid)
         os.close(slave_fd)
@@ -391,6 +395,8 @@ if __name__ == '__main__':
         # Test seed data
         from tests.test_seed import seed_test_db
         seed_test_db()
+        # Ayarları test DB'den yeniden yükle
+        ayarlari_yukle()
         print('\n  ⚠️  TEST MODU — data/test_yoklama.db kullanılıyor\n')
 
     if ders_durumu.get('system_host'): yerel_ip = ders_durumu['system_host']
