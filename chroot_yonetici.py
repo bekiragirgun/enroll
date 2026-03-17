@@ -248,6 +248,9 @@ deb http://security.ubuntu.com/ubuntu/ jammy-security main restricted universe m
     except KeyError:
         _run(["groupadd", STUDENT_GROUP])
 
+    # Skel'i Ubuntu-benzeri varsayılan home yapısıyla doldur
+    setup_skel()
+
     log.info("✅ Şablon chroot hazır!")
 
 
@@ -390,7 +393,6 @@ def create_student_chroot(username, real_name=""):
         log.info(f"{username} için chroot oluşturuluyor/onarılıyor...")
         student_path.mkdir(parents=True, exist_ok=True)
         # Şablondan kopyala
-        import subprocess
         result = subprocess.run(
             ["rsync", "-a", "--exclude=/dev/*", "--exclude=/proc/*",
                    "--exclude=/sys/*", "--exclude=/var/run/*",
@@ -423,34 +425,36 @@ def create_student_chroot(username, real_name=""):
         log.error("Konfigürasyon senkronizasyonu başarısız!")
         # Burada durmuyoruz ama hata logu kritik
 
-    # Home dizini ve Shell ortamı (ilk kez ise)
+    # Home dizini — skel'den kopyala (ilk kez ise)
     student_home = student_path / "home" / username
-    student_home.mkdir(mode=0o755, parents=True, exist_ok=True)
-    
-    bashrc = student_home / ".bashrc"
-    if not bashrc.exists():
-        bashrc.write_text(f"""
-export PS1="\\[\\033[01;32m\\]\\u@\\h\\[\\033[00m\\]:\\[\\033[01;34m\\]\\w\\[\\033[00m\\]\\$ "
-alias ll='ls -la'
-alias ..='cd ..'
-alias root='sudo su -'
-export IGNOREEOF=10
-echo "Kapadokya Üniversitesi Linux Laboratuvarı"
-echo "Kullanıcı: {username} | Yetki: sudo su - ile root olabilirsiniz"
-echo "İpucu: Ctrl+D hemen çıkış yapmaz (10 kez basılmalıdır)."
-echo ""
-""")
+    skel_path = STUDENT_TEMPLATE / "etc" / "skel"
 
-    # .profile
-    profile = student_home / ".profile"
-    if not profile.exists():
-        profile.write_text("""
-if [ -n "$BASH_VERSION" ]; then
-    if [ -f "$HOME/.bashrc" ]; then
-        . "$HOME/.bashrc"
-    fi
-fi
-""")
+    if not student_home.exists():
+        student_home.mkdir(mode=0o755, parents=True)
+
+        # Skel varsa içeriğini kopyala (Ubuntu varsayılan home yapısı)
+        if skel_path.exists():
+            subprocess.run(
+                ["cp", "-a", f"{skel_path}/.", str(student_home)],
+                check=False
+            )
+            log.info(f"📂 Skel kopyalandı → {student_home}")
+        else:
+            # Skel yoksa en azından temel dosyaları oluştur
+            (student_home / ".bashrc").write_text(
+                f'export PS1="\\[\\033[01;32m\\]\\u@\\h\\[\\033[00m\\]:\\[\\033[01;34m\\]\\w\\[\\033[00m\\]\\$ "\n'
+                f'alias ll="ls -la"\nalias root="sudo su -"\nexport IGNOREEOF=10\n'
+            )
+            (student_home / ".profile").write_text(
+                '[ -f "$HOME/.bashrc" ] && . "$HOME/.bashrc"\n'
+            )
+
+    # Home sahipliğini öğrenciye ver
+    try:
+        user_info = pwd.getpwnam(username)
+        _run(["chown", "-R", f"{user_info.pw_uid}:{user_info.pw_gid}", str(student_home)], check=False)
+    except KeyError:
+        pass
 
     log.info(f"✅ {username} chroot ortamı hazır.")
     return True
@@ -497,6 +501,322 @@ def create_ssh_entry(username):
     # SSH'yi restart et
     subprocess.run(["systemctl", "restart", "sshd"], check=False)
     log.info(f"✅ {username} SSH/Sudoers yapılandırması tamam")
+
+
+def setup_skel():
+    """
+    Template içindeki /etc/skel'i Ubuntu benzeri varsayılan home yapısıyla doldur.
+
+    Yeni öğrenci oluşturulduğunda bu skel kopyalanır.
+    Mevcut öğrenciler etkilenmez.
+    """
+    skel = STUDENT_TEMPLATE / "etc" / "skel"
+    skel.mkdir(parents=True, exist_ok=True)
+
+    # ── Standart Ubuntu home klasörleri ──────────────────────────
+    for klasor in ["Desktop", "Documents", "Downloads", "Music", "Pictures", "Videos", "Public", "Templates"]:
+        (skel / klasor).mkdir(exist_ok=True)
+
+    # ── Laboratuvar klasörü ───────────────────────────────────────
+    lab = skel / "lab"
+    lab.mkdir(exist_ok=True)
+
+    # Karşılama / tanıtım dosyası
+    (lab / "00_hos_geldiniz.txt").write_text("""\
+╔══════════════════════════════════════════════════════╗
+║   Kapadokya Üniversitesi — Linux Laboratuvarı        ║
+╚══════════════════════════════════════════════════════╝
+
+Bu terminal sizin izole çalışma alanınızdır.
+Burada yaptığınız değişiklikler sadece size aittir.
+
+Faydalı komutlar:
+  ls -la         → Dosya listesi (gizli dosyalar dahil)
+  pwd            → Bulunduğunuz dizin
+  cd ~/lab       → Lab klasörüne git
+  sudo su -      → Root kullanıcısına geç
+  man <komut>    → Komut kılavuzunu aç
+
+Alıştırmalar için: cd ~/lab/alistirmalar
+""")
+
+    # Alıştırma klasörü
+    alist = lab / "alistirmalar"
+    alist.mkdir(exist_ok=True)
+
+    (alist / "01_dosya_islemleri.sh").write_text("""\
+#!/bin/bash
+# Alıştırma 1: Temel Dosya İşlemleri
+# Bu dosyayı inceleyin ve komutları teker teker çalıştırın.
+
+echo "=== Dizin Yapısı ==="
+ls -la ~/
+
+echo ""
+echo "=== Yeni Dizin Oluştur ==="
+mkdir -p ~/Documents/proje1
+echo "proje1 dizini oluşturuldu"
+
+echo ""
+echo "=== Dosya Oluştur ve Düzenle ==="
+echo "Merhaba Dünya" > ~/Documents/proje1/readme.txt
+cat ~/Documents/proje1/readme.txt
+
+echo ""
+echo "Alıştırma 1 tamamlandı!"
+""")
+    (alist / "01_dosya_islemleri.sh").chmod(0o755)
+
+    (alist / "02_izinler.sh").write_text("""\
+#!/bin/bash
+# Alıştırma 2: Dosya İzinleri
+# chmod ve chown komutlarını öğrenin.
+
+echo "=== Mevcut İzinleri Gör ==="
+ls -la ~/lab/alistirmalar/
+
+echo ""
+echo "=== İzin Değiştir ==="
+touch ~/Documents/test_dosyasi.txt
+chmod 644 ~/Documents/test_dosyasi.txt
+ls -la ~/Documents/test_dosyasi.txt
+
+echo ""
+echo "=== İzin Sembolik Gösterim ==="
+echo "r=4, w=2, x=1"
+echo "644 = rw-r--r-- (Sahibi: okuma+yazma, Diğerleri: sadece okuma)"
+echo "755 = rwxr-xr-x (Sahibi: tam yetki, Diğerleri: okuma+çalıştırma)"
+""")
+    (alist / "02_izinler.sh").chmod(0o755)
+
+    (alist / "03_metin_islemleri.sh").write_text("""\
+#!/bin/bash
+# Alıştırma 3: Metin İşleme (grep, awk, sed)
+
+echo "=== grep ile Arama ==="
+grep "root" /etc/passwd
+
+echo ""
+echo "=== awk ile Sütun Alma ==="
+awk -F: '{print $1}' /etc/passwd | head -5
+
+echo ""
+echo "=== sed ile Değiştirme ==="
+echo "merhaba dünya" | sed 's/dünya/linux/'
+
+echo ""
+echo "=== Pipeline ==="
+cat /etc/passwd | grep -v "^#" | awk -F: '{print $1, $7}' | head -5
+""")
+    (alist / "03_metin_islemleri.sh").chmod(0o755)
+
+    # ── Ders Notları ─────────────────────────────────────────────
+    notlar = lab / "notlar"
+    notlar.mkdir(exist_ok=True)
+
+    (notlar / "01_linux_temelleri.md").write_text("""\
+# Linux Temelleri
+
+## Dosya Sistemi
+
+Linux'ta her şey bir dosyadır. Kök dizin `/` ile başlar.
+
+```
+/
+├── bin/    → Temel komutlar (ls, cp, mv...)
+├── etc/    → Yapılandırma dosyaları
+├── home/   → Kullanıcı home dizinleri
+├── tmp/    → Geçici dosyalar
+├── usr/    → Kullanıcı programları
+└── var/    → Değişken veri (log, cache...)
+```
+
+## Temel Komutlar
+
+| Komut | Açıklama | Örnek |
+|-------|----------|-------|
+| `ls`  | Dosya listele | `ls -la` |
+| `cd`  | Dizin değiştir | `cd /etc` |
+| `pwd` | Bulunduğun dizin | `pwd` |
+| `mkdir` | Dizin oluştur | `mkdir proje` |
+| `rm` | Sil | `rm dosya.txt` |
+| `cp` | Kopyala | `cp a.txt b.txt` |
+| `mv` | Taşı/Yeniden adlandır | `mv eski.txt yeni.txt` |
+| `cat` | İçerik göster | `cat /etc/hostname` |
+| `man` | Kılavuz sayfası | `man ls` |
+
+## Dosya İzinleri
+
+```
+-rw-r--r-- 1 kullanici grup 1234 Mar 17 10:00 dosya.txt
+│└──┘└──┘└──┘
+│ │   │   └── Diğerleri izinleri
+│ │   └────── Grup izinleri
+│ └────────── Sahip izinleri
+└──────────── Dosya tipi (- = dosya, d = dizin)
+```
+
+**Sayısal gösterim:** r=4, w=2, x=1
+- `chmod 755 dosya` → rwxr-xr-x
+- `chmod 644 dosya` → rw-r--r--
+
+## Metin İşleme
+
+```bash
+grep "arama" dosya.txt        # Metin ara
+grep -r "arama" ./dizin/      # Dizinde ara
+cat dosya.txt | grep "arama"  # Pipeline ile ara
+sed 's/eski/yeni/g' dosya.txt # Metni değiştir
+awk '{print $1}' dosya.txt    # İlk sütunu al
+```
+""")
+
+    (notlar / "02_kullanici_yonetimi.md").write_text("""\
+# Kullanıcı ve Grup Yönetimi
+
+## Temel Kavramlar
+
+- Her dosyanın bir **sahibi** (user) ve **grubu** (group) var
+- **root** kullanıcısı (UID=0) tam yetkiye sahip
+- Normal kullanıcılar kendi dosyaları üzerinde işlem yapabilir
+
+## Komutlar
+
+```bash
+whoami              # Mevcut kullanıcı
+id                  # Kullanıcı ID ve grup bilgisi
+sudo su -           # Root kullanıcısına geç
+passwd              # Şifre değiştir
+
+# Kullanıcı yönetimi (root yetkisi gerekir)
+useradd yeni_kullanici
+userdel eski_kullanici
+usermod -G grup kullanici
+
+# Grup yönetimi
+groupadd yeni_grup
+groups kullanici    # Kullanıcının grupları
+```
+
+## /etc/passwd Yapısı
+
+```
+kullanici:x:1001:1001:Ad Soyad:/home/kullanici:/bin/bash
+    │      │  │    │      │           │              └── Shell
+    │      │  │    │      │           └── Home dizini
+    │      │  │    │      └── GECOS (Açıklama)
+    │      │  │    └── GID (Grup ID)
+    │      │  └── UID (Kullanıcı ID)
+    │      └── Şifre (x = shadow'da)
+    └── Kullanıcı adı
+```
+
+## sudo Kullanımı
+
+```bash
+sudo komut              # Tek komut root ile çalıştır
+sudo su -               # Root shell'e geç
+sudo cat /etc/shadow    # Root gerektiren dosyayı oku
+```
+""")
+
+    (notlar / "03_ag_komutlari.md").write_text("""\
+# Ağ Komutları
+
+## Bağlantı Kontrol
+
+```bash
+ping 8.8.8.8            # ICMP ile bağlantı testi
+ping -c 4 google.com    # 4 paket gönder
+traceroute google.com   # Rota takip
+nslookup google.com     # DNS sorgusu
+dig google.com          # Detaylı DNS sorgusu
+```
+
+## Ağ Arayüzleri
+
+```bash
+ip addr                 # IP adresleri (modern)
+ip addr show eth0       # Belirli arayüz
+ifconfig                # Ağ arayüzleri (eski)
+ip route                # Yönlendirme tablosu
+```
+
+## Bağlantı Durumu
+
+```bash
+ss -tuln                # Açık portlar
+ss -tnp                 # TCP bağlantıları + process
+netstat -tuln           # Eski stil port listesi
+curl -I http://site.com # HTTP başlık bilgisi
+wget http://site.com    # Dosya indir
+```
+
+## SSH
+
+```bash
+ssh kullanici@sunucu         # SSH bağlantısı
+ssh -p 2222 kullanici@sunucu # Port belirt
+scp dosya.txt k@sunucu:~/    # Dosya kopyala
+```
+""")
+
+    log.info(f"✅ Ders notları skel'e eklendi: {notlar}")
+
+    # ── .bashrc (zenginleştirilmiş) ───────────────────────────────
+    (skel / ".bashrc").write_text("""\
+# ~/.bashrc — Kapadokya Üniversitesi Linux Lab
+
+export PS1="\\[\\033[01;32m\\]\\u@\\h\\[\\033[00m\\]:\\[\\033[01;34m\\]\\w\\[\\033[00m\\]\\$ "
+export LANG=tr_TR.UTF-8
+export IGNOREEOF=10
+
+# Takma adlar
+alias ll='ls -la --color=auto'
+alias la='ls -A --color=auto'
+alias l='ls -CF --color=auto'
+alias ls='ls --color=auto'
+alias ..='cd ..'
+alias ...='cd ../..'
+alias root='sudo su -'
+alias lab='cd ~/lab'
+alias alistirma='cd ~/lab/alistirmalar'
+
+# Renkli grep
+alias grep='grep --color=auto'
+alias fgrep='fgrep --color=auto'
+alias egrep='egrep --color=auto'
+
+# Bilgi mesajı (sadece interaktif oturumda)
+if [[ $- == *i* ]]; then
+    echo "──────────────────────────────────────────"
+    echo "  Kapadokya Üniversitesi Linux Laboratuvarı"
+    echo "  Kullanıcı : $USER"
+    echo "  Sunucu    : $(hostname)"
+    echo "  Alıştırma : cd ~/lab && ls"
+    echo "──────────────────────────────────────────"
+fi
+""")
+
+    # ── .profile ─────────────────────────────────────────────────
+    (skel / ".profile").write_text("""\
+if [ -n "$BASH_VERSION" ]; then
+    [ -f "$HOME/.bashrc" ] && . "$HOME/.bashrc"
+fi
+[ -d "$HOME/bin" ] && PATH="$HOME/bin:$PATH"
+""")
+
+    # ── .bash_history (örnek komutlar, başlangıç rehberi) ─────────
+    (skel / ".bash_history").write_text("""\
+ls -la
+cd ~/lab
+cat ~/lab/00_hos_geldiniz.txt
+cd ~/lab/alistirmalar
+ls -la
+bash 01_dosya_islemleri.sh
+""")
+
+    log.info(f"✅ /etc/skel Ubuntu-benzeri yapıyla dolduruldu: {skel}")
 
 
 def list_student_chroots():
