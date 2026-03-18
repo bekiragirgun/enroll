@@ -59,9 +59,10 @@ function modalGoster(mod, ekstra) {
 
   // Overlay'i kapat (Eğer tam ekransa veya bekleme modundaysa)
   if (overlay) overlay.style.display = 'none';
-  // Eğer bekleme modunda değilsek çıkış butonunu göster
-  if (mod !== 'bekleme' && cikisAlani) {
-    cikisAlani.style.display = 'block';
+  // Çıkış/yardım butonlarını göster (SEB'deyken bekleme dahil her modda)
+  if (cikisAlani) {
+    const isSEB = navigator.userAgent.includes('SafeExamBrowser');
+    cikisAlani.style.display = (mod !== 'bekleme' || isSEB) ? 'flex' : 'none';
   }
 
   if (mod === 'bekleme') {
@@ -262,12 +263,11 @@ async function durumKontrol() {
       modalGoster(veri.mod, veri);
     }
 
-    // SEB çıkış butonu görünürlüğü — kiosk modundaysa ve izin verildiyse göster
+    // SEB çıkış butonu görünürlüğü — SEB içindeyken her zaman göster
     const sebCikisTalep = document.getElementById('btn-cikis-talep');
     if (sebCikisTalep) {
       const isSEB = navigator.userAgent.includes('SafeExamBrowser');
-      // Sadece SEB içindeyken VE cikis_izni açıkken göster
-      sebCikisTalep.style.display = (isSEB && veri.cikis_izni) ? 'block' : 'none';
+      sebCikisTalep.style.display = isSEB ? 'block' : 'none';
     }
   } catch (e) {
     console.error('[Polling] Hata:', e);
@@ -475,7 +475,8 @@ async function cikisOnayla() {
     const res = await fetch('/api/ogrenci_cikis', { method: 'POST' });
     const veri = await res.json();
     if (veri.durum === 'ok') {
-      window.location.href = '/';
+      const isSEB = navigator.userAgent.includes('SafeExamBrowser');
+      window.location.href = isSEB ? '/seb-quit' : '/';
     } else if (veri.zaman_disi) {
       const mesaj = document.getElementById('cikis-modal-mesaj');
       if (mesaj) {
