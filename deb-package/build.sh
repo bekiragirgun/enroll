@@ -4,7 +4,7 @@ set -e
 
 cd "$(dirname "$0")"
 
-PKG="chroot-terminal_1.3"
+PKG="chroot-terminal_1.4"
 
 # Kaynak: varsa ../chroot_yonetici.py, yoksa paketin kendi kopyasını kullan
 if [ -f "../chroot_yonetici.py" ]; then

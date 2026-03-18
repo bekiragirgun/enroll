@@ -234,6 +234,9 @@ deb http://security.ubuntu.com/ubuntu/ jammy-security main restricted universe m
               "man-db", "tree", "zip", "unzip", "bzip2", "xz-utils", "tar", "gzip",
               "htop", "psmisc", "acl", "gawk", "sed", "grep", "findutils", "lsof", 
               "openssh-client", "less", "file"], env=env)
+
+        log.info("🧹 PTY sorunlarına yol açan sudo-rs paketi tamamen kaldırılıyor...")
+        _run(["chroot", str(STUDENT_TEMPLATE), "apt-get", "purge", "-y", "--auto-remove", "sudo-rs"], check=False)
     finally:
         log.info("🧹 Geçici filesystem'ler çözülüyor...")
         subprocess.run(["umount", "-l", str(pts)], check=False)
