@@ -43,11 +43,12 @@ function modalGoster(mod, ekstra) {
   const slayt = document.getElementById('slayt-ekrani');
   const terminal = document.getElementById('terminal-ekrani');
   const sinav = document.getElementById('sinav-ekrani');
+  const sinavSplit = document.getElementById('sinav-split-ekrani');
   const overlay = document.getElementById('join-overlay');
   const cikisAlani = document.getElementById('cikis-talep-alani');
 
   // Hepsini gizle
-  [bekleme, slayt, terminal, sinav].forEach(el => { if (el) el.style.display = 'none'; });
+  [bekleme, slayt, terminal, sinav, sinavSplit].forEach(el => { if (el) el.style.display = 'none'; });
   if (cikisAlani) cikisAlani.style.display = 'none';
 
   // Eğer mod 'bekleme' DEĞİLSE ve tam ekran DEĞİLSE overlay göster
@@ -110,9 +111,23 @@ function modalGoster(mod, ekstra) {
     }
   }
   else if (mod === 'sinav') {
-    if (sinav) {
-      sinav.style.display = 'block';
-      aktifSinaviGetir();
+    if (ekstra?.sinav_terminal && ekstra?.terminal_url) {
+      // Split screen: sol sinav, sağ terminal
+      if (sinavSplit) {
+        sinavSplit.style.display = 'flex';
+        aktifSinaviGetir(document.getElementById('sinav-split-sol'));
+        const tIframe = document.getElementById('sinav-terminal-iframe');
+        if (tIframe && tIframe.dataset.lastUrl !== ekstra.terminal_url) {
+          tIframe.src = ekstra.terminal_url;
+          tIframe.dataset.lastUrl = ekstra.terminal_url;
+        }
+      }
+    } else {
+      // Normal tek ekran sinav
+      if (sinav) {
+        sinav.style.display = 'block';
+        aktifSinaviGetir();
+      }
     }
   }
 
@@ -122,12 +137,19 @@ function modalGoster(mod, ekstra) {
 // Global olarak sınav değişkenleri
 let mevcutSinavId = null;
 
-async function aktifSinaviGetir() {
+async function aktifSinaviGetir(hedefContainer) {
   try {
     const yanit = await fetch('/api/sinav/aktif');
     const veri = await yanit.json();
 
     if (!veri.aktif_sinav) return;
+
+    // Split modda soruları hedef container'a render et
+    if (hedefContainer) {
+      mevcutSinavId = veri.aktif_sinav.id;
+      _sinavSplitRender(hedefContainer, veri);
+      return;
+    }
 
     mevcutSinavId = veri.aktif_sinav.id;
     document.getElementById('ogrenci-sinav-baslik').innerText = veri.aktif_sinav.baslik;
@@ -458,6 +480,35 @@ async function cikisTalepEt() {
     btn.innerHTML = '🚪 Çıkış Talep Et';
     btn.style.backgroundColor = '#c53030';
   }
+}
+
+// ── Split Screen Sınav Render ────────────────────────────────
+function _sinavSplitRender(container, veri) {
+  const sinav = veri.aktif_sinav;
+  let html = `<h2 style="color:#90cdf4;border-bottom:2px solid #2b6cb0;padding-bottom:0.5rem;margin-top:0;">${sinav.baslik}</h2>`;
+
+  if (sinav.zaten_cevapladi) {
+    html += `<div style="text-align:center;padding:2rem;"><div style="font-size:3rem;">✅</div>
+      <h3 style="color:#48bb78;">Sınav Tamamlandı</h3>
+      <p style="color:#a0aec0;">Cevaplarınız kaydedildi.</p></div>`;
+    container.innerHTML = html;
+    return;
+  }
+
+  sinav.sorular.forEach(function(soru, i) {
+    html += `<div class="sinav-soru" data-soru-id="${soru.id}" style="background:#2d3748;padding:1rem;border-radius:8px;margin-bottom:1rem;border:1px solid #4a5568;">
+      <h3 style="margin:0 0 0.75rem;color:#e2e8f0;font-size:1rem;">${i+1}. ${soru.metin}</h3>
+      <div style="display:flex;flex-direction:column;gap:0.5rem;">`;
+    soru.secenekler.forEach(function(s) {
+      html += `<label style="display:flex;align-items:center;gap:0.5rem;cursor:pointer;background:#1a202c;padding:0.6rem;border-radius:6px;border:1px solid #4a5568;font-size:0.9rem;">
+        <input type="radio" name="soru_${soru.id}" value="${s.id}" style="width:16px;height:16px;"> ${s.metin}
+      </label>`;
+    });
+    html += `</div></div>`;
+  });
+
+  html += `<button onclick="sinavCevaplariniGonder()" style="width:100%;background:#2b6cb0;color:white;border:none;padding:12px;border-radius:8px;font-weight:bold;cursor:pointer;font-size:1rem;margin-top:0.5rem;">Cevapları Gönder</button>`;
+  container.innerHTML = html;
 }
 
 // ── Sınav Sonrası SEB Çıkışı (cikis_izni'nden bağımsız) ────

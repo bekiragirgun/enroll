@@ -103,11 +103,14 @@ def sinav_aktiflestir():
     # App tarafındaki modu tetiklemek için terminal websocketlerinden faydalanılabilir ya da 1 sn. polling
     # Ders_durumu 'sinav' olarak isaretlenmeli.
     from core.config import ders_durumu
+    sinav_terminal = veri.get('sinav_terminal', False)
     if aktif:
         ders_durumu['mod'] = 'sinav'
-        ders_durumu['dosya'] = str(sinav_id) # 'dosya' field holds exam_id when mod is 'sinav'
+        ders_durumu['dosya'] = str(sinav_id)
+        ders_durumu['sinav_terminal'] = bool(sinav_terminal)
     else:
         ders_durumu['mod'] = 'bekleme'
+        ders_durumu['sinav_terminal'] = False
         ders_durumu['dosya'] = ''
 
     return jsonify({'durum': 'ok'})

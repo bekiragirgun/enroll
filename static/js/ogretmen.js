@@ -1495,14 +1495,51 @@ async function sinavOlustur() {
   }
 }
 
+function sinavBaslatDialog() {
+  return new Promise(function(resolve) {
+    const overlay = document.createElement('div');
+    overlay.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.7);z-index:10001;display:flex;align-items:center;justify-content:center;';
+    overlay.innerHTML = `
+      <div style="background:#2d3748;border-radius:12px;padding:2rem;max-width:380px;width:90%;text-align:center;box-shadow:0 8px 32px rgba(0,0,0,0.5);">
+        <h3 style="color:#e2e8f0;margin:0 0 1rem;">Sınavı Başlat</h3>
+        <p style="color:#a0aec0;font-size:0.9rem;margin:0 0 1.5rem;">Öğrenci ekranlarında bu sınav açılacaktır.</p>
+        <label style="display:flex;align-items:center;gap:8px;color:#90cdf4;font-size:0.95rem;cursor:pointer;justify-content:center;margin-bottom:1.5rem;">
+          <input type="checkbox" id="sinav-terminal-cb" style="width:18px;height:18px;cursor:pointer;">
+          Terminal açık kalsın (bölünmüş ekran)
+        </label>
+        <div style="display:flex;gap:10px;justify-content:center;">
+          <button id="sinav-basla-btn" style="background:#48bb78;color:white;border:none;padding:10px 24px;border-radius:8px;font-weight:bold;cursor:pointer;font-size:1rem;">Başlat</button>
+          <button id="sinav-iptal-btn" style="background:#4a5568;color:white;border:none;padding:10px 24px;border-radius:8px;font-weight:bold;cursor:pointer;font-size:1rem;">İptal</button>
+        </div>
+      </div>`;
+    document.body.appendChild(overlay);
+    overlay.querySelector('#sinav-basla-btn').onclick = function() {
+      const terminal = overlay.querySelector('#sinav-terminal-cb').checked;
+      document.body.removeChild(overlay);
+      resolve({ terminal: terminal });
+    };
+    overlay.querySelector('#sinav-iptal-btn').onclick = function() {
+      document.body.removeChild(overlay);
+      resolve(null);
+    };
+  });
+}
+
 async function sinavDurumDegistir(id, aktifYap) {
-  if (aktifYap && !confirm("Bu sınavı başlatmak istediğinize emin misiniz? Öğrenci ekranlarında otomatik olarak bu sınav açılacaktır.")) return;
-  if (!aktifYap && !confirm("Sınav yayından kaldırılsın mı?")) return;
+  let sinavTerminal = false;
+  if (aktifYap) {
+    // Terminal seçeneğiyle onay sor
+    const sonuc = await sinavBaslatDialog();
+    if (!sonuc) return;
+    sinavTerminal = sonuc.terminal;
+  } else {
+    if (!confirm("Sınav yayından kaldırılsın mı?")) return;
+  }
 
   const yanit = await safeFetch('/api/sinav/aktiflestir', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ sinav_id: id, aktif: aktifYap })
+    body: JSON.stringify({ sinav_id: id, aktif: aktifYap, sinav_terminal: sinavTerminal })
   });
 
   if (yanit.ok) {
