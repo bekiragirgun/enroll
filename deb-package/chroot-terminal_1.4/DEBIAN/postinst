@@ -1,35 +1,60 @@
 #!/bin/bash
 set -e
 
-echo "=== Chroot Terminal System v1.2 kurulumu ==="
+echo "=== Chroot Terminal System v1.4 kurulumu ==="
+
+# ── LXC Boot Optimizasyonu ─────────────────
+echo "[1/7] LXC konteyner optimizasyonu..."
+# Konteyner'da çalışmayan servisleri devre dışı bırak (boot hızlandırma)
+for svc in systemd-udevd.service multipathd.service open-vm-tools.service tmp.mount; do
+    systemctl disable "$svc" 2>/dev/null || true
+    systemctl mask "$svc" 2>/dev/null || true
+done
+# udevd soketlerini de kapat
+for sock in systemd-udevd-kernel.socket systemd-udevd-control.socket; do
+    systemctl disable "$sock" 2>/dev/null || true
+    systemctl mask "$sock" 2>/dev/null || true
+done
+# systemd-resolved yerine statik DNS
+if systemctl is-active systemd-resolved >/dev/null 2>&1 || systemctl is-enabled systemd-resolved >/dev/null 2>&1; then
+    systemctl disable --now systemd-resolved.service 2>/dev/null || true
+    systemctl mask systemd-resolved.service 2>/dev/null || true
+    echo "nameserver 8.8.8.8" > /etc/resolv.conf 2>/dev/null || true
+fi
+# Systemd timeout'ları kısalt
+mkdir -p /etc/systemd/system.conf.d
+cat > /etc/systemd/system.conf.d/lxc-timeout.conf << 'TIMEOUTEOF'
+[Manager]
+DefaultTimeoutStartSec=10s
+DefaultTimeoutStopSec=10s
+DefaultDeviceTimeoutSec=10s
+TIMEOUTEOF
 
 # ── Kernel Optimizasyonu ─────────────────────
-echo "[1/5] Kernel parametreleri uygulanıyor..."
+echo "[2/7] Kernel parametreleri uygulanıyor..."
 sysctl -p /etc/sysctl.d/99-pty-limits.conf 2>/dev/null || true
 
 # ── Ulimit Ayarlari ──────────────────────────
-echo "[2/5] Ulimit ayarları uygulandı (limits.d)"
-# PAM limits modülü zaten aktif, dosya koyulması yeterli
+echo "[3/7] Ulimit ayarları uygulandı (limits.d)"
 
 # ── Grup ve Kullanici ────────────────────────
-echo "[3/5] Sistem grubu oluşturuluyor..."
+echo "[4/7] Sistem grubu oluşturuluyor..."
 groupadd -f ogrenciler
 
 # ── Systemd Servisleri ───────────────────────
-echo "[4/5] Servisler aktifleştiriliyor..."
+echo "[5/7] Servisler aktifleştiriliyor..."
 systemctl daemon-reload
 systemctl enable --now chroot-pty-fix.service
 systemctl enable --now chroot-cleanup.timer
 
 # ── SSH Reload ───────────────────────────────
-echo "[5/6] SSH servisi yeniden yükleniyor..."
+echo "[6/7] SSH servisi yeniden yükleniyor..."
 systemctl reload sshd 2>/dev/null || systemctl reload ssh 2>/dev/null || true
 
 # ── NTP Senkronizasyonu ──────────────────────
-echo "[6/6] NTP zaman senkronizasyonu ayarlanıyor..."
+echo "[7/7] NTP zaman senkronizasyonu ayarlanıyor..."
 timedatectl set-ntp true 2>/dev/null || true
 systemctl restart systemd-timesyncd 2>/dev/null || true
-# Timezone Türkiye
 timedatectl set-timezone Europe/Istanbul 2>/dev/null || true
 
 echo ""
@@ -58,6 +83,11 @@ echo ""
 echo "  NTP:"
 echo "    Timezone:       Europe/Istanbul"
 echo "    NTP Servers:    ntp.ubuntu.com, time.google.com, time.cloudflare.com"
+echo ""
+echo "  LXC Boot Optimizasyonu:"
+echo "    udevd, multipathd, open-vm-tools, tmp.mount: devre dışı"
+echo "    systemd-resolved: statik DNS (8.8.8.8)"
+echo "    Timeout: 10s (start/stop/device)"
 echo ""
 echo "  Servisler:"
 echo "    chroot-pty-fix: boot'ta PTY onarımı"
