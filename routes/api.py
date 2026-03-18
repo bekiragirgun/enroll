@@ -140,6 +140,11 @@ def api_config():
         ders_durumu['ip_kontrol'] = ip_k
         ayar_kaydet('ip_kontrol', ip_k)
 
+    if 'cikis_izni' in veri:
+        cikis = str(veri['cikis_izni'])
+        ders_durumu['cikis_izni'] = cikis
+        ayar_kaydet('cikis_izni', cikis)
+
     return jsonify({'durum': 'ok'})
 
 @api_bp.route('/healthcheck', methods=['POST'])
@@ -979,6 +984,38 @@ def api_chroot_temizle():
         })
     except Exception as e:
         log.error(f"Chroot temizle hatası: {e}")
+        return jsonify({'hata': str(e)}), 500
+
+
+@api_bp.route('/chroot/sil', methods=['POST'])
+@ogretmen_giris_gerekli
+def api_chroot_sil_secili():
+    """Seçilen chroot VM'lerini sil."""
+    import threading
+    veri = request.get_json() or {}
+    secili = veri.get('secili', [])
+    if not secili:
+        return jsonify({'hata': 'Silinecek VM seçilmedi'}), 400
+
+    # Güvenlik: ogretmen ve template silinemez
+    korunmus = {'ogretmen', 'template'}
+    secili = [s for s in secili if s not in korunmus]
+    if not secili:
+        return jsonify({'hata': 'Seçilen VM\'ler korumalı (ogretmen/template)'}), 400
+
+    try:
+        from chroot_terminal import chroot_sil_batch
+        log.info(f"🗑️ Seçili chroot silme: {secili}")
+
+        def _sil():
+            sonuclar = chroot_sil_batch(secili)
+            silindi = sum(1 for v in sonuclar.values() if v)
+            log.info(f"✅ Seçili silme tamamlandı: {silindi}/{len(secili)}")
+
+        threading.Thread(target=_sil, daemon=True).start()
+        return jsonify({'durum': 'ok', 'silinen': len(secili), 'liste': secili})
+    except Exception as e:
+        log.error(f"Chroot seçili silme hatası: {e}")
         return jsonify({'hata': str(e)}), 500
 
 

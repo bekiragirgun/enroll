@@ -77,6 +77,10 @@ async function ayarlariKaydet() {
   const ipKontrolSelect = document.getElementById('config-ip-kontrol');
   const ipKontrol = ipKontrolSelect ? ipKontrolSelect.value : '1';
 
+  // SEB Çıkış İzni
+  const cikisIzniSelect = document.getElementById('config-cikis-izni');
+  const cikisIzni = cikisIzniSelect ? cikisIzniSelect.value : '0';
+
   const yanit = await safeFetch('/api/config', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -88,7 +92,8 @@ async function ayarlariKaydet() {
       system_host: systemHost,
       ttyd_url: ttydUrl,
       kiosk_modu: kioskModu,
-      ip_kontrol: ipKontrol
+      ip_kontrol: ipKontrol,
+      cikis_izni: cikisIzni
     })
   });
 
@@ -1103,14 +1108,72 @@ async function chrootListele() {
       sonuc.textContent = `⚠️ ${veri.fazla_sayisi} eski VM bulundu (toplam: ${veri.toplam})`;
     }
     if (btn) btn.style.display = 'inline-block';
+    // Seçili silme butonu
+    let btnSecili = document.getElementById('chroot-secili-sil-btn');
+    if (!btnSecili) {
+      btnSecili = document.createElement('button');
+      btnSecili.id = 'chroot-secili-sil-btn';
+      btnSecili.className = 'btn-kucuk';
+      btnSecili.style.cssText = 'background:#c53030; margin-left:6px; display:none;';
+      btnSecili.textContent = '🗑️ Seçilenleri Sil';
+      btnSecili.onclick = chrootSeciliSil;
+      btn.parentNode.insertBefore(btnSecili, btn.nextSibling);
+    }
     if (liste) {
-      liste.innerHTML = veri.fazla.map(u =>
-        `<span style="display:inline-block;background:#742a2a;color:#feb2b2;border-radius:4px;padding:2px 8px;margin:2px;font-size:0.78rem;font-family:monospace;">${u}</span>`
+      liste.innerHTML = '<label style="display:block;margin-bottom:4px;cursor:pointer;font-size:0.78rem;color:#a0aec0;">' +
+        '<input type="checkbox" id="chroot-hepsi-sec" style="margin-right:4px;" onchange="chrootHepsiSec(this.checked)"> Tümünü seç</label>' +
+        veri.fazla.map(u =>
+        `<label style="display:inline-flex;align-items:center;background:#742a2a;color:#feb2b2;border-radius:4px;padding:3px 8px;margin:2px;font-size:0.78rem;font-family:monospace;cursor:pointer;">` +
+        `<input type="checkbox" class="chroot-sec" value="${u}" style="margin-right:4px;" onchange="chrootSecimGuncelle()"> ${u}</label>`
       ).join('');
     }
   } catch (e) {
     if (sonuc) { sonuc.style.color = '#e53e3e'; sonuc.textContent = 'Bağlantı hatası'; }
   }
+}
+
+function chrootHepsiSec(checked) {
+  document.querySelectorAll('.chroot-sec').forEach(cb => { cb.checked = checked; });
+  chrootSecimGuncelle();
+}
+
+function chrootSecimGuncelle() {
+  const secili = document.querySelectorAll('.chroot-sec:checked').length;
+  const btn = document.getElementById('chroot-secili-sil-btn');
+  if (btn) {
+    btn.style.display = secili > 0 ? 'inline-block' : 'none';
+    btn.textContent = `🗑️ Seçilenleri Sil (${secili})`;
+  }
+}
+
+async function chrootSeciliSil() {
+  const checkboxlar = document.querySelectorAll('.chroot-sec:checked');
+  const secili = Array.from(checkboxlar).map(cb => cb.value);
+  if (secili.length === 0) return;
+  if (!confirm(`${secili.length} VM silinecek:\n${secili.join(', ')}\n\nEmin misiniz?`)) return;
+
+  const sonuc = document.getElementById('chroot-tarama-sonuc');
+  const btn = document.getElementById('chroot-secili-sil-btn');
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ Siliniyor...'; }
+  try {
+    const res = await safeFetch('/api/chroot/sil', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ secili })
+    });
+    const veri = await res.json();
+    if (veri.durum === 'ok') {
+      if (sonuc) { sonuc.style.color = '#48bb78'; sonuc.textContent = `✅ ${veri.silinen} VM siliniyor (arka planda)`; }
+      // Silinen checkbox'ları kaldır
+      checkboxlar.forEach(cb => cb.closest('label').remove());
+      chrootSecimGuncelle();
+    } else {
+      if (sonuc) { sonuc.style.color = '#e53e3e'; sonuc.textContent = 'Hata: ' + (veri.hata || 'Bilinmeyen'); }
+    }
+  } catch (e) {
+    if (sonuc) { sonuc.style.color = '#e53e3e'; sonuc.textContent = 'Bağlantı hatası'; }
+  }
+  if (btn) { btn.disabled = false; chrootSecimGuncelle(); }
 }
 
 async function chrootTemizle() {
