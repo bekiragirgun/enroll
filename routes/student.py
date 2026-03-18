@@ -231,9 +231,9 @@ def seb_config():
     <key>allowVirtualMachine</key>
     <true/>
 
-    <!-- Görev Çubuğu -->
+    <!-- Görev Çubuğu (gizli — tam ekran sunum için) -->
     <key>showTaskBar</key>
-    <true/>
+    <false/>
 
     <!-- Çıkış Ayarları -->
     <key>enableQuitButton</key>
