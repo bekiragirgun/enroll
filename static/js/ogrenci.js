@@ -210,6 +210,10 @@ async function sinavCevaplariniGonder() {
       document.getElementById('ogrenci-sorular-alani').style.display = 'none';
       document.getElementById('btn-sinav-gonder').style.display = 'none';
       document.getElementById('sinav-bitis-mesaji').style.display = 'block';
+      // SEB'deyse "Sınavı Bitir ve Çık" butonunu göster (cikis_izni'nden bağımsız)
+      const isSEB = navigator.userAgent.includes('SafeExamBrowser') || navigator.userAgent.includes('SEB/');
+      const sebCikisBtn = document.getElementById('btn-sinav-seb-cikis');
+      if (sebCikisBtn && isSEB) sebCikisBtn.style.display = 'inline-block';
     }
   } catch (e) {
     alert("Bağlantı hatası, cevaplar gönderilemedi!");
@@ -454,6 +458,13 @@ async function cikisTalepEt() {
     btn.innerHTML = '🚪 Çıkış Talep Et';
     btn.style.backgroundColor = '#c53030';
   }
+}
+
+// ── Sınav Sonrası SEB Çıkışı (cikis_izni'nden bağımsız) ────
+function sinavSonrasiCikis() {
+  // Oturumu kapat ve SEB'den çık
+  fetch('/api/ogrenci_cikis', { method: 'POST' }).catch(function() {});
+  window.location.href = '/seb-quit';
 }
 
 // ── Öğrenci Çıkış (Paket Saati İçinde) ──────────────────────
