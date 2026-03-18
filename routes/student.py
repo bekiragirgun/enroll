@@ -160,13 +160,17 @@ def seb_gerekli_sayfasi():
 
 @student_bp.route('/seb-config')
 def seb_config():
-    system_host = ayar_getir('system_host', '')
+    system_host = ayar_getir('system_host', '').strip()
     if system_host:
         if not system_host.startswith('http'):
-            url = f"http://{system_host}/"
-        else:
-            url = system_host
-            if not url.endswith('/'): url += '/'
+            system_host = f"http://{system_host}"
+        # Port yoksa request'ten al (varsayılan 3333)
+        from urllib.parse import urlparse
+        parsed = urlparse(system_host)
+        if not parsed.port:
+            server_port = request.host.split(':')[-1] if ':' in request.host else '3333'
+            system_host = f"{parsed.scheme}://{parsed.hostname}:{server_port}"
+        url = system_host.rstrip('/') + '/'
     else:
         url = request.host_url
         
