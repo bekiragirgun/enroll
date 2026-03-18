@@ -23,8 +23,8 @@ def seb_gerekli(f):
         kiosk_modu = ayar_getir('kiosk_modu', '1') == '1'
         if kiosk_modu:
             user_agent = request.headers.get('User-Agent', '')
-            # SEB tespiti: "SafeExamBrowser" veya "SEB/" User-Agent'ta var mı
-            is_seb = 'SafeExamBrowser' in user_agent or 'SEB/' in user_agent
+            # SEB tespiti: Windows "SEB/3.x", macOS "SafeExamBrowser"
+            is_seb = 'SEB/' in user_agent or 'SafeExamBrowser' in user_agent
             _log.info(f"[SEB CHECK] path={request.path} is_seb={is_seb} UA={user_agent[:120]}")
             if not is_seb:
                 return redirect(url_for('student_bp.seb_gerekli_sayfasi'))

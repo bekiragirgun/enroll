@@ -62,7 +62,7 @@ function modalGoster(mod, ekstra) {
   if (overlay) overlay.style.display = 'none';
   // Çıkış/yardım butonlarını göster (SEB'deyken bekleme dahil her modda)
   if (cikisAlani) {
-    const isSEB = navigator.userAgent.includes('SafeExamBrowser');
+    const isSEB = navigator.userAgent.includes('SEB/');
     cikisAlani.style.display = (mod !== 'bekleme' || isSEB) ? 'flex' : 'none';
   }
 
@@ -246,7 +246,7 @@ async function sinavCevaplariniGonder() {
       }
 
       // SEB'deyse "Sınavı Bitir ve Çık" butonunu göster (cikis_izni'nden bağımsız)
-      const isSEB = navigator.userAgent.includes('SafeExamBrowser') || navigator.userAgent.includes('SEB/');
+      const isSEB = navigator.userAgent.includes('SEB/') || navigator.userAgent.includes('SEB/');
       const sebCikisBtn = document.getElementById('btn-sinav-seb-cikis');
       if (sebCikisBtn && isSEB) sebCikisBtn.style.display = 'inline-block';
     }
@@ -285,7 +285,7 @@ async function durumKontrol() {
 
     if (veri.toplu_cikis) {
       // SEB açıksa SEB'i kapat, değilse ana sayfaya dön
-      const isSEB = navigator.userAgent.includes('SafeExamBrowser');
+      const isSEB = navigator.userAgent.includes('SEB/');
       window.location.href = isSEB ? '/seb-quit' : '/';
       return;
     }
@@ -304,7 +304,7 @@ async function durumKontrol() {
     }
 
     // Buton görünürlüğü — cikis_izni öğretmen tarafından kontrol edilir
-    const isSEB = navigator.userAgent.includes('SafeExamBrowser');
+    const isSEB = navigator.userAgent.includes('SEB/');
     const cikisIzni = veri.cikis_izni;
     const sebCikisTalep = document.getElementById('btn-cikis-talep');
     const cikisYap = document.getElementById('btn-cikis-yap');
@@ -552,7 +552,7 @@ async function cikisOnayla() {
     const res = await fetch('/api/ogrenci_cikis', { method: 'POST' });
     const veri = await res.json();
     if (veri.durum === 'ok') {
-      const isSEB = navigator.userAgent.includes('SafeExamBrowser');
+      const isSEB = navigator.userAgent.includes('SEB/');
       window.location.href = isSEB ? '/seb-quit' : '/';
     } else if (veri.zaman_disi) {
       const mesaj = document.getElementById('cikis-modal-mesaj');
