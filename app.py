@@ -418,6 +418,7 @@ if __name__ == '__main__':
                 break
 
         os.environ['DERS_TAKIP_TEST'] = '1'
+        ders_durumu['test_modu'] = True
         import importlib
         import core.paths
         importlib.reload(core.paths)

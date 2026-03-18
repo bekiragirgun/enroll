@@ -605,17 +605,19 @@ def api_ogrenci_cikis():
         return jsonify({'durum': 'hata', 'mesaj': 'Bugün yoklama kaydınız bulunamadı.'})
 
     paket = kayit['paket']
-    bas, bit, gecerli = paket_zaman_kontrolu(paket)
 
-    if not gecerli:
-        return jsonify({
-            'durum': 'hata',
-            'mesaj': f'Çıkış yalnızca paket saatleri içinde yapılabilir ({bas}–{bit}).',
-            'zaman_disi': True,
-            'paket': paket,
-            'bas': bas,
-            'bit': bit,
-        })
+    # Test modunda paket saati kontrolü atlanır
+    if not ders_durumu.get('test_modu'):
+        bas, bit, gecerli = paket_zaman_kontrolu(paket)
+        if not gecerli:
+            return jsonify({
+                'durum': 'hata',
+                'mesaj': f'Çıkış yalnızca paket saatleri içinde yapılabilir ({bas}–{bit}).',
+                'zaman_disi': True,
+                'paket': paket,
+                'bas': bas,
+                'bit': bit,
+            })
 
     # Çıkışı kaydet
     with db_baglantisi() as db:
