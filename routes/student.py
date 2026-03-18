@@ -175,21 +175,63 @@ def seb_config():
 <plist version="1.0">
 <dict>
     <key>originatorVersion</key>
-    <string>SEB_OSX_3.3.2_52D4</string>
+    <string>SEB_Win_3.10.1</string>
     <key>startURL</key>
     <string>{url}</string>
-    <key>allowVirtualMachine</key>
-    <true/>
-    <key>sendBrowserExamKey</key>
-    <true/>
+
+    <!-- Tarayıcı Ayarları -->
     <key>browserWindowAllowReload</key>
     <true/>
     <key>enableZoomPage</key>
     <true/>
     <key>allowSpellCheck</key>
     <false/>
-    <key>showTaskBar</key>
+    <key>showReloadButton</key>
+    <true/>
+    <key>showTime</key>
+    <true/>
+    <key>taskBarHeight</key>
+    <integer>40</integer>
+    <key>newBrowserWindowAllow</key>
     <false/>
+    <key>allowDeveloperConsole</key>
+    <false/>
+
+    <!-- User-Agent: SafeExamBrowser eklenmesini garanti et -->
+    <key>sendBrowserExamKey</key>
+    <true/>
+    <key>browserUserAgentWinDesktopModeCustom</key>
+    <string>Mozilla/5.0 SafeExamBrowser</string>
+    <key>browserUserAgentWinDesktopMode</key>
+    <integer>0</integer>
+
+    <!-- Cookie ve Oturum: Flask session icin gerekli -->
+    <key>allowThirdPartyCookies</key>
+    <true/>
+    <key>removeBrowserProfile</key>
+    <false/>
+    <key>enableBrowserWindowToolbar</key>
+    <false/>
+
+    <!-- Navigasyon: Form POST ve redirect icin -->
+    <key>allowNavigationTo</key>
+    <true/>
+    <key>browserWindowAllowAddressBar</key>
+    <false/>
+
+    <!-- URL Filter: Kapalı (tüm isteklere izin ver) -->
+    <key>URLFilterEnable</key>
+    <false/>
+
+    <!-- Sanal Makine İzni -->
+    <key>allowVirtualMachine</key>
+    <true/>
+
+    <!-- Görev Çubuğu -->
+    <key>showTaskBar</key>
+    <true/>
+
+    <!-- Çıkış Ayarları -->
     <key>enableQuitButton</key>
     <true/>
     <key>allowQuit</key>
@@ -202,17 +244,9 @@ def seb_config():
     <string>linux2024</string>
     <key>hashedQuitPassword</key>
     <string></string>
+
+    <!-- Güvenlik -->
     <key>allowPreferencesWindow</key>
-    <false/>
-    <key>showReloadButton</key>
-    <true/>
-    <key>showTime</key>
-    <true/>
-    <key>taskBarHeight</key>
-    <integer>40</integer>
-    <key>newBrowserWindowAllow</key>
-    <false/>
-    <key>allowDeveloperConsole</key>
     <false/>
     <key>enableTouchExit</key>
     <false/>

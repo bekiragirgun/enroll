@@ -54,6 +54,9 @@ class _BufHandler(logging.Handler):
 app = Flask(__name__)
 app.secret_key = SECRET_KEY
 app.config['SEND_FILE_MAX_AGE_DEFAULT'] = 0  # Static dosyaları cache'leme
+app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
+app.config['SESSION_COOKIE_HTTPONLY'] = True
+app.config['SESSION_COOKIE_SECURE'] = False  # HTTP üzerinden çalışıyoruz
 log = app.logger
 log.setLevel(logging.INFO)
 
