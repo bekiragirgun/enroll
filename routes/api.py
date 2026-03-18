@@ -50,7 +50,9 @@ def api_durum():
         'slayt_hash': ders_durumu.get('slayt_hash', ''),
         'terminal_url': ders_durumu.get('terminal_url', ''),
         'cikis_onaylandi': cikis_onaylandi,
-        'toplu_cikis': toplu_cikis
+        'toplu_cikis': toplu_cikis,
+        'cikis_izni': ders_durumu.get('cikis_izni', '0') == '1',
+        'kiosk_modu': ders_durumu.get('kiosk_modu', '1') == '1'
     }
     return jsonify(response)
 

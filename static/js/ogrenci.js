@@ -244,7 +244,9 @@ async function durumKontrol() {
     }
 
     if (veri.toplu_cikis) {
-      window.location.href = '/';
+      // SEB açıksa SEB'i kapat, değilse ana sayfaya dön
+      const isSEB = navigator.userAgent.includes('SafeExamBrowser');
+      window.location.href = isSEB ? '/seb-quit' : '/';
       return;
     }
 
@@ -258,6 +260,14 @@ async function durumKontrol() {
       console.log('[Polling] Durum değişti:', suAnkiDurum, '->', veri);
       suAnkiDurum = { ...veri };
       modalGoster(veri.mod, veri);
+    }
+
+    // SEB çıkış butonu görünürlüğü — kiosk modundaysa ve izin verildiyse göster
+    const sebCikisTalep = document.getElementById('btn-cikis-talep');
+    if (sebCikisTalep) {
+      const isSEB = navigator.userAgent.includes('SafeExamBrowser');
+      // Sadece SEB içindeyken VE cikis_izni açıkken göster
+      sebCikisTalep.style.display = (isSEB && veri.cikis_izni) ? 'block' : 'none';
     }
   } catch (e) {
     console.error('[Polling] Hata:', e);
