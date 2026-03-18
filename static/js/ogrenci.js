@@ -263,12 +263,13 @@ async function durumKontrol() {
       modalGoster(veri.mod, veri);
     }
 
-    // SEB çıkış butonu görünürlüğü — SEB içindeyken her zaman göster
+    // Buton görünürlüğü — cikis_izni öğretmen tarafından kontrol edilir
+    const isSEB = navigator.userAgent.includes('SafeExamBrowser');
+    const cikisIzni = veri.cikis_izni;
     const sebCikisTalep = document.getElementById('btn-cikis-talep');
-    if (sebCikisTalep) {
-      const isSEB = navigator.userAgent.includes('SafeExamBrowser');
-      sebCikisTalep.style.display = isSEB ? 'block' : 'none';
-    }
+    const cikisYap = document.getElementById('btn-cikis-yap');
+    if (sebCikisTalep) sebCikisTalep.style.display = (isSEB && cikisIzni) ? 'block' : 'none';
+    if (cikisYap) cikisYap.style.display = cikisIzni ? 'block' : 'none';
   } catch (e) {
     console.error('[Polling] Hata:', e);
   }
