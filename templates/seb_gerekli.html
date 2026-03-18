@@ -228,6 +228,16 @@
         Sorun yaşıyorsanız öğretmeninize danışın.<br>
         Sistem şu anda <strong>Güvenli Sınav Modu</strong> aktif — normal tarayıcı ile giriş kapalıdır.
     </p>
+
+    <!-- Çıkış Butonları -->
+    <div style="margin-top:18px; display:flex; flex-direction:column; gap:10px;">
+        <a id="btn-seb-cikis" href="/seb-quit" class="btn" style="display:none; background:#c53030; color:white; justify-content:center; padding:12px; border-radius:10px; font-size:0.9rem;">
+            <i class="bi bi-box-arrow-right"></i> SEB'den Çık
+        </a>
+        <button id="btn-geri" onclick="window.history.back(); setTimeout(function(){window.close();},300);" class="btn" style="background:#4b5563; color:white; justify-content:center; padding:12px; border-radius:10px; font-size:0.9rem;">
+            <i class="bi bi-arrow-left"></i> Geri Dön / Sayfayı Kapat
+        </button>
+    </div>
 </div>
 
 <script>
@@ -240,6 +250,11 @@
     const armNote = document.getElementById('arm-note');
 
     const isArm = ua.includes('arm') || ua.includes('aarch64') || navigator.userAgentData?.platform === 'Windows' && navigator.userAgentData?.architecture === 'arm';
+
+    // SEB içindeyken çıkış butonunu göster
+    if (ua.includes('safeexambrowser')) {
+        document.getElementById('btn-seb-cikis').style.display = 'inline-flex';
+    }
 
     if (ua.includes('win')) {
         if (isArm) {
