@@ -1,6 +1,8 @@
 from functools import wraps
 from flask import session, request, redirect, url_for, jsonify
 from core.config import ayar_getir
+import logging
+_log = logging.getLogger('app')
 
 def ogretmen_giris_gerekli(f):
     @wraps(f)
@@ -18,11 +20,13 @@ def ogretmen_giris_gerekli(f):
 def seb_gerekli(f):
     @wraps(f)
     def decorated(*args, **kwargs):
-        # Eğer Kiosk Modu açık ise 
         kiosk_modu = ayar_getir('kiosk_modu', '1') == '1'
         if kiosk_modu:
             user_agent = request.headers.get('User-Agent', '')
-            if 'SafeExamBrowser' not in user_agent:
+            # SEB tespiti: "SafeExamBrowser" veya "SEB/" User-Agent'ta var mı
+            is_seb = 'SafeExamBrowser' in user_agent or 'SEB/' in user_agent
+            _log.info(f"[SEB CHECK] path={request.path} is_seb={is_seb} UA={user_agent[:120]}")
+            if not is_seb:
                 return redirect(url_for('student_bp.seb_gerekli_sayfasi'))
         return f(*args, **kwargs)
     return decorated
