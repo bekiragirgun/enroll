@@ -44,10 +44,15 @@ def repair_system_pty():
     """
     log.info("🛠️ Sistem PTY ve /dev/pts onarılıyor...")
     
-    # 1. /dev/pts mount edilmiş mi kontrol et
-    if not os.path.ismount("/dev/pts"):
-        log.warning("⚠️ /dev/pts mount edilmemiş! Mount ediliyor...")
-        _run(["mount", "-t", "devpts", "devpts", "/dev/pts", "-o", "rw,nosuid,noexec,relatime,gid=5,mode=620,ptmxmode=666"], check=False)
+    # 1. /dev/pts mount edilmiş mi kontrol et (devpts türünde olmalı)
+    try:
+        mounts = subprocess.run(["mount"], capture_output=True, text=True).stdout
+        if "devpts on /dev/pts type devpts" not in mounts:
+            log.warning("⚠️ /dev/pts devpts olarak mount edilmemiş! Düzeltiliyor...")
+            subprocess.run(["umount", "-l", "/dev/pts"], check=False)
+            _run(["mount", "-t", "devpts", "devpts", "/dev/pts", "-o", "rw,nosuid,noexec,relatime,gid=5,mode=620,ptmxmode=666"], check=False)
+    except Exception as e:
+        log.error(f"PTS mount kontrolünde hata: {e}")
     
     # 2. /dev/ptmx kontrolü ve onarımı
     ptmx = Path("/dev/ptmx")
@@ -368,8 +373,8 @@ def sync_chroot_configs(username, real_name=""):
         # Sudoers dosyasını kopyala ve içeriği doğrula
         sudo_dst = student_path / "etc" / "sudoers.d" / "chroot-ogrenciler"
         sudo_dst.parent.mkdir(parents=True, exist_ok=True)
-        # Doğrudan içeriği yaz (Host'a güvenmek yerine)
-        sudo_content = f"%{STUDENT_GROUP} ALL=(ALL) NOPASSWD: ALL\n{username} ALL=(ALL) NOPASSWD: ALL\n"
+        # Doğrudan içeriği yaz (Host'a güvenmek yerine). PTY sorunlarını önlemek için !use_pty eklendi.
+        sudo_content = f"Defaults:%{STUDENT_GROUP} !use_pty\n%{STUDENT_GROUP} ALL=(ALL) NOPASSWD: ALL\n{username} ALL=(ALL) NOPASSWD: ALL\n"
         sudo_dst.write_text(sudo_content)
         _run(["chmod", "0440", str(sudo_dst)], check=False)
         log.info(f"📝 Sudoers yapılandırıldı: {sudo_dst}")
