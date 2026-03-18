@@ -203,15 +203,18 @@
             SEB Kurulu Değilse — İndirin
         </div>
         <div class="btn-group">
-            <a id="btn-win" href="https://github.com/SafeExamBrowser/seb-win-refactoring/releases/download/v3.10.1/SEB_3.10.1.864_SetupBundle.exe"
-               class="btn btn-windows">
-                <i class="bi bi-windows"></i> Windows İndir
+            <a id="btn-win" href="https://github.com/SafeExamBrowser/seb-win-refactoring/releases/tag/v3.10.1"
+               class="btn btn-windows" target="_blank">
+                <i class="bi bi-windows"></i> Windows İndir (GitHub)
             </a>
-            <a id="btn-mac" href="https://github.com/SafeExamBrowser/seb-mac/releases/latest/download/SafeExamBrowser.dmg"
-               class="btn btn-mac">
-                <i class="bi bi-apple"></i> macOS İndir
+            <a id="btn-mac" href="https://github.com/SafeExamBrowser/seb-mac/releases/tag/3.6.1"
+               class="btn btn-mac" target="_blank">
+                <i class="bi bi-apple"></i> macOS İndir (GitHub)
             </a>
         </div>
+        <p style="font-size:0.78rem; color:#64748b; margin-top:10px;">
+            GitHub açılmazsa: <a href="https://safeexambrowser.org/download_en.html" target="_blank" style="color:#93c5fd;">safeexambrowser.org</a> adresinden indirin.
+        </p>
         <p style="font-size:0.78rem; color:#94a3b8; margin-top:10px;">
             <i class="bi bi-info-circle"></i>
             İndirdikten sonra kurulumu tamamlayın, ardından yukarıdaki <strong>.seb dosyasını</strong> çift tıklayarak açın.
@@ -251,29 +254,27 @@
     const ua = navigator.userAgent.toLowerCase();
     const badge = document.getElementById('platform-text');
     const winBtn = document.getElementById('btn-win');
-    const winX86Btn = document.getElementById('btn-win-x86');
     const macBtn = document.getElementById('btn-mac');
-    const armNote = document.getElementById('arm-note');
-
-    const isArm = ua.includes('arm') || ua.includes('aarch64') || navigator.userAgentData?.platform === 'Windows' && navigator.userAgentData?.architecture === 'arm';
 
     // SEB içindeyken çıkış butonunu göster
     if (ua.includes('safeexambrowser')) {
         document.getElementById('btn-seb-cikis').style.display = 'inline-flex';
     }
 
+    // Öğretmen kiosk modunu kapattığında otomatik yönlendir
+    setInterval(function() {
+        fetch('/api/durum').then(function(r) { return r.json(); }).then(function(v) {
+            if (!v.kiosk_modu) {
+                window.location.href = '/';
+            }
+        }).catch(function() {});
+    }, 3000);
+
     if (ua.includes('win')) {
-        if (isArm) {
-            badge.textContent = 'Windows ARM tespit edildi — x86 sürümünü indirin';
-            armNote.style.display = 'block';
-            winX86Btn.style.boxShadow = '0 0 0 2px #3b82f6';
-            winBtn.style.opacity = '0.5';
-        } else {
-            badge.textContent = 'Windows sistemi tespit edildi — x64 sürümünü indirin';
-            winBtn.style.boxShadow = '0 0 0 2px #3b82f6';
-        }
+        badge.textContent = 'Windows sistemi tespit edildi';
+        winBtn.style.boxShadow = '0 0 0 2px #3b82f6';
     } else if (ua.includes('mac')) {
-        badge.textContent = 'macOS sistemi tespit edildi — Mac sürümünü indirin';
+        badge.textContent = 'macOS sistemi tespit edildi';
         macBtn.style.boxShadow = '0 0 0 2px #3b82f6';
     } else if (ua.includes('linux')) {
         badge.textContent = 'Linux tespit edildi — SEB resmi Linux sürümü bulunmuyor';
