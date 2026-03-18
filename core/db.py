@@ -174,4 +174,18 @@ def db_olustur():
         try: db.execute("ALTER TABLE yardim_talepleri ADD COLUMN kategori TEXT DEFAULT ''")
         except: pass
 
+        # Öğrenci Çıkış Logu
+        db.execute("""
+            CREATE TABLE IF NOT EXISTS ogrenci_cikis_log (
+                id       INTEGER PRIMARY KEY AUTOINCREMENT,
+                tarih    TEXT NOT NULL,
+                saat     TEXT NOT NULL,
+                numara   TEXT NOT NULL,
+                ad_soyad TEXT NOT NULL,
+                paket    TEXT NOT NULL,
+                ip       TEXT NOT NULL DEFAULT '',
+                kaynak   TEXT NOT NULL DEFAULT 'ogrenci'
+            )
+        """)
+
 

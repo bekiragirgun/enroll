@@ -29,6 +29,24 @@ def paket_hesapla():
     else:
         return '—'
 
+# Paket string → (baslangic, bitis) zaman aralığı
+_PAKET_SAATLERI = {
+    '09:00': ('09:00', '11:35'),
+    '12:40': ('12:40', '15:15'),
+    '15:25': ('15:25', '18:00'),
+}
+
+def paket_zaman_kontrolu(paket_str: str) -> tuple:
+    """Verilen paket string'i için (baslangic_str, bitis_str, gecerli_mi) döndür."""
+    from datetime import time as t
+    now = datetime.now().time()
+    for anahtar, (bas, bit) in _PAKET_SAATLERI.items():
+        if anahtar in paket_str:
+            bs = t(int(bas[:2]), int(bas[3:]))
+            bt = t(int(bit[:2]), int(bit[3:]))
+            return bas, bit, (bs <= now <= bt)
+    return '', '', False
+
 def slayt_listesi():
     if not SLAYT_DIR.exists():
         return []

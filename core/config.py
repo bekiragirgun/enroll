@@ -15,7 +15,8 @@ ders_durumu = {
     'kiosk_modu': '1',
     'cikis_izni': '0',
     'ip_kontrol': '1',
-    'toplu_cikis_zamani': 0
+    'toplu_cikis_zamani': 0,
+    'force_cikis': {}    # {numara: timestamp} — öğretmen bireysel çıkartma
 }
 
 def ayar_kaydet(anahtar, deger):

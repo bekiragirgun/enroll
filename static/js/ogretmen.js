@@ -623,6 +623,57 @@ function guvenlikSoketBaslat() {
   }
 }
 
+async function cikisLogCek() {
+  const kutu = document.getElementById('cikis-log-kutu');
+  if (!kutu) return;
+  try {
+    const yanit = await safeFetch('/api/ogrenci_cikis_log');
+    const veri = await yanit.json();
+    if (!veri.kayitlar || veri.kayitlar.length === 0) {
+      kutu.innerHTML = '<div style="color:#718096;text-align:center;padding:1rem;">Bugün çıkış yok</div>';
+      return;
+    }
+    let html = '<table style="width:100%;border-collapse:collapse;font-size:0.82rem;">';
+    html += '<tr style="color:#a0aec0;border-bottom:1px solid #4a5568;"><th style="padding:6px;">Saat</th><th>Numara</th><th>Ad Soyad</th><th>Paket</th><th>Kaynak</th><th>İşlem</th></tr>';
+    veri.kayitlar.forEach(k => {
+      const kaynak_renk = k.kaynak === 'force' ? '#fc8181' : '#68d391';
+      const kaynak_etiket = k.kaynak === 'force' ? '👨‍🏫 Force' : '🧑 Öğrenci';
+      html += `<tr style="border-bottom:1px solid #2d3748;">
+        <td style="padding:5px 8px;color:#a0aec0;">${k.saat}</td>
+        <td style="padding:5px 8px;">${k.numara}</td>
+        <td style="padding:5px 8px;">${k.ad_soyad}</td>
+        <td style="padding:5px 8px;color:#90cdf4;">${k.paket}</td>
+        <td style="padding:5px 8px;color:${kaynak_renk};">${kaynak_etiket}</td>
+        <td style="padding:5px 8px;"></td>
+      </tr>`;
+    });
+    html += '</table>';
+    kutu.innerHTML = html;
+  } catch(e) {
+    kutu.innerHTML = '<div style="color:#e53e3e;padding:1rem;">Hata: ' + e.message + '</div>';
+  }
+}
+
+async function ogrenciForceCikis(numara, adSoyad) {
+  if (!confirm(`${adSoyad || numara} adlı öğrenciyi zorla çıkartmak istiyor musunuz?`)) return;
+  try {
+    const res = await safeFetch('/api/ogrenci_force_cikis', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ numara })
+    });
+    const veri = await res.json();
+    if (veri.durum === 'ok') {
+      alert(`✅ ${numara} çıkartıldı (5 saniye içinde etkili olacak).`);
+      cikisLogCek();
+    } else {
+      alert('Hata: ' + (veri.mesaj || 'Bilinmeyen hata'));
+    }
+  } catch(e) {
+    alert('Bağlantı hatası.');
+  }
+}
+
 async function guvenlikLogCek() {
   try {
     const yanit = await safeFetch('/api/terminal/guvenlik_log');
@@ -1029,6 +1080,60 @@ async function sifreDegistir() {
   }
 }
 
+async function chrootListele() {
+  const sonuc = document.getElementById('chroot-tarama-sonuc');
+  const liste = document.getElementById('chroot-fazla-liste');
+  const btn = document.getElementById('chroot-temizle-btn');
+  if (sonuc) sonuc.textContent = '⏳ Taranıyor...';
+  if (liste) liste.innerHTML = '';
+  if (btn) btn.style.display = 'none';
+  try {
+    const res = await safeFetch('/api/chroot/listele');
+    const veri = await res.json();
+    if (veri.hata) {
+      if (sonuc) { sonuc.style.color = '#e53e3e'; sonuc.textContent = 'Hata: ' + veri.hata; }
+      return;
+    }
+    if (veri.fazla_sayisi === 0) {
+      if (sonuc) { sonuc.style.color = '#48bb78'; sonuc.textContent = `✅ Temiz — ${veri.toplam} VM, hepsi aktif.`; }
+      return;
+    }
+    if (sonuc) {
+      sonuc.style.color = '#f6ad55';
+      sonuc.textContent = `⚠️ ${veri.fazla_sayisi} eski VM bulundu (toplam: ${veri.toplam})`;
+    }
+    if (btn) btn.style.display = 'inline-block';
+    if (liste) {
+      liste.innerHTML = veri.fazla.map(u =>
+        `<span style="display:inline-block;background:#742a2a;color:#feb2b2;border-radius:4px;padding:2px 8px;margin:2px;font-size:0.78rem;font-family:monospace;">${u}</span>`
+      ).join('');
+    }
+  } catch (e) {
+    if (sonuc) { sonuc.style.color = '#e53e3e'; sonuc.textContent = 'Bağlantı hatası'; }
+  }
+}
+
+async function chrootTemizle() {
+  const btn = document.getElementById('chroot-temizle-btn');
+  const sonuc = document.getElementById('chroot-tarama-sonuc');
+  if (!confirm('Bu eski VM\'ler kalıcı olarak silinecek. Emin misiniz?')) return;
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ Siliniyor...'; }
+  try {
+    const res = await safeFetch('/api/chroot/temizle', { method: 'POST' });
+    const veri = await res.json();
+    if (veri.hata) {
+      if (sonuc) { sonuc.style.color = '#e53e3e'; sonuc.textContent = 'Hata: ' + veri.hata; }
+    } else {
+      if (sonuc) { sonuc.style.color = '#48bb78'; sonuc.textContent = `✅ ${veri.silinen} VM siliniyor (arka planda)`; }
+      document.getElementById('chroot-fazla-liste').innerHTML = '';
+    }
+    if (btn) { btn.disabled = false; btn.textContent = '🗑️ Hepsini Sil'; btn.style.display = 'none'; }
+  } catch (e) {
+    if (btn) { btn.disabled = false; btn.textContent = '🗑️ Hepsini Sil'; }
+    if (sonuc) { sonuc.style.color = '#e53e3e'; sonuc.textContent = 'Bağlantı hatası'; }
+  }
+}
+
 async function paketSonu() {
   const onay = confirm(
     '📦 PAKET SONU\n\n' +
@@ -1247,6 +1352,7 @@ document.addEventListener('DOMContentLoaded', () => {
   yoklamaPaketleriCek();
   yoklamaCek();
   sahteCek();
+  sinifDurumCek();        // Kayıtlı öğrenci sayısını güncelle
   guvenlikSoketBaslat();  // Güvenlik uyarılarını dinle
   devamsizlikEsikYukle(); // Devamsizlik esigini yukle
 
@@ -1675,3 +1781,118 @@ async function sinavSonuclariniAc(sinavId, baslik) {
   html += '</table>';
   tablo.innerHTML = html;
 }
+
+// ── Sistem Logları ────────────────────────────────────────────
+let _logVerisi = [];
+let _logSonTs = 0;
+let _logOtomatikInterval = null;
+
+const _seviyeRenk = {
+  DEBUG:   '#718096',
+  INFO:    '#68d391',
+  WARNING: '#f6ad55',
+  ERROR:   '#fc8181',
+  CRITICAL:'#fc8181',
+};
+
+function loglarRenderEt() {
+  const kutu = document.getElementById('log-kutu');
+  if (!kutu) return;
+  const filtre = document.getElementById('log-seviye-filtre')?.value || '';
+  const gorunen = filtre ? _logVerisi.filter(e => e.seviye === filtre) : _logVerisi;
+
+  if (gorunen.length === 0) {
+    kutu.innerHTML = '<div style="color:#4a5568;text-align:center;padding:2rem;">Log bulunamadı.</div>';
+    document.getElementById('log-sayac').textContent = '';
+    return;
+  }
+
+  const frag = document.createDocumentFragment();
+  gorunen.forEach(e => {
+    const renk = _seviyeRenk[e.seviye] || '#a0aec0';
+    const zaman = new Date(e.ts).toLocaleTimeString('tr-TR', { hour12: false });
+    const satir = document.createElement('div');
+    satir.style.cssText = `padding:2px 4px;border-bottom:1px solid #1a202c;white-space:pre-wrap;word-break:break-all;`;
+
+    const ts = document.createElement('span');
+    ts.style.color = '#4a5568';
+    ts.textContent = zaman + ' ';
+
+    const sev = document.createElement('span');
+    sev.style.cssText = `color:${renk};font-weight:bold;min-width:4.5rem;display:inline-block;`;
+    sev.textContent = '[' + e.seviye + '] ';
+
+    const msg = document.createElement('span');
+    msg.style.color = '#e2e8f0';
+    msg.textContent = e.mesaj;
+
+    satir.appendChild(ts);
+    satir.appendChild(sev);
+    satir.appendChild(msg);
+    frag.appendChild(satir);
+  });
+
+  kutu.innerHTML = '';
+  kutu.appendChild(frag);
+  kutu.scrollTop = kutu.scrollHeight;
+
+  const sayac = document.getElementById('log-sayac');
+  if (sayac) sayac.textContent = `${gorunen.length} kayıt gösteriliyor`;
+}
+
+async function loglarCek(tumu = false) {
+  try {
+    const since = tumu ? 0 : _logSonTs;
+    const res = await fetch(`/api/loglar?limit=200&since=${since}`);
+    const veri = await res.json();
+    if (!veri.loglar) return;
+
+    if (tumu) {
+      _logVerisi = veri.loglar;
+      _logSonTs = 0;
+    } else {
+      _logVerisi = [..._logVerisi, ...veri.loglar];
+      // Son 200 girişi tut
+      if (_logVerisi.length > 200) _logVerisi = _logVerisi.slice(-200);
+    }
+    if (veri.loglar.length > 0) {
+      _logSonTs = veri.loglar[veri.loglar.length - 1].ts;
+    }
+    loglarRenderEt();
+  } catch(e) {
+    console.error('Log çekme hatası:', e);
+  }
+}
+
+function logOtomatikToggle() {
+  const aktif = document.getElementById('log-otomatik')?.checked;
+  if (aktif) {
+    _logOtomatikInterval = setInterval(() => loglarCek(false), 3000);
+  } else {
+    clearInterval(_logOtomatikInterval);
+    _logOtomatikInterval = null;
+  }
+}
+
+function logTemizleEkran() {
+  _logVerisi = [];
+  _logSonTs = 0;
+  loglarRenderEt();
+}
+
+// Loglar tabına geçilince otomatik yenilemeyi başlat
+document.addEventListener('DOMContentLoaded', () => {
+  const orijTabGec = typeof tabGec === 'function' ? tabGec : null;
+  if (!orijTabGec) return;
+  window.tabGec = function(tab, btn) {
+    if (tab === 'loglar') {
+      if (!_logOtomatikInterval && document.getElementById('log-otomatik')?.checked) {
+        _logOtomatikInterval = setInterval(() => loglarCek(false), 3000);
+      }
+    } else {
+      clearInterval(_logOtomatikInterval);
+      _logOtomatikInterval = null;
+    }
+    orijTabGec(tab, btn);
+  };
+});

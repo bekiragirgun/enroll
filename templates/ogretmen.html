@@ -142,7 +142,7 @@
         <div class="etiket">Katılan Öğrenci</div>
       </div>
       <div class="ist-item">
-        <div class="sayi" id="kayitli-sayisi">51</div>
+        <div class="sayi" id="kayitli-sayisi">—</div>
         <div class="etiket">Kayıtlı Öğrenci</div>
       </div>
       <div class="ist-item">
@@ -191,7 +191,7 @@
         <span id="sahte-rozet"
           style="display:none;background:#c53030;color:#fff;border-radius:10px;padding:0 6px;font-size:0.72rem;margin-left:4px;">0</span>
       </button>
-      <button class="tab-btn" onclick="tabGec('guvenlik', this); guvenlikLogCek(); sebCikisCek(); cikisTalepleriCek();">
+      <button class="tab-btn" onclick="tabGec('guvenlik', this); guvenlikLogCek(); sebCikisCek(); cikisTalepleriCek(); cikisLogCek();">
         🔐 Güvenlik Log
         <span id="guvenlik-rozet"
           style="display:none;background:#c53030;color:#fff;border-radius:10px;padding:0 6px;font-size:0.72rem;margin-left:4px;">0</span>
@@ -201,6 +201,7 @@
       <button class="tab-btn" onclick="tabGec('ogrenci_yonetim', this); ogrenciYonetimCek();">🎓 Öğrenci
         Yönetimi</button>
       <button class="tab-btn" onclick="tabGec('devam_raporu', this); devamRaporuCek();">📊 Devam Raporu</button>
+      <button class="tab-btn" onclick="tabGec('loglar', this); loglarCek();">📋 Sistem Logları</button>
       <button class="tab-btn" onclick="tabGec('ayarlar', this)">⚙️ Ayarlar</button>
     </div>
 
@@ -283,6 +284,20 @@
 
     <!-- Güvenlik Log -->
     <div id="tab-guvenlik" class="panel-bolum" style="margin-top:1rem;">
+
+      <div class="kutu-baslik" style="margin-bottom:0.5rem;">
+        <div style="display:flex; justify-content:space-between; align-items:center; width:100%;">
+          <div>
+            <h3>🚪 Öğrenci Çıkış Logu</h3>
+            <span style="color:#4a5568;font-size:0.8rem;">Paket saati içinde gerçekleşen çıkışlar</span>
+          </div>
+          <button class="btn-kucuk" style="background:#2b6cb0;" onclick="cikisLogCek()">🔄 Yenile</button>
+        </div>
+      </div>
+      <div id="cikis-log-kutu" style="margin-bottom:2rem;">
+        <div style="color:#718096;text-align:center;padding:1rem;">Yükleniyor...</div>
+      </div>
+
       <div class="kutu-baslik">
         <h3>🔐 Terminal Güvenlik Logu</h3>
         <span style="color:#4a5568;font-size:0.8rem;">Terminal erişim denemeleri</span>
@@ -458,6 +473,42 @@
       </div>
     </div>
 
+    <!-- Sistem Logları -->
+    <div id="tab-loglar" class="panel-bolum" style="margin-top:1rem;">
+      <div class="kutu-baslik" style="display:flex; justify-content:space-between; align-items:center;">
+        <div>
+          <h3>📋 Sistem Logları</h3>
+          <span style="color:#4a5568;font-size:0.8rem;">Uygulama logları (son 200 kayıt)</span>
+        </div>
+        <div style="display:flex;gap:0.5rem;align-items:center;">
+          <label style="color:#a0aec0;font-size:0.8rem;">
+            <input type="checkbox" id="log-otomatik" checked onchange="logOtomatikToggle()">
+            Otomatik Yenile
+          </label>
+          <select id="log-seviye-filtre" onchange="loglarRenderEt()"
+            style="background:#2d3748;color:#fff;border:1px solid #4a5568;border-radius:4px;padding:3px 6px;font-size:0.8rem;">
+            <option value="">Tümü</option>
+            <option value="INFO">INFO</option>
+            <option value="WARNING">WARNING</option>
+            <option value="ERROR">ERROR</option>
+          </select>
+          <button onclick="loglarCek(true)"
+            style="padding:4px 12px;background:#2b6cb0;color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:0.8rem;">
+            🔄 Yenile
+          </button>
+          <button onclick="logTemizleEkran()"
+            style="padding:4px 12px;background:#4a5568;color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:0.8rem;">
+            🗑️ Temizle
+          </button>
+        </div>
+      </div>
+      <div id="log-kutu"
+        style="margin-top:0.75rem;background:#0d1117;border:1px solid #2d3748;border-radius:6px;height:480px;overflow-y:auto;font-family:'Menlo','Courier New',monospace;font-size:0.78rem;padding:0.5rem;">
+        <div style="color:#4a5568;text-align:center;padding:2rem;">Loglar yükleniyor...</div>
+      </div>
+      <div id="log-sayac" style="color:#718096;font-size:0.75rem;margin-top:0.3rem;text-align:right;"></div>
+    </div>
+
     <!-- Ayarlar -->
     <div id="tab-ayarlar" class="panel-bolum" style="margin-top:1rem;">
       <div class="kutu-baslik">
@@ -550,6 +601,18 @@
               Et</button>
             <span id="healthcheck-sonuc" style="font-size:0.85rem; font-weight:bold;"></span>
           </div>
+
+          <hr style="border-color:#4a5568; margin:1.5rem 0;">
+          <h4 style="color:#90cdf4; margin-bottom:0.75rem;">🧹 VM Temizliği</h4>
+          <p style="color:#a0aec0;font-size:0.82rem;margin-bottom:0.75rem;">
+            DB'de kayıtlı olmayan (öğrenci silindi veya eski kalan) chroot VM'lerini tespit edip siler.
+          </p>
+          <div style="display:flex;gap:0.75rem;align-items:center;flex-wrap:wrap;">
+            <button class="btn-kucuk" style="background:#2b6cb0;" onclick="chrootListele()">🔍 Eski VM Tara</button>
+            <button class="btn-kucuk" id="chroot-temizle-btn" style="background:#742a2a;display:none;" onclick="chrootTemizle()">🗑️ Hepsini Sil</button>
+            <span id="chroot-tarama-sonuc" style="font-size:0.82rem;color:#a0aec0;"></span>
+          </div>
+          <div id="chroot-fazla-liste" style="margin-top:0.5rem;"></div>
 
           <hr style="border-color:#4a5568; margin:1.5rem 0;">
           <h4 style="color:#90cdf4; margin-bottom:0.75rem;">🔑 Şifre Değiştir</h4>

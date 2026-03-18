@@ -445,6 +445,44 @@ async function cikisTalepEt() {
   }
 }
 
+// ── Öğrenci Çıkış (Paket Saati İçinde) ──────────────────────
+function oturumKapat() {
+  const modal = document.getElementById('cikis-modal');
+  const mesaj = document.getElementById('cikis-modal-mesaj');
+  if (mesaj) mesaj.textContent = 'Paket saatleri içinde çıkış yapacaksınız. Tekrar giriş yapabilirsiniz.';
+  if (modal) modal.style.display = 'flex';
+}
+
+function cikisIptal() {
+  const modal = document.getElementById('cikis-modal');
+  if (modal) modal.style.display = 'none';
+}
+
+async function cikisOnayla() {
+  const btn = document.getElementById('btn-cikis-onayla');
+  if (btn) { btn.disabled = true; btn.textContent = '⏳...'; }
+  try {
+    const res = await fetch('/api/ogrenci_cikis', { method: 'POST' });
+    const veri = await res.json();
+    if (veri.durum === 'ok') {
+      window.location.href = '/';
+    } else if (veri.zaman_disi) {
+      const mesaj = document.getElementById('cikis-modal-mesaj');
+      if (mesaj) {
+        mesaj.style.color = '#fc8181';
+        mesaj.textContent = veri.mesaj;
+      }
+      if (btn) { btn.disabled = true; btn.textContent = 'Çıkış Kapalı'; btn.style.background = '#4a5568'; }
+    } else {
+      alert(veri.mesaj || 'Hata oluştu.');
+      if (btn) { btn.disabled = false; btn.textContent = 'Evet, Çık'; }
+    }
+  } catch (e) {
+    alert('Bağlantı hatası.');
+    if (btn) { btn.disabled = false; btn.textContent = 'Evet, Çık'; }
+  }
+}
+
 // SEB kapandığında / Sayfa tazelendiğinde arka plana log at
 window.addEventListener('beforeunload', function (e) {
   if (suAnkiDurum.mod === 'sinav' || suAnkiDurum.mod === 'terminal' || suAnkiDurum.mod === 'slayt') {

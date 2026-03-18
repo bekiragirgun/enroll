@@ -4,10 +4,13 @@ set -e
 
 cd "$(dirname "$0")"
 
-PKG="chroot-terminal_1.1"
+PKG="chroot-terminal_1.2"
 
-# chroot_yonetici.py'yi güncelle
-cp ../chroot_yonetici.py ${PKG}/usr/local/bin/chroot-yonetici
+# Kaynak: varsa ../chroot_yonetici.py, yoksa paketin kendi kopyasını kullan
+if [ -f "../chroot_yonetici.py" ]; then
+    echo "→ chroot_yonetici.py kaynaktan kopyalanıyor..."
+    cp ../chroot_yonetici.py ${PKG}/usr/local/bin/chroot-yonetici
+fi
 chmod 755 ${PKG}/usr/local/bin/chroot-yonetici
 
 # Dosya izinlerini düzelt

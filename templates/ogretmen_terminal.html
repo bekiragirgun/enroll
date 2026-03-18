@@ -195,15 +195,27 @@ function ogrenciListesiGuncelle() {
       }
 
       veri.oturumlar.forEach(function(o) {
+        var satir = document.createElement('div');
+        satir.style.cssText = 'display:flex; align-items:center; gap:4px; margin-bottom:4px;';
+
         var btn = document.createElement('button');
-        btn.style.cssText = 'display:block; width:100%; text-align:left; padding:6px 10px; margin-bottom:4px; background:#1a202c; border:1px solid #4a5568; color:#e2e8f0; border-radius:6px; cursor:pointer; font-size:12px;';
+        btn.style.cssText = 'flex:1; text-align:left; padding:6px 10px; background:#1a202c; border:1px solid #4a5568; color:#e2e8f0; border-radius:6px; cursor:pointer; font-size:12px;';
         var durum = o.aktif ? ' [aktif]' : ' [bekliyor]';
         btn.textContent = o.username + durum;
         if (o.aktif) {
           btn.style.borderColor = '#48bb78';
         }
         btn.addEventListener('click', function() { izlemeBaslat(o.username); });
-        liste.appendChild(btn);
+
+        var btnCikis = document.createElement('button');
+        btnCikis.title = 'Zorla Çıkart';
+        btnCikis.textContent = '🚪';
+        btnCikis.style.cssText = 'padding:6px 8px; background:#c53030; border:none; color:white; border-radius:6px; cursor:pointer; font-size:12px; flex-shrink:0;';
+        btnCikis.addEventListener('click', function() { ogrenciForceCikis(o.username); });
+
+        satir.appendChild(btn);
+        satir.appendChild(btnCikis);
+        liste.appendChild(satir);
       });
     })
     .catch(function(e) {
@@ -221,15 +233,13 @@ function izlemeBaslat(username) {
   document.getElementById('izleme-terminal-container').style.borderColor = '#3182ce';
   document.getElementById('mudahale-btn').textContent = 'Mudahale Et';
   document.getElementById('mudahale-btn').style.background = '#2b6cb0';
-  // Izleme modunda stdin'i kapat
-  izlemeTerminal.options.disableStdin = true;
+  // disableStdin kullanılmıyor: onData guard (izlemeAktif && mudahaleAktif) gönderimi kontrol eder
 }
 
 function izlemeBirak() {
   socket.emit('ogretmen_izle_birak');
   izlemeAktif = false;
   mudahaleAktif = false;
-  izlemeTerminal.options.disableStdin = true;
   document.getElementById('izleme-durum').textContent = 'Izleme kapali';
   document.getElementById('izleme-terminal-container').style.borderColor = '#4a5568';
   document.getElementById('mudahale-btn').textContent = 'Mudahale Et';
@@ -352,6 +362,21 @@ function yardimTalepleriCek() {
 
 yardimTalepleriCek();
 setInterval(yardimTalepleriCek, 10000);
+
+function ogrenciForceCikis(numara) {
+  if (!confirm(numara + ' numaralı öğrenciyi zorla çıkartmak istiyor musunuz?')) return;
+  fetch('/api/ogrenci_force_cikis', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ numara: numara })
+  }).then(function(r) { return r.json(); })
+    .then(function(v) {
+      alert(v.durum === 'ok'
+        ? '✅ ' + numara + ' çıkartıldı (5 sn içinde etkili olacak).'
+        : '❌ Hata: ' + (v.mesaj || 'Bilinmeyen'));
+    })
+    .catch(function() { alert('Bağlantı hatası.'); });
+}
 </script>
 </body>
 </html>

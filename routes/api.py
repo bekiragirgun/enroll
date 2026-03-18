@@ -6,7 +6,7 @@ from flask import Blueprint, request, jsonify, send_file
 from core.db import db_baglantisi
 from core.config import ders_durumu, ayar_kaydet, ayar_getir
 from core.security import ogretmen_giris_gerekli
-from core.utils import bugun, simdi, paket_hesapla
+from core.utils import bugun, simdi, paket_hesapla, paket_zaman_kontrolu, istemci_ip
 from docker_terminal import image_var_mi, container_durum
 
 log = logging.getLogger('app')
@@ -34,6 +34,15 @@ def api_durum():
     if toplu_cikis_zamani and giris_zamani and toplu_cikis_zamani > giris_zamani:
         toplu_cikis = True
         session.clear()
+
+    # Bireysel force-çıkış kontrolü (öğretmen tek öğrenciyi çıkarır)
+    if not toplu_cikis and numara:
+        force_cikis_zamani = ders_durumu.get('force_cikis', {}).get(numara, 0)
+        if force_cikis_zamani and giris_zamani and force_cikis_zamani > giris_zamani:
+            toplu_cikis = True
+            session.clear()
+            # Temizle — tek seferlik
+            ders_durumu.get('force_cikis', {}).pop(numara, None)
 
     response = {
         'mod': ders_durumu['mod'],
@@ -568,6 +577,94 @@ def api_seb_cikis_toplu_onayla():
         db.commit()
     return jsonify({'durum': 'ok'})
 
+@api_bp.route('/ogrenci_cikis', methods=['POST'])
+def api_ogrenci_cikis():
+    """Öğrenci paket saatleri içinde kendi oturumunu kapatır."""
+    from flask import session
+    numara = session.get('numara')
+    if not numara:
+        return jsonify({'durum': 'hata', 'mesaj': 'Oturum yok'}), 401
+
+    ad_soyad = f"{session.get('ad', '')} {session.get('soyad', '')}".strip()
+
+    # Bugünkü paketi bul
+    with db_baglantisi() as db:
+        kayit = db.execute(
+            'SELECT paket FROM yoklama WHERE tarih=? AND numara=? ORDER BY id DESC LIMIT 1',
+            (bugun(), numara)
+        ).fetchone()
+
+    if not kayit:
+        return jsonify({'durum': 'hata', 'mesaj': 'Bugün yoklama kaydınız bulunamadı.'})
+
+    paket = kayit['paket']
+    bas, bit, gecerli = paket_zaman_kontrolu(paket)
+
+    if not gecerli:
+        return jsonify({
+            'durum': 'hata',
+            'mesaj': f'Çıkış yalnızca paket saatleri içinde yapılabilir ({bas}–{bit}).',
+            'zaman_disi': True,
+            'paket': paket,
+            'bas': bas,
+            'bit': bit,
+        })
+
+    # Çıkışı kaydet
+    with db_baglantisi() as db:
+        db.execute(
+            'INSERT INTO ogrenci_cikis_log (tarih, saat, numara, ad_soyad, paket, ip, kaynak) VALUES (?,?,?,?,?,?,?)',
+            (bugun(), simdi(), numara, ad_soyad, paket, istemci_ip(), 'ogrenci')
+        )
+        db.commit()
+
+    log.info(f"🚪 Öğrenci çıkış: {numara} ({ad_soyad}) — {paket}")
+    session.clear()
+    return jsonify({'durum': 'ok', 'mesaj': 'Çıkış başarılı.'})
+
+
+@api_bp.route('/ogrenci_cikis_log')
+@ogretmen_giris_gerekli
+def api_ogrenci_cikis_log():
+    """Öğrenci çıkış loglarını listele."""
+    tarih = request.args.get('tarih', bugun())
+    with db_baglantisi() as db:
+        kayitlar = db.execute(
+            'SELECT * FROM ogrenci_cikis_log WHERE tarih=? ORDER BY id DESC',
+            (tarih,)
+        ).fetchall()
+    return jsonify({'kayitlar': [dict(k) for k in kayitlar]})
+
+
+@api_bp.route('/ogrenci_force_cikis', methods=['POST'])
+@ogretmen_giris_gerekli
+def api_ogrenci_force_cikis():
+    """Öğretmen tek bir öğrenciyi zorla çıkartır."""
+    import time
+    veri = request.get_json(silent=True) or {}
+    numara = veri.get('numara', '').strip()
+    if not numara:
+        return jsonify({'durum': 'hata', 'mesaj': 'Numara gerekli'}), 400
+
+    if 'force_cikis' not in ders_durumu:
+        ders_durumu['force_cikis'] = {}
+    ders_durumu['force_cikis'][numara] = time.time()
+
+    # Log kaydı
+    with db_baglantisi() as db:
+        ad_soyad_row = db.execute('SELECT ad, soyad FROM ogrenciler WHERE numara=?', (numara,)).fetchone()
+        ad_soyad = f"{ad_soyad_row['ad']} {ad_soyad_row['soyad']}" if ad_soyad_row else numara
+        paket = paket_hesapla()
+        db.execute(
+            'INSERT INTO ogrenci_cikis_log (tarih, saat, numara, ad_soyad, paket, ip, kaynak) VALUES (?,?,?,?,?,?,?)',
+            (bugun(), simdi(), numara, ad_soyad, paket, 'ogretmen', 'force')
+        )
+        db.commit()
+
+    log.info(f"👨‍🏫 Öğretmen force-çıkış: {numara}")
+    return jsonify({'durum': 'ok', 'mesaj': f'{numara} çıkartıldı.'})
+
+
 @api_bp.route('/yardim_talep', methods=['POST'])
 def api_yardim_talep():
     from flask import session
@@ -649,7 +746,19 @@ def api_ogrenci_sil():
         db.commit()
     if silinen.rowcount == 0:
         return jsonify({'durum': 'hata', 'mesaj': 'Öğrenci bulunamadı'}), 404
-    return jsonify({'durum': 'ok', 'mesaj': f'{numara} numaralı öğrenci silindi'})
+
+    # Öğrenci silinince chroot VM'i de arka planda temizle
+    import threading
+    def _chroot_sil():
+        try:
+            from chroot_terminal import chroot_sil, _slugify
+            chroot_sil(_slugify(numara))
+            log.info(f"🗑️ Öğrenci silindi, chroot temizlendi: {numara}")
+        except Exception as e:
+            log.warning(f"Öğrenci {numara} chroot silinemedi: {e}")
+    threading.Thread(target=_chroot_sil, daemon=True).start()
+
+    return jsonify({'durum': 'ok', 'mesaj': f'{numara} numaralı öğrenci ve VM silindi'})
 
 @api_bp.route('/ogrenci_guncelle', methods=['POST'])
 @ogretmen_giris_gerekli
@@ -806,4 +915,78 @@ def api_devamsizlik_esik_kaydet():
     esik = veri.get('esik', 3)
     ayar_kaydet('devamsizlik_esik', str(esik))
     return jsonify({'durum': 'ok', 'esik': int(esik)})
+
+
+@api_bp.route('/chroot/listele')
+@ogretmen_giris_gerekli
+def api_chroot_listele():
+    """VM sunucusundaki chroot klasörlerini listele, DB ile karşılaştır."""
+    try:
+        from chroot_terminal import chroot_listesi, _slugify
+        mevcut_chroots = [c['username'] for c in chroot_listesi()]
+
+        with db_baglantisi() as db:
+            ogrenciler = db.execute('SELECT numara FROM ogrenciler').fetchall()
+        aktif_numaralar = {_slugify(r['numara']) for r in ogrenciler}
+        aktif_numaralar.add('ogretmen')  # Öğretmen chroot'u korunacak
+
+        fazla = [u for u in mevcut_chroots if u not in aktif_numaralar]
+        return jsonify({
+            'toplam': len(mevcut_chroots),
+            'aktif': len(aktif_numaralar),
+            'fazla': fazla,
+            'fazla_sayisi': len(fazla),
+        })
+    except Exception as e:
+        log.error(f"Chroot listele hatası: {e}")
+        return jsonify({'hata': str(e)}), 500
+
+
+@api_bp.route('/chroot/temizle', methods=['POST'])
+@ogretmen_giris_gerekli
+def api_chroot_temizle():
+    """DB'de olmayan (artık silinmiş öğrencilere ait) chroot'ları sil."""
+    import threading
+    try:
+        from chroot_terminal import chroot_listesi, chroot_sil_batch, _slugify
+        mevcut_chroots = [c['username'] for c in chroot_listesi()]
+
+        with db_baglantisi() as db:
+            ogrenciler = db.execute('SELECT numara FROM ogrenciler').fetchall()
+        aktif_numaralar = {_slugify(r['numara']) for r in ogrenciler}
+        aktif_numaralar.add('ogretmen')
+
+        fazla = [u for u in mevcut_chroots if u not in aktif_numaralar]
+        if not fazla:
+            return jsonify({'durum': 'ok', 'mesaj': 'Temizlenecek eski chroot yok.', 'silinen': 0})
+
+        log.info(f"🧹 Eski chroot temizliği başlıyor: {len(fazla)} adet — {fazla}")
+
+        def _temizle():
+            sonuclar = chroot_sil_batch(fazla)
+            silindi = sum(1 for v in sonuclar.values() if v)
+            log.info(f"✅ Eski chroot temizliği tamamlandı: {silindi}/{len(fazla)} silindi")
+
+        threading.Thread(target=_temizle, daemon=True).start()
+
+        return jsonify({
+            'durum': 'ok',
+            'mesaj': f'{len(fazla)} eski chroot siliniyor...',
+            'silinen': len(fazla),
+            'liste': fazla,
+        })
+    except Exception as e:
+        log.error(f"Chroot temizle hatası: {e}")
+        return jsonify({'hata': str(e)}), 500
+
+
+@api_bp.route('/loglar')
+@ogretmen_giris_gerekli
+def api_loglar():
+    """Son N uygulama logu döndür (in-memory buffer)."""
+    from core.state import log_buffer
+    limit = min(int(request.args.get('limit', 200)), 500)
+    since_ts = int(request.args.get('since', 0))
+    kayitlar = [e for e in log_buffer if e['ts'] > since_ts]
+    return jsonify({'loglar': list(kayitlar)[-limit:]})
 

@@ -25,6 +25,7 @@ from flask_socketio import SocketIO, emit
 from core.db import db_olustur
 from core.config import ayarlari_yukle, ders_durumu
 import logging
+import collections
 
 from routes.student import student_bp
 from routes.teacher import teacher_bp
@@ -34,11 +35,32 @@ from routes.exam import exam_bp
 
 SECRET_KEY = 'kapadokya-linux-2024'
 
+# ── In-memory log buffer (UI için) ────────────────────────────
+log_buffer = collections.deque(maxlen=500)  # Son 500 log satırı
+
+class _BufHandler(logging.Handler):
+    """Her log kaydını log_buffer'a ekler."""
+    def emit(self, record):
+        try:
+            log_buffer.append({
+                'ts': int(record.created * 1000),  # ms cinsinden timestamp
+                'seviye': record.levelname,
+                'mesaj': self.format(record),
+            })
+        except Exception:
+            pass
+
 # ── Uygulama ──────────────────────────────────────────────────
 app = Flask(__name__)
 app.secret_key = SECRET_KEY
 app.config['SEND_FILE_MAX_AGE_DEFAULT'] = 0  # Static dosyaları cache'leme
 log = app.logger
+log.setLevel(logging.INFO)
+
+# BufHandler'ı kök logger'a ekle — tüm modüllerin log.info/error'ları yakalanır
+_buf_handler = _BufHandler()
+_buf_handler.setFormatter(logging.Formatter('%(name)s — %(message)s'))
+logging.getLogger().addHandler(_buf_handler)
 
 # eventlet ile daha performanslı ve stabil WebSocket desteği
 socketio = SocketIO(app, cors_allowed_origins="*", async_mode='eventlet')
@@ -85,12 +107,13 @@ _ogretmen_pty_kapaniyor = False  # Eski PTY'nin kapandığını reader thread'e 
 ogretmen_izlenen_sid = None  # Öğretmenin şu an izlediği öğrenci SID'i
 ogretmen_mudahale = False     # Müdahale modu açık mı
 
-# Blueprint'lerin aynı dict nesnelerini görmesi için core.state'e bağla
+# Blueprint'lerin aynı dict/deque nesnelerini görmesi için core.state'e bağla
 # (double-import tuzağını önler: app.py __main__ olarak çalışır)
 import core.state as _state
 _state.ogrenci_surecleri = ogrenci_surecleri
 _state.ogrenci_sidleri   = ogrenci_sidleri
 _state.ogrenci_pty_locks = ogrenci_pty_locks
+_state.log_buffer        = log_buffer
 
 def _pty_oku_ve_yayinla(fd, hedef_event, hedef_room=None, broadcast=False):
     """PTY fd'den oku ve SocketIO üzerinden yayınla.
@@ -207,12 +230,6 @@ def ogretmen_baglan_event(veri=None):
 
         t = threading.Thread(target=_pty_oku_ve_yayinla, args=(master_fd, 'ogretmen_cikti', None, True), daemon=True)
         t.start()
-
-        if ders_durumu['mod'] != 'terminal':
-            log.info(f"Otomatik mod değişimi tetiklendi: {ders_durumu['mod']} -> terminal")
-            ders_durumu['mod'] = 'terminal'
-            if not ders_durumu.get('terminal_url'):
-                ders_durumu['terminal_url'] = '/terminal'
 
         emit('bagli_ogrenci_sayisi', len(ogrenci_sidleri))
 
