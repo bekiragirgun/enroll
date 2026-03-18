@@ -139,6 +139,21 @@ def giris():
 
     return redirect(url_for('student_bp.ana'))
 
+@student_bp.route('/seb-quit')
+def seb_quit():
+    """SEB quitURL endpoint — SEB bu URL'ye navigate edildiğinde kendini kapatır."""
+    from flask import session
+    numara = session.get('numara', 'bilinmiyor')
+    session.clear()
+    return Response(
+        f"""<!DOCTYPE html>
+<html><head><title>SEB Çıkış</title></head>
+<body style="background:#000;color:#fff;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;font-family:sans-serif;">
+<h2>SEB kapatılıyor... ({numara})</h2>
+</body></html>""",
+        mimetype='text/html'
+    )
+
 @student_bp.route('/seb-gerekli')
 def seb_gerekli_sayfasi():
     return render_template('seb_gerekli.html')
