@@ -108,6 +108,12 @@ def sinav_aktiflestir():
         ders_durumu['mod'] = 'sinav'
         ders_durumu['dosya'] = str(sinav_id)
         ders_durumu['sinav_terminal'] = bool(sinav_terminal)
+        if sinav_terminal:
+            # Terminal URL'sini ayarla (yoksa varsayılan)
+            if not ders_durumu.get('terminal_url'):
+                ders_durumu['terminal_url'] = '/terminal'
+            import logging
+            logging.getLogger('app').info(f"📝 Sınav başlatıldı: terminal_açık={sinav_terminal}, terminal_url={ders_durumu.get('terminal_url')}")
     else:
         ders_durumu['mod'] = 'bekleme'
         ders_durumu['sinav_terminal'] = False

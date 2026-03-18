@@ -229,9 +229,22 @@ async function sinavCevaplariniGonder() {
     });
 
     if (yanit.ok) {
-      document.getElementById('ogrenci-sorular-alani').style.display = 'none';
-      document.getElementById('btn-sinav-gonder').style.display = 'none';
-      document.getElementById('sinav-bitis-mesaji').style.display = 'block';
+      // Normal mod elementleri
+      const sorularAlani = document.getElementById('ogrenci-sorular-alani');
+      const gonderBtn = document.getElementById('btn-sinav-gonder');
+      const bitisMsg = document.getElementById('sinav-bitis-mesaji');
+      if (sorularAlani) sorularAlani.style.display = 'none';
+      if (gonderBtn) gonderBtn.style.display = 'none';
+      if (bitisMsg) bitisMsg.style.display = 'block';
+
+      // Split mod: sol paneli tamamlandı mesajıyla değiştir
+      const splitSol = document.getElementById('sinav-split-sol');
+      if (splitSol && splitSol.innerHTML.includes('sinav-soru')) {
+        splitSol.innerHTML = '<div style="text-align:center;padding:3rem 1rem;"><div style="font-size:4rem;margin-bottom:1rem;">✅</div>' +
+          '<h3 style="color:#48bb78;">Sınav Tamamlandı</h3>' +
+          '<p style="color:#a0aec0;">Cevaplarınız kaydedildi. Terminal açık kalmaya devam ediyor.</p></div>';
+      }
+
       // SEB'deyse "Sınavı Bitir ve Çık" butonunu göster (cikis_izni'nden bağımsız)
       const isSEB = navigator.userAgent.includes('SafeExamBrowser') || navigator.userAgent.includes('SEB/');
       const sebCikisBtn = document.getElementById('btn-sinav-seb-cikis');
@@ -281,7 +294,8 @@ async function durumKontrol() {
       veri.mod !== suAnkiDurum.mod ||
       veri.dosya !== suAnkiDurum.dosya ||
       veri.slayt_hash !== suAnkiDurum.slayt_hash ||
-      veri.terminal_url !== suAnkiDurum.terminal_url;
+      veri.terminal_url !== suAnkiDurum.terminal_url ||
+      veri.sinav_terminal !== suAnkiDurum.sinav_terminal;
 
     if (degisti) {
       console.log('[Polling] Durum değişti:', suAnkiDurum, '->', veri);
