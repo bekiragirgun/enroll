@@ -181,46 +181,52 @@
         <i class="bi bi-laptop"></i> <span id="platform-text">Platform tespit ediliyor...</span>
     </div>
 
-    <!-- Adım 1: İndir -->
+    <!-- Adım 1: SEB Zaten Kuruluysa -->
+    <div class="step" style="border-color:rgba(34,197,94,0.3); background:rgba(34,197,94,0.06);">
+        <div class="step-title">
+            <span class="step-num" style="background:#22c55e;">✓</span>
+            SEB Zaten Kuruluysa — Hemen Başlat
+        </div>
+        <p style="font-size:0.85rem; color:#94a3b8; margin-bottom:12px;">
+            SEB kuruluysa aşağıdaki <strong>.seb</strong> dosyasını indirin ve <strong>çift tıklayarak</strong> açın.
+            SEB otomatik olarak başlayıp derse bağlanacaktır.
+        </p>
+        <a href="/seb-config" class="btn btn-success" download="ders_takip.seb">
+            <i class="bi bi-play-circle"></i> ders_takip.seb — SEB ile Derse Bağlan
+        </a>
+    </div>
+
+    <!-- Adım 2: İndir ve Kur -->
     <div class="step">
         <div class="step-title">
             <span class="step-num">1</span>
-            SEB'i İndirin ve Kurun
+            SEB Kurulu Değilse — İndirin
         </div>
         <div class="btn-group">
             <a id="btn-win" href="https://github.com/SafeExamBrowser/seb-win-refactoring/releases/download/v3.10.1/SEB_3.10.1.864_SetupBundle.exe"
-               class="btn btn-windows" target="_blank">
-                <i class="bi bi-windows"></i> Windows x64 İndir
-            </a>
-            <a id="btn-win-x86" href="https://github.com/SafeExamBrowser/seb-win-refactoring/releases/download/v3.10.1/SEB_3.10.1.864_SetupBundle.exe"
-               class="btn btn-mac" target="_blank" title="ARM Windows için x86 sürümü kullanın">
-                <i class="bi bi-cpu"></i> Windows x86 (ARM için)
+               class="btn btn-windows">
+                <i class="bi bi-windows"></i> Windows İndir
             </a>
             <a id="btn-mac" href="https://github.com/SafeExamBrowser/seb-mac/releases/latest/download/SafeExamBrowser.dmg"
-               class="btn btn-mac" target="_blank">
+               class="btn btn-mac">
                 <i class="bi bi-apple"></i> macOS İndir
             </a>
         </div>
-        <p id="arm-note" style="display:none; font-size:0.78rem; color:#fcd34d; margin-top:10px;">
-            <i class="bi bi-exclamation-triangle-fill"></i>
-            <strong>ARM Windows:</strong> SEB'in resmi ARM sürümü bulunmuyor.
-            Lütfen <strong>x86 sürümünü</strong> indirin — Windows ARM emülasyonu ile çalışır.
+        <p style="font-size:0.78rem; color:#94a3b8; margin-top:10px;">
+            <i class="bi bi-info-circle"></i>
+            İndirdikten sonra kurulumu tamamlayın, ardından yukarıdaki <strong>.seb dosyasını</strong> çift tıklayarak açın.
         </p>
     </div>
 
-    <!-- Adım 2: Bağlan -->
+    <!-- Adım 3: Şifre bilgisi -->
     <div class="step">
         <div class="step-title">
             <span class="step-num">2</span>
-            SEB'i Kurulumdan Sonra Başlatın
+            SEB Şifre Bilgisi
         </div>
-        <p style="font-size:0.85rem; color:#94a3b8; margin-bottom:12px;">
-            Kurulum tamamlandıktan sonra aşağıdaki <strong>.seb</strong> dosyasını indirin ve <strong>çift tıklayarak</strong> açın.
-            SEB otomatik olarak başlayıp sisteme bağlanacaktır.
+        <p style="font-size:0.85rem; color:#94a3b8;">
+            SEB'den çıkmak için şifre sorulursa: <strong style="color:#90cdf4; user-select:all;">linux2024</strong>
         </p>
-        <a href="/seb-config" class="btn btn-success">
-            <i class="bi bi-download"></i> ders_takip.seb Dosyasını İndir ve Başlat
-        </a>
     </div>
 
     <p class="note">
