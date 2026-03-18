@@ -187,6 +187,24 @@ def _ssh_pool_kapat():
 atexit.register(_ssh_pool_kapat)
 
 
+def _ssh_pool_reset():
+    """Stale pool bağlantısını temizle — sonraki çağrı yeniden oluşturur."""
+    global _pool_ready, _pool_process
+    _pool_ready = False
+    if _pool_process:
+        try:
+            _pool_process.terminate()
+        except Exception:
+            pass
+        _pool_process = None
+    if _pool_socket:
+        try:
+            Path(_pool_socket).unlink(missing_ok=True)
+        except Exception:
+            pass
+    log.info("🔄 SSH pool sıfırlandı, yeniden bağlanılacak")
+
+
 def _ct991_exec(command: list, retries: int = 2) -> subprocess.CompletedProcess:
     """CT 991 üzerinde komut çalıştır (Local veya SSH üzerinden).
 
@@ -234,11 +252,29 @@ def _ct991_exec(command: list, retries: int = 2) -> subprocess.CompletedProcess:
             if result.returncode == 0:
                 return result
 
-            # SSH bağlantı hatası (exit 255) → retry
+            # SSH bağlantı hatası (exit 255) → pool'u sıfırla ve retry
             if result.returncode == 255 and attempt < retries:
+                _ssh_pool_reset()
                 wait = (attempt + 1) * 2
-                log.warning(f"SSH bağlantı hatası, {wait}s sonra tekrar denenecek ({attempt+1}/{retries})")
+                log.warning(f"SSH bağlantı hatası, pool sıfırlandı, {wait}s sonra tekrar denenecek ({attempt+1}/{retries})")
                 time.sleep(wait)
+                # Yeni pool ile ssh_cmd'yi yeniden oluştur
+                use_pool = _ssh_pool_baslat()
+                control_path = _pool_socket if use_pool else "none"
+                ssh_cmd = [
+                    "ssh", "-o", "ConnectTimeout=10",
+                    "-o", "StrictHostKeyChecking=no",
+                    "-o", "BatchMode=yes" if not CT_991_PASS else "BatchMode=no",
+                    "-o", f"ControlPath={control_path}",
+                    "-o", "ControlMaster=no",
+                    "-p", str(CT_991_REAL_SSH_PORT),
+                    f"{CT_991_USER}@{CT_991_HOST}"
+                ]
+                if CT_991_PASS and not use_pool:
+                    import shutil
+                    if shutil.which("sshpass"):
+                        ssh_cmd = ["sshpass", "-p", CT_991_PASS] + ssh_cmd
+                ssh_cmd += final_command
                 continue
 
             if result.returncode != 0:
@@ -248,6 +284,7 @@ def _ct991_exec(command: list, retries: int = 2) -> subprocess.CompletedProcess:
             return result
         except subprocess.TimeoutExpired:
             log.error(f"SSH zaman aşımı: {' '.join(command)}")
+            _ssh_pool_reset()
             if attempt < retries:
                 time.sleep((attempt + 1) * 2)
                 continue
@@ -541,15 +578,17 @@ def chroot_listesi() -> list:
         log.error(f"Chroot listesi alınamadı: {result.stderr}")
         return []
 
+    import re
     chroots = []
     for line in result.stdout.strip().split('\n'):
-        if line.strip() and line.strip() != "Öğrenci Chroot'ları:":
-            username = line.strip().replace("- ", "").strip()
-            if username:
-                chroots.append({
-                    "username": username,
-                    "active": True
-                })
+        username = line.strip().replace("- ", "").strip()
+        # Yalnızca geçerli Unix kullanıcı adı formatındaki satırları kabul et
+        # (harf/rakam/alt çizgi ile başlar, en az 2 karakter)
+        if username and re.match(r'^[a-z0-9_][a-z0-9_]{1,}$', username):
+            chroots.append({
+                "username": username,
+                "active": True
+            })
 
     return chroots
 
