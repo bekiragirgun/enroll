@@ -79,7 +79,7 @@ cd enroll/deb-package
 
 # DEB paketi olustur ve kur
 bash build.sh
-sudo dpkg -i chroot-terminal_1.1.deb
+sudo apt install ./chroot-terminal_1.3.deb
 
 # Chroot sablonunu olustur (ilk sefer, ~10dk)
 sudo chroot-yonetici init
