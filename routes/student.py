@@ -89,6 +89,13 @@ def giris():
             (ad_soyad, sinif_id)
         ).fetchone()
 
+        # Fallback: Eğer ad-soyad tam eşleşmezse (Örn: Test modunda "test1" ile girmek için)
+        if not ogrenci:
+            ogrenci = db.execute(
+                'SELECT ad, soyad, numara FROM ogrenciler WHERE numara=? AND sinif_id=?',
+                (numara, sinif_id)
+            ).fetchone()
+
     if not ogrenci:
         return hata_goster('Bu öğrenci numarası seçili sınıfa kayıtlı değil.')
 
