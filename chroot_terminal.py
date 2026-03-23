@@ -483,7 +483,8 @@ def chroot_olustur_batch(users: list) -> dict:
 
     # Tek SSH bağlantısında bash loop — tüm create + mount komutları sırayla
     # JSON çıktısı ile sonuç takibi: "OK:username" veya "ERR:username"
-    loop_lines = []
+    for slug, tam_ad in prepared:
+        safe_ad = tam_ad.replace("'", "'\\''")  # bash single-quote escape
         sudo_prefix = "sudo -S " if CHROOT_USER != "root" else ""
         loop_lines.append(
             f"echo '{CHROOT_PASS}' | {sudo_prefix}{PYTHON_PATH} {CHROOT_MANAGE_SCRIPT} create '{slug}' '{safe_ad}' "
@@ -505,17 +506,18 @@ def chroot_olustur_batch(users: list) -> dict:
 
     for line in result.stdout.splitlines():
         line = line.strip()
+        if line.startswith("OK:"):
+            slug = line[3:]
+            sonuclar[slug] = True
+            _chroot_cache.add(slug)
             log.info(f"✅ Chroot oluşturuldu (batch): {slug}")
         elif line.startswith("ERR:"):
             slug = line[4:]
+            sonuclar[slug] = False
             log.error(f"❌ Chroot oluşturulamadı (batch): {slug}")
             
     if not any(sonuclar.values()):
-        log.error(f"Batch oluşturma başarısız görünüyor! Çıktı: {result.stdout} {result.stderr}")
-        elif line.startswith("ERR:"):
-            slug = line[4:]
-            sonuclar[slug] = False
-            log.error(f"❌ Chroot oluşturma hatası (batch): {slug}")
+        log.error(f"Batch oluşturma başarısız görünüyor! stdout: {result.stdout}, stderr: {result.stderr}")
 
     return sonuclar
 
