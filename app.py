@@ -424,10 +424,10 @@ def ogrenci_girdi_event(veri):
     sid = request.sid
     if sid in ogrenci_surecleri:
         _, fd = ogrenci_surecleri[sid]
-        lock = ogrenci_pty_locks.get(fd)
-        else:
-            try: os.write(fd, veri['data'].encode('utf-8'))
-            except OSError: pass
+        try:
+            os.write(fd, veri['data'].encode('utf-8'))
+        except OSError:
+            pass
 
 
 # ── HTTPS bağlantılarını zararsız şekilde kapat ─────────────
