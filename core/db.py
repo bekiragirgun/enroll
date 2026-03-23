@@ -306,6 +306,23 @@ def test_verilerini_yukle():
             """, ogr)
         
         conn.commit()
+        
+        # 3. Tüm test öğrencilerini bugünün yoklamasına ekle (otomatik giriş)
+        from datetime import datetime
+        tarih = datetime.now().strftime('%Y-%m-%d')
+        saat = datetime.now().strftime('%H:%M')
+        sinif_ad = 'Test Sınıfı (30 Kişi)'
+        
+        for i in range(1, 31):
+            numara = f"test{i}"
+            ad_soyad = f"Öğrenci-{i} TEST"
+            cursor.execute("""
+                INSERT INTO yoklama (tarih, ad_soyad, numara, saat, sinif, paket, ip, kaynak)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT DO NOTHING
+            """, (tarih, ad_soyad, numara, saat, sinif_ad, 'test-paket', '127.0.0.1', 'test'))
+        
+        conn.commit()
         _log.info("📊 Test verileri başarıyla yüklendi.")
 
 
