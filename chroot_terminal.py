@@ -484,14 +484,12 @@ def chroot_olustur_batch(users: list) -> dict:
     # Tek SSH bağlantısında bash loop — tüm create + mount komutları sırayla
     # JSON çıktısı ile sonuç takibi: "OK:username" veya "ERR:username"
     loop_lines = []
-    sudo_prefix = "sudo -S " if CHROOT_USER != "root" else ""
     for slug, tam_ad in prepared:
         safe_ad = tam_ad.replace("'", "'\\''")
-        sudo_prefix = "sudo -S " if CHROOT_USER != "root" else ""
-        # Her komut grubunu parantez içine alıp stdin'i kontrollü yönlendir
+        # NOPASSWD sudo sayesinde artık şifre pipe etmeye gerek yok
         cmd = (
-            f"{{ echo '{CHROOT_PASS}'; }} | {sudo_prefix}{PYTHON_PATH} {CHROOT_MANAGE_SCRIPT} create '{slug}' '{safe_ad}' && "
-            f"{{ echo '{CHROOT_PASS}'; }} | {sudo_prefix}{PYTHON_PATH} {CHROOT_MANAGE_SCRIPT} mount '{slug}' && "
+            f"sudo {PYTHON_PATH} {CHROOT_MANAGE_SCRIPT} create '{slug}' '{safe_ad}' && "
+            f"sudo {PYTHON_PATH} {CHROOT_MANAGE_SCRIPT} mount '{slug}' && "
             f"echo 'OK:{slug}' || echo 'ERR:{slug}'"
         )
         loop_lines.append(cmd)
