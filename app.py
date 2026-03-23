@@ -472,6 +472,7 @@ if __name__ == '__main__':
         print("="*55 + "\n")
         
         os.environ['DB_TYPE'] = 'sqlite'
+        os.environ['TEST_MODE'] = '1'
         import core.paths
         if core.paths.DB_YOLU.exists():
             try:

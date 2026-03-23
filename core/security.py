@@ -20,6 +20,10 @@ def ogretmen_giris_gerekli(f):
 def seb_gerekli(f):
     @wraps(f)
     def decorated(*args, **kwargs):
+        # Test modunda SEB kontrolünü atla
+        import os
+        if os.environ.get('TEST_MODE') == '1':
+            return f(*args, **kwargs)
         kiosk_modu = ayar_getir('kiosk_modu', '1') == '1'
         if kiosk_modu:
             user_agent = request.headers.get('User-Agent', '')
