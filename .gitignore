@@ -40,3 +40,4 @@ boxes/*.box
 
 # Environment Variables
 .env
+postgres_data/
