@@ -20,6 +20,13 @@ PAKET_SECENEKLERI = [
 @seb_gerekli
 def ana():
     """Ana sayfa - Giriş formu veya Öğrenci Paneli."""
+    from core.db import db_saglikli
+    if not db_saglikli:
+        return render_template('login.html',
+                               hata='⛔ Sistem bakımda — veritabanı şu anda erişilemiyor. Lütfen öğretmeninize bildirin.',
+                               siniflar=[],
+                               paket_secenekleri=PAKET_SECENEKLERI,
+                               paket_varsayilan=paket_hesapla())
     if session.get('numara'):
         tarih = bugun()
         with db_baglantisi() as db:
@@ -47,6 +54,16 @@ def ana():
 @student_bp.route('/giris', methods=['POST'])
 @seb_gerekli
 def giris():
+    # DB sağlık kontrolü — veritabanı erişilemezse girişi engelle
+    from core.db import db_saglikli
+    if not db_saglikli:
+        siniflar = []
+        return render_template('login.html',
+                               hata='⛔ Sistem bakımda — veritabanı şu anda erişilemiyor. Lütfen öğretmeninize bildirin ve birkaç dakika sonra tekrar deneyin.',
+                               siniflar=siniflar,
+                               paket_secenekleri=PAKET_SECENEKLERI,
+                               paket_varsayilan=paket_hesapla())
+
     sinif_id  = request.form.get('sinif_id', '').strip()
     ad_soyad  = request.form.get('ad_soyad', '').strip().upper()
     numara    = request.form.get('numara', '').strip()

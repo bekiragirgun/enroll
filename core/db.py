@@ -1,11 +1,26 @@
 import sqlite3
+import logging
 from core.paths import DB_YOLU
 
+_log = logging.getLogger('app')
+
+# Global DB sağlık durumu — False ise öğrenci girişi engellenir
+db_saglikli = True
+
 def db_baglantisi():
+    global db_saglikli
     DB_YOLU.parent.mkdir(exist_ok=True)
-    baglanti = sqlite3.connect(DB_YOLU)
-    baglanti.row_factory = sqlite3.Row
-    return baglanti
+    try:
+        baglanti = sqlite3.connect(DB_YOLU, timeout=5)
+        baglanti.row_factory = sqlite3.Row
+        if not db_saglikli:
+            _log.info("✅ Veritabanı bağlantısı geri geldi")
+            db_saglikli = True
+        return baglanti
+    except sqlite3.OperationalError as e:
+        db_saglikli = False
+        _log.error(f"❌ Veritabanı açılamıyor: {e}")
+        raise
 
 def db_olustur():
     with db_baglantisi() as db:

@@ -53,7 +53,8 @@ def api_durum():
         'toplu_cikis': toplu_cikis,
         'cikis_izni': ders_durumu.get('cikis_izni', '0') == '1',
         'kiosk_modu': ders_durumu.get('kiosk_modu', '1') == '1',
-        'sinav_terminal': ders_durumu.get('sinav_terminal', False)
+        'sinav_terminal': ders_durumu.get('sinav_terminal', False),
+        'db_saglikli': __import__('core.db', fromlist=['db_saglikli']).db_saglikli
     }
     return jsonify(response)
 
