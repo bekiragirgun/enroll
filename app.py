@@ -101,9 +101,7 @@ app.register_blueprint(api_bp)
 app.register_blueprint(terminal_bp)
 app.register_blueprint(exam_bp)
 
-# İlk yükleme
-db_olustur()
-ayarlari_yukle()
+# İlk yükleme (Artık __main__ içinde yapılıyor)
 
 
 # ── SocketIO Terminal Olayları ────────────────────────────────
@@ -456,11 +454,15 @@ if __name__ == '__main__':
         print("="*55 + "\n")
         
         os.environ['DB_TYPE'] = 'sqlite'
-        from core.db import test_verilerini_yukle
+        import core.db
+        from core.db import db_olustur, test_verilerini_yukle
         db_olustur()
         test_verilerini_yukle()
     else:
         db_olustur()
+    
+    from core.config import ayarlari_yukle
+    ayarlari_yukle()
 
     # IP Tespiti
     try:
