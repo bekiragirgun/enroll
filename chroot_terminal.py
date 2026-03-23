@@ -483,14 +483,14 @@ def chroot_olustur_batch(users: list) -> dict:
 
     # Tek SSH bağlantısında bash loop — tüm create + mount komutları sırayla
     # JSON çıktısı ile sonuç takibi: "OK:username" veya "ERR:username"
+    loop_lines = []
+    sudo_prefix = "sudo -S " if CHROOT_USER != "root" else ""
     for slug, tam_ad in prepared:
         safe_ad = tam_ad.replace("'", "'\\''")  # bash single-quote escape
-        sudo_prefix = "sudo -S " if CHROOT_USER != "root" else ""
-        loop_lines.append(
-            f"echo '{CHROOT_PASS}' | {sudo_prefix}{PYTHON_PATH} {CHROOT_MANAGE_SCRIPT} create '{slug}' '{safe_ad}' "
-            f"&& echo '{CHROOT_PASS}' | {sudo_prefix}{PYTHON_PATH} {CHROOT_MANAGE_SCRIPT} mount '{slug}' "
-            f"&& echo 'OK:{slug}' || echo 'ERR:{slug}'"
-        )
+        # Her komut için şifreyi ayrı ayrı gönder
+        cmd_create = f"echo '{CHROOT_PASS}' | {sudo_prefix}{PYTHON_PATH} {CHROOT_MANAGE_SCRIPT} create '{slug}' '{safe_ad}'"
+        cmd_mount = f"echo '{CHROOT_PASS}' | {sudo_prefix}{PYTHON_PATH} {CHROOT_MANAGE_SCRIPT} mount '{slug}'"
+        loop_lines.append(f"{cmd_create} && {cmd_mount} && echo 'OK:{slug}' || echo 'ERR:{slug}'")
 
     # Hepsini tek ssh ile çalıştır (pool varsa socket üzerinden)
     batch_script = "\n".join(loop_lines)
