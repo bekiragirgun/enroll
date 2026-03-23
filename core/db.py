@@ -269,14 +269,14 @@ def db_olustur():
         conn.commit()
 
 
-def test_verilerini_yukle():
+def test_verilerini_yukle(count=30):
     """Test modu için örnek sınıflar ve öğrenciler ekler."""
     with db_baglantisi() as conn:
         cursor = conn.cursor()
         
         # 1. Örnek Sınıflar
         siniflar = [
-            ('Test Sınıfı (30 Kişi)',),
+            (f'Test Sınıfı ({count} Kişi)',),
             ('Bilgisayar Programcılığı',),
             ('Siber Güvenlik',),
             ('İnsansız Hava Aracı Teknolojisi',)
@@ -287,16 +287,13 @@ def test_verilerini_yukle():
         # Sınıf ID'lerini al
         cursor.execute("SELECT id, ad FROM siniflar")
         sinif_map = {ad: id for id, ad in cursor.fetchall()}
-        test_sinif_id = sinif_map['Test Sınıfı (30 Kişi)']
+        test_sinif_id = sinif_map[f'Test Sınıfı ({count} Kişi)']
         
-        # 2. 30 Tane Test Öğrencisi Oluştur
+        # 2. N Tane Test Öğrencisi Oluştur
         ogrenciler = []
-        for i in range(1, 31):
+        for i in range(1, count + 1):
             numara = f"test{i}"
             ogrenciler.append((test_sinif_id, numara, f"Öğrenci-{i}", "TEST", "1234"))
-        
-        # Ekstra özel test kullanıcıları
-        ogrenciler.append((sinif_map['Siber Güvenlik'], 'siber1', 'Siber', 'Uzman', '1234'))
         
         for ogr in ogrenciler:
             cursor.execute("""
@@ -311,9 +308,9 @@ def test_verilerini_yukle():
         from datetime import datetime
         tarih = datetime.now().strftime('%Y-%m-%d')
         saat = datetime.now().strftime('%H:%M')
-        sinif_ad = 'Test Sınıfı (30 Kişi)'
+        sinif_ad = f'Test Sınıfı ({count} Kişi)'
         
-        for i in range(1, 31):
+        for i in range(1, count + 1):
             numara = f"test{i}"
             ad_soyad = f"Öğrenci-{i} TEST"
             cursor.execute("""
@@ -323,6 +320,6 @@ def test_verilerini_yukle():
             """, (tarih, ad_soyad, numara, saat, sinif_ad, 'test-paket', '127.0.0.1', 'test'))
         
         conn.commit()
-        _log.info("📊 Test verileri başarıyla yüklendi.")
+        _log.info(f"📊 {count} test öğrencisi başarıyla yüklendi.")
 
 

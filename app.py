@@ -445,6 +445,7 @@ if __name__ == '__main__':
     parser.add_argument('--host', type=str, help='Chroot Host IP (Örn: 10.211.55.27)')
     parser.add_argument('--user', type=str, help='Chroot SSH Kullanıcısı (Örn: bekir)')
     parser.add_argument('--pass', dest='password', type=str, help='Chroot SSH Şifresi')
+    parser.add_argument('--student', type=int, default=0, help='Test öğrenci sayısı (Örn: --student 30)')
     args = parser.parse_args()
 
     # CLI Argümanlarını Environment Variable olarak ata (config.py tarafından okunması için)
@@ -479,19 +480,26 @@ if __name__ == '__main__':
         import core.db
         from core.db import db_olustur, test_verilerini_yukle, db_baglantisi
         db_olustur()
-        test_verilerini_yukle()
 
-        # TEST MODU: Chroot'ları önceden toplu oluştur (Giriş yapıldığında gecikme olmasın)
-        print("  🏗️  Test chroot'ları toplu olarak oluşturuluyor (Bu biraz zaman alabilir)...")
-        from chroot_terminal import chroot_olustur_batch
-        with db_baglantisi() as conn:
-            cursor = conn.cursor()
-            cursor.execute("SELECT numara, ad, soyad FROM ogrenciler")
-            ogrenciler = [{"username": r[0], "ad": r[1], "soyad": r[2]} for r in cursor.fetchall()]
-        
-        if ogrenciler:
-            chroot_olustur_batch(ogrenciler)
-            print("  ✅ 30 Test Chroot'u hazır.")
+        if args.student > 0:
+            print(f"  👥 {args.student} test öğrencisi oluşturuluyor...")
+            test_verilerini_yukle(args.student)
+
+            # Chroot'ları önceden toplu oluştur
+            print("  🏗️  Test chroot'ları toplu olarak oluşturuluyor (Bu biraz zaman alabilir)...")
+            from chroot_terminal import chroot_olustur_batch
+            with db_baglantisi() as conn:
+                cursor = conn.cursor()
+                cursor.execute("SELECT numara, ad, soyad FROM ogrenciler")
+                ogrenciler = [{"username": r[0], "ad": r[1], "soyad": r[2]} for r in cursor.fetchall()]
+            
+            if ogrenciler:
+                chroot_olustur_batch(ogrenciler)
+                print(f"  ✅ {args.student} Test Chroot'u hazır.")
+        else:
+            print("  ℹ️  Öğrenci oluşturulmadı (--student N ile oluşturabilirsiniz)")
+            db_olustur()
+
     else:
         db_olustur()
     
