@@ -119,21 +119,21 @@ def setup_template():
         target_arch = "arm64"
     else:
         target_arch = machine # Fallback
-    log.info(f"Detected architecture: {machine} (Target arch for debootstrap: {target_arch})")
+    log.info(f"Detected architecture: {machine} (Target arch for mmdebstrap: {target_arch})")
 
     # ÖNCE TEMİZLİK (V11): Eski mount'ları temizle ki rm -rf veya init hata vermesin
     log.info("🧹 Eski şablon mount'ları temizleniyor...")
     for p in ["proc", "sys", "dev/pts", "dev"]:
         subprocess.run(["umount", "-l", str(STUDENT_TEMPLATE / p)], check=False)
 
-    # Ubuntu base kur (debootstrap)
+    # Ubuntu base kur (mmdebstrap)
     if not STUDENT_TEMPLATE.exists():
         STUDENT_TEMPLATE.parent.mkdir(parents=True, exist_ok=True)
         # GNUPG ve Keyring'i baştan dahil et ki apt update doğrulamada hata vermesin (V8)
         _run([
-            "debootstrap", f"--arch={target_arch}", 
-            "--include=gnupg,ubuntu-keyring,gpgv,ca-certificates",
-            "jammy",
+            "mmdebstrap", f"--arch={target_arch}", 
+            "--include=gnupg,debian-archive-keyring,gpgv,ca-certificates",
+            "bookworm",
             str(STUDENT_TEMPLATE),
             "http://ports.ubuntu.com/ubuntu-ports/" if target_arch == "arm64" else "http://archive.ubuntu.com/ubuntu/"
         ])
@@ -144,17 +144,17 @@ def setup_template():
     # ARM64 için ports mirror kullan (V13)
     if target_arch == "arm64":
         repo_content = """
-deb http://ports.ubuntu.com/ubuntu-ports/ jammy main restricted universe multiverse
-deb http://ports.ubuntu.com/ubuntu-ports/ jammy-updates main restricted universe multiverse
-deb http://ports.ubuntu.com/ubuntu-ports/ jammy-backports main restricted universe multiverse
-deb http://ports.ubuntu.com/ubuntu-ports/ jammy-security main restricted universe multiverse
+deb http://ports.ubuntu.com/ubuntu-ports/ bookworm main restricted universe multiverse
+deb http://ports.ubuntu.com/ubuntu-ports/ bookworm-updates main restricted universe multiverse
+deb http://ports.ubuntu.com/ubuntu-ports/ bookworm-backports main restricted universe multiverse
+deb http://ports.ubuntu.com/ubuntu-ports/ bookworm-security main restricted universe multiverse
 """
     else:
         repo_content = """
-deb http://archive.ubuntu.com/ubuntu/ jammy main restricted universe multiverse
-deb http://archive.ubuntu.com/ubuntu/ jammy-updates main restricted universe multiverse
-deb http://archive.ubuntu.com/ubuntu/ jammy-backports main restricted universe multiverse
-deb http://security.ubuntu.com/ubuntu/ jammy-security main restricted universe multiverse
+deb http://archive.ubuntu.com/ubuntu/ bookworm main restricted universe multiverse
+deb http://archive.ubuntu.com/ubuntu/ bookworm-updates main restricted universe multiverse
+deb http://archive.ubuntu.com/ubuntu/ bookworm-backports main restricted universe multiverse
+deb http://security.ubuntu.com/ubuntu/ bookworm-security main restricted universe multiverse
 """
     sources_list.write_text(repo_content.strip() + "\n")
     log.info("📝 sources.list full depo desteği ile güncellendi.")
