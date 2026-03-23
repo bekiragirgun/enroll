@@ -138,26 +138,16 @@ def setup_template():
             "http://ports.ubuntu.com/ubuntu-ports/" if target_arch == "arm64" else "http://archive.ubuntu.com/ubuntu/"
         ])
 
-    # 1. Full Repositories (V7)
+    # 1. Full Repositories (Debian 12)
     sources_list = STUDENT_TEMPLATE / "etc" / "apt" / "sources.list"
     
-    # ARM64 için ports mirror kullan (V13)
-    if target_arch == "arm64":
-        repo_content = """
-deb http://ports.ubuntu.com/ubuntu-ports/ bookworm main restricted universe multiverse
-deb http://ports.ubuntu.com/ubuntu-ports/ bookworm-updates main restricted universe multiverse
-deb http://ports.ubuntu.com/ubuntu-ports/ bookworm-backports main restricted universe multiverse
-deb http://ports.ubuntu.com/ubuntu-ports/ bookworm-security main restricted universe multiverse
-"""
-    else:
-        repo_content = """
-deb http://archive.ubuntu.com/ubuntu/ bookworm main restricted universe multiverse
-deb http://archive.ubuntu.com/ubuntu/ bookworm-updates main restricted universe multiverse
-deb http://archive.ubuntu.com/ubuntu/ bookworm-backports main restricted universe multiverse
-deb http://security.ubuntu.com/ubuntu/ bookworm-security main restricted universe multiverse
+    repo_content = f"""
+deb http://deb.debian.org/debian bookworm main contrib non-free non-free-firmware
+deb http://deb.debian.org/debian bookworm-updates main contrib non-free non-free-firmware
+deb http://security.debian.org/debian-security bookworm-security main contrib non-free non-free-firmware
 """
     sources_list.write_text(repo_content.strip() + "\n")
-    log.info("📝 sources.list full depo desteği ile güncellendi.")
+    log.info("📝 sources.list Debian 12 mirrorları ile güncellendi.")
 
     # DNS filtering - şablonda yap
     resolv_conf = STUDENT_TEMPLATE / "etc" / "resolv.conf"
