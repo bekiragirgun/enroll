@@ -3,7 +3,7 @@ Version: 1.5
 Section: admin
 Priority: optional
 Architecture: all
-Depends: openssh-server, python3, rsync, debootstrap, sshpass
+Depends: openssh-server, python3, rsync, mmdebstrap, sshpass
 Maintainer: Kapadokya University <info@kapadokya.edu.tr>
 Description: Chroot Terminal System for Linux Lab
  Provides isolated chroot environments for students
