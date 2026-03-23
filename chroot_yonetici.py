@@ -262,7 +262,7 @@ deb http://security.debian.org/debian-security {DEBIAN_SUITE}-security main cont
         _run(["chroot", str(STUDENT_TEMPLATE), "apt-get", "-o", "Acquire::Check-Valid-Until=false", "-o", "Acquire::Check-Date=false", "update"], env=env)
         
         _run(["chroot", str(STUDENT_TEMPLATE), "apt-get", "install", "-y", 
-              "debian-minimal", "build-essential", "python3", "python3-pip", 
+              "build-essential", "python3", "python3-pip", 
               "git", "curl", "wget", "vim", "nano", "sudo", "locales",
               "dnsutils", "net-tools", "iputils-ping", "iproute2",
               "man-db", "tree", "zip", "unzip", "bzip2", "xz-utils", "tar", "gzip",
