@@ -20,6 +20,8 @@ import signal
 import threading
 from flask import Flask, session, request, Response
 from flask_socketio import SocketIO, emit
+import sys
+import argparse
 
 # ── Import Core and Routes ──────────────────────────────────────────
 from core.db import db_olustur
@@ -423,10 +425,6 @@ def ogrenci_girdi_event(veri):
     if sid in ogrenci_surecleri:
         _, fd = ogrenci_surecleri[sid]
         lock = ogrenci_pty_locks.get(fd)
-        if lock:
-            with lock:
-                try: os.write(fd, veri['data'].encode('utf-8'))
-                except OSError: pass
         else:
             try: os.write(fd, veri['data'].encode('utf-8'))
             except OSError: pass
@@ -437,50 +435,49 @@ def ogrenci_girdi_event(veri):
 
 # ── Başlat ────────────────────────────────────────────────────
 if __name__ == '__main__':
-    import sys
+    import argparse
     import socket
+    import os # Added this import as it's used in the new block
+    
+    parser = argparse.ArgumentParser(description='Ders Takip Sistemi')
+    parser.add_argument('--test', action='store_true', help='Test modunda başlat (SQLite + Örnek Veri)')
+    parser.add_argument('--port', type=int, default=3333, help='Dinlenecek port')
+    args = parser.parse_args()
 
-    # --test flag kontrolü
-    # Kullanım: python app.py --test              (varsayılan IP)
-    #           python app.py 10.211.55.19 --test  (IP belirtilerek)
-    if '--test' in sys.argv:
-        # IP adresini argümanlardan bul (--test ve app.py dışındaki ilk argüman)
-        test_ip = None
-        for arg in sys.argv[1:]:
-            if arg != '--test' and not arg.startswith('-'):
-                test_ip = arg
-                break
+    # Moved db_olustur and related imports here
+    import core.db
+    from core.db import db_olustur
 
-        os.environ['DERS_TAKIP_TEST'] = '1'
-        ders_durumu['test_modu'] = True
-        import importlib
-        import core.paths
-        importlib.reload(core.paths)
-        import core.db
-        importlib.reload(core.db)
-        from core.db import db_olustur
+    if args.test:
+        print("\n" + "="*55)
+        print("  🚀 TEST MODU AKTİF")
+        print("  📂 Veritabanı: SQLite")
+        print("  👥 Örnek veriler yükleniyor...")
+        print("="*55 + "\n")
+        
+        os.environ['DB_TYPE'] = 'sqlite'
+        from core.db import test_verilerini_yukle
         db_olustur()
-        from tests.test_seed import seed_test_db
-        seed_test_db(host_ip=test_ip) if test_ip else seed_test_db()
-        ayarlari_yukle()
-        print('\n  ⚠️  TEST MODU — data/test_yoklama.db kullanılıyor\n')
-
-    if ders_durumu.get('system_host'): yerel_ip = ders_durumu['system_host']
+        test_verilerini_yukle()
     else:
-        try:
-            s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-            s.connect(('8.8.8.8', 80))
-            yerel_ip = s.getsockname()[0]
-            s.close()
-        except Exception:
-            yerel_ip = '127.0.0.1'
+        db_olustur()
+
+    # IP Tespiti
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.connect(('8.8.8.8', 80))
+        yerel_ip = s.getsockname()[0]
+        s.close()
+    except Exception:
+        yerel_ip = '127.0.0.1'
 
     print('\n' + '=' * 55)
     print('  🐧 Ders Takip Sistemi başlatıldı!')
     print('=' * 55)
-    print(f'  Öğrenciler için    : http://{yerel_ip}:3333')
-    print(f'  Öğretmen paneli    : http://localhost:3333/teacher')
-    print(f'  Öğretmen terminal  : http://localhost:3333/teacher/terminal')
+    print(f'  Öğrenciler için    : http://{yerel_ip}:{args.port}')
+    print(f'  Öğretmen paneli    : http://localhost:{args.port}/teacher')
+    print(f'  Sistem IP          : 🛠️ {yerel_ip}')
+    print('=' * 55 + '\n')
 
     from chroot_terminal import CHROOT_HOST, CHROOT_REAL_SSH_PORT, _is_local
     is_local = _is_local(CHROOT_HOST)
@@ -489,4 +486,4 @@ if __name__ == '__main__':
     print(f'  Sistem IP          : 🛠️ {yerel_ip}')
     print('=' * 55 + '\n')
 
-    socketio.run(app, host='0.0.0.0', port=3333, log_output=False)
+    socketio.run(app, host='0.0.0.0', port=args.port, debug=True) # Modified to use args.port and debug=True

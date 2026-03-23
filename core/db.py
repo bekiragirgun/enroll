@@ -269,3 +269,41 @@ def db_olustur():
         conn.commit()
 
 
+def test_verilerini_yukle():
+    """Test modu için örnek sınıflar ve öğrenciler ekler."""
+    with db_baglantisi() as conn:
+        cursor = conn.cursor()
+        
+        # 1. Örnek Sınıflar
+        siniflar = [
+            ('Bilgisayar Programcılığı',),
+            ('Siber Güvenlik',),
+            ('İnsansız Hava Aracı Teknolojisi',)
+        ]
+        for sinif in siniflar:
+            cursor.execute("INSERT INTO siniflar (ad) VALUES (?) ON CONFLICT(ad) DO NOTHING", sinif)
+        
+        # Sınıf ID'lerini al
+        cursor.execute("SELECT id, ad FROM siniflar")
+        sinif_map = {ad: id for id, ad in cursor.fetchall()}
+        
+        # 2. Örnek Öğrenciler
+        # Şifreler varsayılan olarak boştur (veya numara ile aynı yapılabilir)
+        ogrenciler = [
+            (sinif_map['Bilgisayar Programcılığı'], 'test1', 'Ahmet', 'Yılmaz', '1234'),
+            (sinif_map['Bilgisayar Programcılığı'], 'test2', 'Mehmet', 'Demir', '1234'),
+            (sinif_map['Siber Güvenlik'], 'siber1', 'Can', 'Öz', '1234'),
+            (sinif_map['İnsansız Hava Aracı Teknolojisi'], 'iha1', 'Gökhan', 'Bulut', '1234')
+        ]
+        
+        for ogr in ogrenciler:
+            cursor.execute("""
+                INSERT INTO ogrenciler (sinif_id, numara, ad, soyad, sifre) 
+                VALUES (?, ?, ?, ?, ?) 
+                ON CONFLICT(numara) DO NOTHING
+            """, ogr)
+        
+        conn.commit()
+        _log.info("📊 Test verileri başarıyla yüklendi.")
+
+
