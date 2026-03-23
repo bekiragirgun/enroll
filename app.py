@@ -449,11 +449,19 @@ if __name__ == '__main__':
     if args.test:
         print("\n" + "="*55)
         print("  🚀 TEST MODU AKTİF")
-        print("  📂 Veritabanı: SQLite")
+        print("  📂 Veritabanı: SQLite (TEMİZ BAŞLANGIÇ)")
         print("  👥 Örnek veriler yükleniyor...")
         print("="*55 + "\n")
         
         os.environ['DB_TYPE'] = 'sqlite'
+        import core.paths
+        if core.paths.DB_YOLU.exists():
+            try:
+                core.paths.DB_YOLU.unlink()
+                print(f"  ✨ Eski test veritabanı silindi: {core.paths.DB_YOLU}")
+            except Exception as e:
+                print(f"  ⚠️ Veritabanı silinemedi (Kilitli olabilir): {e}")
+
         import core.db
         from core.db import db_olustur, test_verilerini_yukle
         db_olustur()
