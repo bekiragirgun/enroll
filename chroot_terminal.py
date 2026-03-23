@@ -494,29 +494,33 @@ def chroot_olustur_batch(users: list) -> dict:
         )
         loop_lines.append(cmd)
 
-    # Hepsini tek ssh ile çalıştır (pool varsa socket üzerinden)
-    batch_script = "\n".join(loop_lines)
-    result = _ct991_exec(["bash", "-c", batch_script])
-
     sonuclar = {}
     for slug, _ in prepared:
         sonuclar[slug] = False  # Varsayılan: başarısız
 
-    if result.returncode == 255:
-        log.error("Batch chroot: SSH bağlantı hatası")
-        return sonuclar
+    # Hepsini tek ssh ile çalıştır (pool varsa socket üzerinden)
+    # Chunking: Çok fazla öğrenci varsa SSH/bash limitlerine takılmamak için 20'şerli grupla
+    chunk_size = 20
+    for i in range(0, len(loop_lines), chunk_size):
+        chunk = loop_lines[i:i + chunk_size]
+        batch_script = "\n".join(chunk)
+        result = _ct991_exec(["bash", "-c", batch_script])
 
-    for line in result.stdout.splitlines():
-        line = line.strip()
-        if line.startswith("OK:"):
-            slug = line[3:]
-            sonuclar[slug] = True
-            _chroot_cache.add(slug)
-            log.info(f"✅ Chroot oluşturuldu (batch): {slug}")
-        elif line.startswith("ERR:"):
-            slug = line[4:]
-            sonuclar[slug] = False
-            log.error(f"❌ Chroot oluşturulamadı (batch): {slug}")
+        if result.returncode == 255:
+            log.error(f"Batch chroot (chunk {i//chunk_size}): SSH bağlantı hatası")
+            continue
+
+        for line in result.stdout.splitlines():
+            line = line.strip()
+            if line.startswith("OK:"):
+                slug = line[3:]
+                sonuclar[slug] = True
+                _chroot_cache.add(slug)
+                log.info(f"✅ Chroot oluşturuldu (batch): {slug}")
+            elif line.startswith("ERR:"):
+                slug = line[4:]
+                sonuclar[slug] = False
+                log.error(f"❌ Chroot oluşturulamadı (batch): {slug}")
             
     if not any(sonuclar.values()):
         log.error(f"Batch oluşturma başarısız görünüyor! stdout: {result.stdout}, stderr: {result.stderr}")
