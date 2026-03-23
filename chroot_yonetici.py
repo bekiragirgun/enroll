@@ -521,27 +521,23 @@ def create_ssh_entry(username):
             f.write(sudoers_line)
         subprocess.run(["chmod", "0440", str(sudoers_file)], check=False)
 
-    # SSH config'e ForceCommand ekle (V10 - Sticky Shell)
+    # SSH config'e ForceCommand ekle (Match Group ile toplu yönetim - V15)
     ssh_config = Path("/etc/ssh/sshd_config")
-    # Önemli: Chroot dizini ve su komutunu bir döngüye al
-    force_command = f"Match User {username}\n    ForceCommand /bin/bash -c \"while true; do sudo /usr/sbin/chroot {student_path} /bin/su - {username}; echo 'Oturum kapatılamaz, yeniden başlatılıyor...'; sleep 1; done\"\n"
-
-    # SSH config'e ekle
+    match_group_cmd = "Match Group ogrenciler"
+    
     ssh_config_text = ssh_config.read_text()
-    if force_command not in ssh_config_text:
+    if match_group_cmd not in ssh_config_text:
+        force_command = (
+            f"\nMatch Group {STUDENT_GROUP}\n"
+            f"    ForceCommand /bin/bash -c \"while true; do sudo /usr/sbin/chroot {CHROOT_BASE}/%u /bin/su - %u; "
+            f"echo 'Oturum kapatilamaz, yeniden baslatiliyor...'; sleep 1; done\"\n"
+        )
         with open(ssh_config, 'a') as f:
             f.write(force_command)
+        # SSH'yi restart et
+        subprocess.run(["systemctl", "restart", "sshd"], check=False)
+        log.info(f"✅ {STUDENT_GROUP} grubu için toplu SSH yapılandırması eklendi")
 
-    # Chroot login script'ini kopyala
-    chrootlogin_src = Path("/usr/sbin/chrootlogin")
-    chrootlogin_dst = student_path / "usr" / "sbin" / "chrootlogin"
-    if chrootlogin_src.exists():
-        chrootlogin_dst.parent.mkdir(parents=True, exist_ok=True)
-        subprocess.run(["cp", str(chrootlogin_src), str(chrootlogin_dst)], check=False)
-        subprocess.run(["chmod", "+x", str(chrootlogin_dst)], check=False)
-
-    # SSH'yi restart et
-    subprocess.run(["systemctl", "restart", "sshd"], check=False)
     log.info(f"✅ {username} SSH/Sudoers yapılandırması tamam")
 
 
