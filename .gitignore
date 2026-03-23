@@ -37,3 +37,6 @@ boxes/*.box
 
 # Git
 .git/
+
+# Environment Variables
+.env

@@ -33,7 +33,10 @@ from routes.api import api_bp
 from routes.terminal import terminal_bp
 from routes.exam import exam_bp
 
-SECRET_KEY = 'kapadokya-linux-2024'
+from dotenv import load_dotenv
+load_dotenv()
+
+SECRET_KEY = os.environ.get('SECRET_KEY', 'kapadokya-linux-2024')
 
 # ── In-memory log buffer (UI için) ────────────────────────────
 log_buffer = collections.deque(maxlen=500)  # Son 500 log satırı
@@ -75,8 +78,13 @@ def favicon():
 @app.route('/slayt/<path:filename>')
 def serve_slayt(filename):
     from flask import send_from_directory
-    from core.paths import SLAYT_DIR
-    return send_from_directory(SLAYT_DIR, filename)
+    from core.config import ders_durumu
+    
+    klasor = ders_durumu.get('slayt_klasoru', '')
+    if not klasor or not os.path.exists(klasor):
+        return "Slayt klasörü bulunamadı", 404
+        
+    return send_from_directory(klasor, filename)
 
 @app.route('/gorseller/<path:filename>')
 def serve_gorseller(filename):
@@ -151,6 +159,32 @@ def _pty_oku_ve_yayinla(fd, hedef_event, hedef_room=None, broadcast=False):
 def terminal_baglan():
     pass
 
+@socketio.on('ogrenci_heartbeat', namespace='/terminal')
+def handle_heartbeat(data):
+    numara = data.get('numara')
+    if not numara: return
+    
+    from core.db import db_baglantisi, DBWrapper
+    from core.utils import bugun, simdi
+    
+    try:
+        with db_baglantisi() as conn:
+            db = DBWrapper(conn)
+            db.execute("""
+                INSERT INTO ogrenci_aktivite_log (numara, ip, aktivite_tipi, detay, tarih, saat)
+                VALUES (?, ?, ?, ?, ?, ?)
+            """, (
+                numara,
+                request.remote_addr,
+                'heartbeat',
+                f"Mod: {data.get('mod')}, Slayt: {data.get('slayt')}, Durum: {data.get('durum')}",
+                bugun(),
+                simdi()
+            ))
+            db.commit()
+    except Exception as e:
+        app.logger.error(f"Heartbeat log hatası: {e}")
+
 @socketio.on('disconnect', namespace='/terminal')
 def terminal_kopma(*args):
     global ogretmen_sid, ogretmen_pty_fd, ogretmen_pty_pid
@@ -202,7 +236,7 @@ def ogretmen_baglan_event(veri=None):
         import time
         time.sleep(0.3)  # Reader thread'in çıkmasını bekle
 
-    from chroot_terminal import chroot_var_mi, chroot_olustur, CT_991_HOST, CT_991_REAL_SSH_PORT, CT_991_USER, CT_991_PASS, CHROOT_BASE, _slugify
+    from chroot_terminal import chroot_var_mi, chroot_olustur, CHROOT_HOST, CHROOT_REAL_SSH_PORT, CHROOT_USER, CHROOT_PASS, CHROOT_BASE, _slugify
     ogretmen_numara = _slugify(ogretmen_numara)
 
     try:
@@ -218,12 +252,12 @@ def ogretmen_baglan_event(veri=None):
             'ssh', '-t',
             '-o', 'StrictHostKeyChecking=no',
             '-o', 'ControlPath=none',
-            '-p', str(CT_991_REAL_SSH_PORT),
-            f'{CT_991_USER}@{CT_991_HOST}',
+            '-p', str(CHROOT_REAL_SSH_PORT),
+            f'{CHROOT_USER}@{CHROOT_HOST}',
             f"sudo /bin/bash -c \"while true; do chroot '{safe_chroot_path}' /bin/su - '{safe_username}'; echo 'Oturum kapatılamaz, yeniden başlatılıyor...'; sleep 1; done\""
         ]
-        if CT_991_PASS:
-            ssh_cmd = ['sshpass', '-p', CT_991_PASS] + ssh_cmd
+        if CHROOT_PASS:
+            ssh_cmd = ['sshpass', '-p', CHROOT_PASS] + ssh_cmd
 
         proc = subprocess.Popen(ssh_cmd, stdin=slave_fd, stdout=slave_fd, stderr=slave_fd, preexec_fn=os.setsid)
         os.close(slave_fd)
@@ -341,7 +375,7 @@ def ogrenci_baglan_event(veri):
 
     ogrenci_sidleri[sid] = username
     try:
-        from chroot_terminal import CT_991_HOST, CT_991_REAL_SSH_PORT, CT_991_USER, CT_991_PASS, CHROOT_BASE, _slugify, chroot_olustur
+        from chroot_terminal import CHROOT_HOST, CHROOT_REAL_SSH_PORT, CHROOT_USER, CHROOT_PASS, CHROOT_BASE, _slugify, chroot_olustur
         username = _slugify(username)
         
         ad_soyad = "Ogrenci"
@@ -362,11 +396,11 @@ def ogrenci_baglan_event(veri):
             'ssh', '-t',
             '-o', 'StrictHostKeyChecking=no',
             '-o', 'ControlPath=none',
-            '-p', str(CT_991_REAL_SSH_PORT), f'{CT_991_USER}@{CT_991_HOST}',
+            '-p', str(CHROOT_REAL_SSH_PORT), f'{CHROOT_USER}@{CHROOT_HOST}',
             f"sudo /bin/bash -c \"while true; do chroot '{safe_chroot_path}' /bin/su - '{safe_username}'; echo 'Oturum kapatılamaz, yeniden başlatılıyor...'; sleep 1; done\""
         ]
-        if CT_991_PASS:
-            ssh_cmd = ['sshpass', '-p', CT_991_PASS] + ssh_cmd
+        if CHROOT_PASS:
+            ssh_cmd = ['sshpass', '-p', CHROOT_PASS] + ssh_cmd
 
         proc = subprocess.Popen(ssh_cmd, stdin=slave_fd, stdout=slave_fd, stderr=slave_fd, preexec_fn=os.setsid)
         os.close(slave_fd)
@@ -448,10 +482,10 @@ if __name__ == '__main__':
     print(f'  Öğretmen paneli    : http://localhost:3333/teacher')
     print(f'  Öğretmen terminal  : http://localhost:3333/teacher/terminal')
 
-    from chroot_terminal import CT_991_HOST, CT_991_REAL_SSH_PORT, _is_local
-    is_local = _is_local(CT_991_HOST)
+    from chroot_terminal import CHROOT_HOST, CHROOT_REAL_SSH_PORT, _is_local
+    is_local = _is_local(CHROOT_HOST)
     mode_text = "🏠 LOCAL MODE" if is_local else "🌐 REMOTE MODE"
-    print(f'  Chroot Host (991)  : ✅ {CT_991_HOST}:{CT_991_REAL_SSH_PORT} ({mode_text})')
+    print(f'  Chroot Host (991)  : ✅ {CHROOT_HOST}:{CHROOT_REAL_SSH_PORT} ({mode_text})')
     print(f'  Sistem IP          : 🛠️ {yerel_ip}')
     print('=' * 55 + '\n')
 

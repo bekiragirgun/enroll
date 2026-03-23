@@ -76,31 +76,75 @@ def repair_system_pty():
 
 def setup_persistence():
     """
-    Onarım işlemini her açılışta çalışacak bir systemd servisi olarak kurar.
+    Onarım ve koruma işlemini sürekli arka planda çalışacak bir systemd servisi (daemon) olarak kurar.
     """
     service_content = f"""[Unit]
-Description=Chroot PTY Repair Service
+Description=Chroot PTY Health Monitor Daemon
 After=network.target
 
 [Service]
-Type=oneshot
-ExecStart={os.path.abspath(__file__)} repair
-RemainAfterExit=yes
+Type=simple
+ExecStart={os.path.abspath(__file__)} daemon
+Restart=always
+RestartSec=10
 
 [Install]
 WantedBy=multi-user.target
 """
-    service_path = Path("/etc/systemd/system/chroot-pty-fix.service")
+    service_path = Path("/etc/systemd/system/chroot-pty-health.service")
     log.info(f"📝 Servis dosyası oluşturuluyor: {service_path}")
     
     try:
+        # Eski servisi temizle
+        old_service = Path("/etc/systemd/system/chroot-pty-fix.service")
+        if old_service.exists():
+            subprocess.run(["systemctl", "stop", "chroot-pty-fix.service"], check=False)
+            subprocess.run(["systemctl", "disable", "chroot-pty-fix.service"], check=False)
+            try: old_service.unlink()
+            except: pass
+
         service_path.write_text(service_content)
         _run(["systemctl", "daemon-reload"])
-        _run(["systemctl", "enable", "chroot-pty-fix.service"])
-        _run(["systemctl", "start", "chroot-pty-fix.service"])
-        log.info("✅ PTY onarım servisi başarıyla kuruldu ve başlatıldı.")
+        _run(["systemctl", "enable", "chroot-pty-health.service"])
+        _run(["systemctl", "start", "chroot-pty-health.service"])
+        log.info("✅ PTY sağlık izleme servisi (daemon) başarıyla kuruldu ve başlatıldı.")
     except Exception as e:
         log.error(f"❌ Servis kurulum hatası: {e}")
+
+def run_daemon():
+    """Arka planda çalışarak sistemi sürekli sağlıklı tutar."""
+    import time
+    log.info("🛡️ Chroot Health Monitor Daemon başlatıldı. (15s aralıklarla kontrol edilecek)")
+    while True:
+        try:
+            ptmx = Path("/dev/ptmx")
+            if ptmx.exists():
+                import stat
+                mode = os.stat(ptmx).st_mode
+                # log basmamak için sessizce kontrol ediyoruz
+                if stat.S_IMODE(mode) != 0o666:
+                    subprocess.run(["chmod", "666", "/dev/ptmx"], check=False)
+            else:
+                log.warning("⚠️ Daemon: /dev/ptmx bulunamadı! Onarılıyor...")
+                subprocess.run(["ln", "-s", "/dev/pts/ptmx", "/dev/ptmx"], check=False)
+                subprocess.run(["chmod", "666", "/dev/ptmx"], check=False)
+            
+            # /dev/pts kontrolü
+            if not os.path.ismount("/dev/pts"):
+                log.warning("⚠️ Daemon: /dev/pts unmount edilmiş! Yeniden mount ediliyor...")
+                subprocess.run(["mount", "-t", "devpts", "devpts", "/dev/pts", "-o", "rw,nosuid,noexec,relatime,gid=5,mode=620,ptmxmode=666"], check=False)
+
+            # /dev/tty izinleri
+            tty = Path("/dev/tty")
+            if tty.exists():
+                mode = os.stat(tty).st_mode
+                if stat.S_IMODE(mode) != 0o666:
+                    subprocess.run(["chmod", "666", "/dev/tty"], check=False)
+
+            time.sleep(15)
+        except Exception as e:
+            log.error(f"Daemon error: {e}")
+            time.sleep(15)
 
 
 def setup_template():
@@ -199,12 +243,11 @@ deb http://security.ubuntu.com/ubuntu/ jammy-security main restricted universe m
     subprocess.run(["mount", "-t", "proc", "proc", str(p)], check=False)
     subprocess.run(["mount", "-t", "sysfs", "sysfs", str(s)], check=False)
     
-    # LXC DESTEĞİ: /dev bind mount et ama nodev/nosuid gibi bayraklar gelmiş olabilir
+    # LXC DESTEĞİ: /dev bind mount et ama okuma koruması (RO) ile tam izolasyon sağla
     subprocess.run(["mount", "-o", "bind", "/dev", str(d)], check=False)
+    subprocess.run(["mount", "-o", "remount,bind,ro", str(d)], check=False)
+    # dev/pts yazılabilir olmalı ki PTY tahsisi yapılabilsin
     subprocess.run(["mount", "-o", "bind", "/dev/pts", str(pts)], check=False)
-    
-    # KRİTİK: Cihazları onar (V11)
-    _restore_device_nodes(d)
 
     # DNS Ayarları
     log.info("🌐 DNS ayarları yapılandırılıyor...")
@@ -857,51 +900,7 @@ def delete_student_chroot(username):
 
 
 
-def _restore_device_nodes(dev_path):
-    """
-    Kritik cihaz düğümlerini (/dev/null, /dev/ptmx vb.) onarır.
-    LXC içinde mknod çalışmazsa, host'tan bind-mount ile aktarır (V11).
-    """
-    devices = [
-        ("null", "c 1 3"),
-        ("zero", "c 1 5"),
-        ("full", "c 1 7"),
-        ("tty", "c 5 0"),
-        ("random", "c 1 8"),
-        ("urandom", "c 1 9")
-    ]
-    
-    for dev_name, mode in devices:
-        d_p = dev_path / dev_name
-        
-        # 1. Eğer zaten doğru bir karakter cihazıysa, sadece izinleri tazele (V12 Safety)
-        if d_p.exists() and d_p.is_char_device():
-            subprocess.run(["chmod", "666", str(d_p)], check=False)
-            continue
 
-        # 2. Karakter cihazı değilse (veya yoksa) silmeyi dene
-        # Busy hatası almamak için sadece karakter cihazı değilse sileriz
-        if d_p.exists() and not d_p.is_char_device():
-            subprocess.run(["rm", "-f", str(d_p)], check=False)
-        
-        # 3. mknod dene (Privileged modda çalışır)
-        if not d_p.exists():
-            res = subprocess.run(["mknod", "-m", "666", str(d_p)] + mode.split(), capture_output=True)
-            
-            # 4. mknod başarısızsa (LXC Unprivileged), Host'tan BIND-MOUNT yap (V11 fallback)
-            if res.returncode != 0:
-                if not d_p.exists():
-                    subprocess.run(["touch", str(d_p)], check=False)
-                subprocess.run(["mount", "-o", "bind", f"/dev/{dev_name}", str(d_p)], check=False)
-                subprocess.run(["chmod", "666", str(d_p)], check=False)
-        else:
-            # Dosya var ama karakter cihazı değilse (yukarıdaki rm başarısız olduysa)
-            log.warning(f"⚠️ {d_p} karakter cihazı değil ve silinemedi (Busy olabilir).")
-
-    # /dev/ptmx (Sembolik Link) - PTY ler için hayati
-    ptmx_node = dev_path / "ptmx"
-    subprocess.run(["rm", "-f", str(ptmx_node)], check=False)
-    subprocess.run(["ln", "-snf", "pts/ptmx", str(ptmx_node)], check=False)
 
 
 def mount_student_chroot(username):
@@ -935,14 +934,12 @@ def mount_student_chroot(username):
     subprocess.run(["mount", "-t", "proc", "proc", str(proc_path)], check=False)
     subprocess.run(["mount", "-t", "sysfs", "sysfs", str(sys_path)], check=False)
 
-    # 2. /dev (Bind Mount) - LXC içinde en güvenli yöntem
+    # 2. /dev (Bind Mount) - İzolasyon ve Korumalı Read-Only yapı
     subprocess.run(["mount", "-o", "bind", "/dev", str(dev_path)], check=False)
+    subprocess.run(["mount", "-o", "remount,bind,ro", str(dev_path)], check=False)
     
     # 3. /dev/pts (Bind Mount) - LXC içinde PTY paylaşımı için kritik
     subprocess.run(["mount", "-o", "bind", "/dev/pts", str(pts_path)], check=False)
-    
-    # 4. KRİTİK CİHAZ DÜZELTMELERİ (V9)
-    _restore_device_nodes(dev_path)
     
     # Resolv.conf tazele
     subprocess.run(["cp", "-f", "/etc/resolv.conf", str(student_path / "etc" / "resolv.conf")], check=False)
@@ -1008,8 +1005,7 @@ def cleanup_stale_resources():
     except Exception as e:
         log.warning(f"Mount temizleme hatası: {e}")
 
-    # 3. /dev/pts repairini her temizlikte çalıştır
-    repair_system_pty()
+    # 3. /dev/pts repair manuel komutlarla (repair) bırakıldı. Temizlik esnasında host PTY'sini bozmamalı.
 
     log.info(f"✅ Temizlik tamamlandı: {cleaned} kaynak temizlendi")
     return cleaned
@@ -1125,7 +1121,8 @@ def main():
         print("  Kurulum & Bakim:")
         print("    init                    Ubuntu chroot sablonunu olustur (ilk kurulum)")
         print("    repair                  /dev/pts ve PTY izinlerini onar")
-        print("    persist                 PTY onarimi icin systemd servisi kur")
+        print("    persist                 PTY sagligi icin arkaplan servisini kur")
+        print("    daemon                  Surekli calisarak PTY sagligini koru")
         print("    cleanup                 Zombie process ve stale mount temizligi")
         print("    health                  Sistem saglk raporu (PTY, SSH, disk, mount)")
         print()
@@ -1160,6 +1157,9 @@ def main():
 
     elif command == "persist":
         setup_persistence()
+
+    elif command == "daemon":
+        run_daemon()
 
     elif command == "create":
         if len(sys.argv) < 3:

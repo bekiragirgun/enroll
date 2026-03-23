@@ -23,7 +23,7 @@ else
 fi
 
 # 2. Yapılandırma Dosyası Oluşturma
-DOMAIN="enroll.bekiragi.org"
+DOMAIN="${DOMAIN:-ders-takip.local}"
 CONF_FILE="/etc/nginx/sites-available/enroll"
 
 echo -e "${YELLOW}📝 Nginx yapılandırması oluşturuluyor: $CONF_FILE${NC}"

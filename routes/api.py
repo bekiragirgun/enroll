@@ -98,7 +98,7 @@ def api_config():
         ayar_kaydet('chroot_host', host)
         try:
             import chroot_terminal
-            chroot_terminal.CT_991_HOST = host
+            chroot_terminal.CHROOT_HOST = host
         except: pass
             
     if 'chroot_port' in veri:
@@ -107,8 +107,8 @@ def api_config():
             ders_durumu['chroot_port'] = port
             ayar_kaydet('chroot_port', port)
             import chroot_terminal
-            chroot_terminal.CT_991_SSH_PORT = port
-            chroot_terminal.CT_991_REAL_SSH_PORT = port
+            chroot_terminal.CHROOT_SSH_PORT = port
+            chroot_terminal.CHROOT_REAL_SSH_PORT = port
         except: pass
 
     if 'chroot_user' in veri:
@@ -117,7 +117,7 @@ def api_config():
         ayar_kaydet('chroot_user', user)
         try:
             import chroot_terminal
-            chroot_terminal.CT_991_USER = user
+            chroot_terminal.CHROOT_USER = user
         except: pass
 
     if 'chroot_pass' in veri:
@@ -126,7 +126,7 @@ def api_config():
         ayar_kaydet('chroot_pass', pw)
         try:
             import chroot_terminal
-            chroot_terminal.CT_991_PASS = pw
+            chroot_terminal.CHROOT_PASS = pw
         except: pass
 
     if 'system_host' in veri:
@@ -156,6 +156,18 @@ def api_config():
 
     if 'ders_gunleri' in veri:
         ayar_kaydet('ders_gunleri', str(veri['ders_gunleri']))
+
+    if 'slayt_klasoru' in veri:
+        klasor = str(veri['slayt_klasoru'])
+        ders_durumu['slayt_klasoru'] = klasor
+        ayar_kaydet('slayt_klasoru', klasor)
+
+    # Veritabanı Ayarları
+    db_keys = ['db_type', 'db_host', 'db_port', 'db_user', 'db_pass', 'db_name']
+    for key in db_keys:
+        if key in veri:
+            ayar_kaydet(key, str(veri[key]))
+            # ders_durumu güncellemesi (isteğe bağlı, db_baglantisi os.environ veya ayar_getir kullanmalı)
 
     return jsonify({'durum': 'ok'})
 

@@ -32,12 +32,15 @@ _pool_process = None   # Master SSH süreci
 _pool_socket = None    # ControlPath socket yolu
 _pool_ready = False    # Pool hazır mı?
 
+from dotenv import load_dotenv
+load_dotenv()
+
 # CT 991 (ogrenci-vm) bilgileri
-CT_991_HOST = "10.211.55.17"  # CT 991 IP adresi
-CT_991_SSH_PORT = 22            # Chroot içindeki SSH portu (V14 Default: 22)
-CT_991_REAL_SSH_PORT = 22       # CT 991 ana sistem SSH portu (V14 Default: 22)
-CT_991_USER = "root"            # SSH kullanıcı adı (V15 Default: root)
-CT_991_PASS = ""                # SSH şifresi (Opsiyonel, sshpass gerektirir)
+CHROOT_HOST = os.environ.get("CHROOT_HOST", "192.168.111.51")  # CT 991 IP adresi
+CHROOT_SSH_PORT = int(os.environ.get("CHROOT_SSH_PORT", "22"))            # Chroot içindeki SSH portu (V14 Default: 22)
+CHROOT_REAL_SSH_PORT = int(os.environ.get("CHROOT_REAL_SSH_PORT", "22"))       # CT 991 ana sistem SSH portu (V14 Default: 22)
+CHROOT_USER = os.environ.get("CHROOT_USER", "root")            # SSH kullanıcı adı (V15 Default: root)
+CHROOT_PASS = os.environ.get("CHROOT_PASS", "")                # SSH şifresi (Opsiyonel, sshpass gerektirir)
 
 CHROOT_MANAGE_SCRIPT = "/root/enroll/chroot_yonetici.py" # Varsayılan, ayarlari_yukle ile güncellenir
 PYTHON_PATH = "python3" # PCT 991'deki python yolu (Venv yerine sistem python kullanıyoruz)
@@ -105,7 +108,7 @@ def _ssh_pool_baslat() -> bool:
     """
     global _pool_process, _pool_socket, _pool_ready
 
-    if _is_local(CT_991_HOST):
+    if _is_local(CHROOT_HOST):
         return False  # Yerel modda pool'a gerek yok
 
     with _pool_lock:
@@ -113,7 +116,7 @@ def _ssh_pool_baslat() -> bool:
         if _pool_ready and _pool_socket and Path(_pool_socket).exists():
             return True
 
-        socket_path = f"/tmp/ssh_pool_{CT_991_HOST}_{CT_991_REAL_SSH_PORT}_{CT_991_USER}"
+        socket_path = f"/tmp/ssh_pool_{CHROOT_HOST}_{CHROOT_REAL_SSH_PORT}_{CHROOT_USER}"
         _pool_socket = socket_path
 
         # Önceki socket temizle
@@ -127,19 +130,19 @@ def _ssh_pool_baslat() -> bool:
             "ssh",
             "-o", "ConnectTimeout=15",
             "-o", "StrictHostKeyChecking=no",
-            "-o", "BatchMode=yes" if not CT_991_PASS else "BatchMode=no",
+            "-o", "BatchMode=yes" if not CHROOT_PASS else "BatchMode=no",
             "-o", "ControlMaster=yes",
             "-o", f"ControlPath={socket_path}",
             "-o", "ControlPersist=120",  # 120 saniye boşta kalırsa kapat
-            "-p", str(CT_991_REAL_SSH_PORT),
+            "-p", str(CHROOT_REAL_SSH_PORT),
             "-N",  # Komut çalıştırma, sadece bağlantı tut
-            f"{CT_991_USER}@{CT_991_HOST}",
+            f"{CHROOT_USER}@{CHROOT_HOST}",
         ]
 
-        if CT_991_PASS:
+        if CHROOT_PASS:
             import shutil
             if shutil.which("sshpass"):
-                cmd = ["sshpass", "-p", CT_991_PASS] + cmd
+                cmd = ["sshpass", "-p", CHROOT_PASS] + cmd
 
         try:
             proc = subprocess.Popen(
@@ -211,12 +214,12 @@ def _ct991_exec(command: list, retries: int = 2) -> subprocess.CompletedProcess:
     SSH bağlantıları semaphore ile sınırlandırılır (max 3 eşzamanlı).
     Başarısız bağlantılarda retry + backoff uygulanır.
     """
-    if _is_local(CT_991_HOST):
+    if _is_local(CHROOT_HOST):
         log.debug(f"Executing locally: {' '.join(command)}")
         return subprocess.run(command, capture_output=True, text=True)
 
     final_command = command
-    if CT_991_USER != "root":
+    if CHROOT_USER != "root":
         final_command = ["sudo"] + command
 
     # Pool hazırsa ControlPath ile hızlı bağlan, değilse pool'u başlat
@@ -226,20 +229,20 @@ def _ct991_exec(command: list, retries: int = 2) -> subprocess.CompletedProcess:
     ssh_cmd = [
         "ssh", "-o", "ConnectTimeout=10",
         "-o", "StrictHostKeyChecking=no",
-        "-o", "BatchMode=yes" if not CT_991_PASS else "BatchMode=no",
+        "-o", "BatchMode=yes" if not CHROOT_PASS else "BatchMode=no",
         "-o", f"ControlPath={control_path}",
         "-o", "ControlMaster=no",  # Master zaten _pool_process, biz slave olarak bağlanıyoruz
-        "-p", str(CT_991_REAL_SSH_PORT),
-        f"{CT_991_USER}@{CT_991_HOST}"
+        "-p", str(CHROOT_REAL_SSH_PORT),
+        f"{CHROOT_USER}@{CHROOT_HOST}"
     ]
 
-    if CT_991_PASS and not use_pool:
+    if CHROOT_PASS and not use_pool:
         # Pool sshpass kullanıyorsa slave bağlantılarda tekrar gerekmez
         import shutil
         if not shutil.which("sshpass"):
             log.error("sshpass paketi yüklü değil!")
             return subprocess.CompletedProcess(ssh_cmd, 1, stderr="sshpass not found")
-        ssh_cmd = ["sshpass", "-p", CT_991_PASS] + ssh_cmd
+        ssh_cmd = ["sshpass", "-p", CHROOT_PASS] + ssh_cmd
 
     ssh_cmd += final_command
 
@@ -264,16 +267,16 @@ def _ct991_exec(command: list, retries: int = 2) -> subprocess.CompletedProcess:
                 ssh_cmd = [
                     "ssh", "-o", "ConnectTimeout=10",
                     "-o", "StrictHostKeyChecking=no",
-                    "-o", "BatchMode=yes" if not CT_991_PASS else "BatchMode=no",
+                    "-o", "BatchMode=yes" if not CHROOT_PASS else "BatchMode=no",
                     "-o", f"ControlPath={control_path}",
                     "-o", "ControlMaster=no",
-                    "-p", str(CT_991_REAL_SSH_PORT),
-                    f"{CT_991_USER}@{CT_991_HOST}"
+                    "-p", str(CHROOT_REAL_SSH_PORT),
+                    f"{CHROOT_USER}@{CHROOT_HOST}"
                 ]
-                if CT_991_PASS and not use_pool:
+                if CHROOT_PASS and not use_pool:
                     import shutil
                     if shutil.which("sshpass"):
-                        ssh_cmd = ["sshpass", "-p", CT_991_PASS] + ssh_cmd
+                        ssh_cmd = ["sshpass", "-p", CHROOT_PASS] + ssh_cmd
                 ssh_cmd += final_command
                 continue
 
@@ -312,7 +315,7 @@ def sync_manager_script():
             log.error(f"Senkronizasyon hatası: {local_path} bulunamadı")
             return False
             
-        if _is_local(CT_991_HOST):
+        if _is_local(CHROOT_HOST):
             # Yerel modda dosya zaten burada, sadece erişimi kontrol et
             if not Path(CHROOT_MANAGE_SCRIPT).exists():
                 # Eğer CHROOT_MANAGE_SCRIPT farklı bir yerse kopyala
@@ -328,25 +331,25 @@ def sync_manager_script():
         # Dizin varlığı ve pipe için komut
         target_dir = os.path.dirname(CHROOT_MANAGE_SCRIPT)
         remote_cmd = f"mkdir -p {target_dir} && cat > {CHROOT_MANAGE_SCRIPT} && chmod +x {CHROOT_MANAGE_SCRIPT}"
-        if CT_991_USER != "root":
+        if CHROOT_USER != "root":
             remote_cmd = f"sudo mkdir -p {target_dir} && sudo tee {CHROOT_MANAGE_SCRIPT} > /dev/null && sudo chmod +x {CHROOT_MANAGE_SCRIPT}"
 
         # Dizin varlığından emin ol ve dosyayı SSH üzerinden pipe ile gönder
         ssh_cmd = [
             "ssh", "-o", "ConnectTimeout=5",
-            "-o", "BatchMode=yes" if not CT_991_PASS else "BatchMode=no",
+            "-o", "BatchMode=yes" if not CHROOT_PASS else "BatchMode=no",
             "-o", "ControlPath=none",
-            "-p", str(CT_991_REAL_SSH_PORT),
-            f"{CT_991_USER}@{CT_991_HOST}",
+            "-p", str(CHROOT_REAL_SSH_PORT),
+            f"{CHROOT_USER}@{CHROOT_HOST}",
             remote_cmd
         ]
 
         # Şifre varsa sshpass kullan
-        if CT_991_PASS:
-            ssh_cmd = ["sshpass", "-p", CT_991_PASS] + ssh_cmd
+        if CHROOT_PASS:
+            ssh_cmd = ["sshpass", "-p", CHROOT_PASS] + ssh_cmd
         
         subprocess.run(ssh_cmd, input=content, text=True, check=True)
-        log.info(f"✅ chroot_yonetici.py {CT_991_HOST} üzerine senkronize edildi.")
+        log.info(f"✅ chroot_yonetici.py {CHROOT_HOST} üzerine senkronize edildi.")
         
         # PTY Onarımını tetikle (V14)
         chroot_onar()
@@ -562,7 +565,7 @@ def chroot_sil_batch(usernames: list) -> dict:
 
 def chroot_ip_al(username: str) -> str:
     """SSH IP adresini döndür (CT 991 IP)."""
-    return CT_991_HOST
+    return CHROOT_HOST
 
 
 def chroot_durum(username: str) -> bool:
@@ -597,11 +600,11 @@ def ssh_bilgi(username: str) -> dict:
     """SSH bağlantı bilgileri."""
     username = _slugify(username)
     return {
-        "host": CT_991_HOST,
-        "port": CT_991_SSH_PORT,
+        "host": CHROOT_HOST,
+        "port": CHROOT_SSH_PORT,
         "username": username,
         "password": username,  # Kullanıcı adı ile aynı
-        "command": f"ssh -p {CT_991_SSH_PORT} {username}@{CT_991_HOST}"
+        "command": f"ssh -p {CHROOT_SSH_PORT} {username}@{CHROOT_HOST}"
     }
 
 

@@ -68,6 +68,14 @@ async function ayarlariKaydet() {
   const chrootPass = document.getElementById('config-chroot-pass').value;
   const systemHost = document.getElementById('config-system-host').value;
   const ttydUrl = document.getElementById('config-ttyd-url').value;
+  const slaytKlasoru = document.getElementById('config-slayt-klasoru') ? document.getElementById('config-slayt-klasoru').value : '';
+  
+  const dbType = document.getElementById('config-db-type').value;
+  const dbHost = document.getElementById('config-db-host').value;
+  const dbPort = document.getElementById('config-db-port').value;
+  const dbUser = document.getElementById('config-db-user').value;
+  const dbPass = document.getElementById('config-db-pass').value;
+  const dbName = document.getElementById('config-db-name').value;
 
   // Kiosk Modu Toggle
   const kioskModuSelect = document.getElementById('config-kiosk-modu');
@@ -94,6 +102,13 @@ async function ayarlariKaydet() {
       chroot_pass: chrootPass,
       system_host: systemHost,
       ttyd_url: ttydUrl,
+      slayt_klasoru: slaytKlasoru,
+      db_type: dbType,
+      db_host: dbHost,
+      db_port: dbPort,
+      db_user: dbUser,
+      db_pass: dbPass,
+      db_name: dbName,
       kiosk_modu: kioskModu,
       ip_kontrol: ipKontrol,
       cikis_izni: cikisIzni,

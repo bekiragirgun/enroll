@@ -1,5 +1,12 @@
+import os
 import sqlite3
 import logging
+try:
+    import psycopg2
+    from psycopg2.extras import RealDictCursor
+except ImportError:
+    psycopg2 = None
+
 from core.paths import DB_YOLU
 
 _log = logging.getLogger('app')
@@ -9,68 +16,124 @@ db_saglikli = True
 
 def db_baglantisi():
     global db_saglikli
-    DB_YOLU.parent.mkdir(exist_ok=True)
-    try:
-        baglanti = sqlite3.connect(DB_YOLU, timeout=5)
-        baglanti.row_factory = sqlite3.Row
-        if not db_saglikli:
-            _log.info("✅ Veritabanı bağlantısı geri geldi")
-            db_saglikli = True
-        return baglanti
-    except sqlite3.OperationalError as e:
-        db_saglikli = False
-        _log.error(f"❌ Veritabanı açılamıyor: {e}")
-        raise
+    db_type = os.environ.get('DB_TYPE', 'sqlite').lower()
+
+    if db_type == 'postgres':
+        if not psycopg2:
+            _log.error("❌ psycopg2 kütüphanesi yüklü değil! 'pip install psycopg2-binary' komutunu çalıştırın.")
+            raise ImportError("psycopg2 not installed")
+        
+        try:
+            baglanti = psycopg2.connect(
+                host=os.environ.get('DB_HOST', 'localhost'),
+                port=os.environ.get('DB_PORT', '5432'),
+                user=os.environ.get('DB_USER', 'postgres'),
+                password=os.environ.get('DB_PASS', 'postgres_pass'),
+                dbname=os.environ.get('DB_NAME', 'ders_takip')
+            )
+            # SQLite 'Row' benzeri davranış için RealDictCursor kullanıyoruz
+            # Ancak biz genel bir wrapper yazacağımız için standardı koruyalım veya cursor factory ayarlı kalsın
+            if not db_saglikli:
+                _log.info("✅ PostgreSQL bağlantısı kuruldu")
+                db_saglikli = True
+            return baglanti
+        except Exception as e:
+            db_saglikli = False
+            _log.error(f"❌ PostgreSQL bağlantı hatası: {e}")
+            raise
+    else:
+        # Varsayılan SQLite
+        DB_YOLU.parent.mkdir(exist_ok=True)
+        try:
+            baglanti = sqlite3.connect(DB_YOLU, timeout=5)
+            baglanti.row_factory = sqlite3.Row
+            if not db_saglikli:
+                _log.info("✅ SQLite bağlantısı kuruldu")
+                db_saglikli = True
+            return baglanti
+        except sqlite3.OperationalError as e:
+            db_saglikli = False
+            _log.error(f"❌ SQLite açılamıyor: {e}")
+            raise
+
+class DBWrapper:
+    """SQLite (?) ve PostgreSQL (%s) parametre uyumsuzluğunu çözen wrapper"""
+    def __init__(self, conn):
+        self.conn = conn
+        self.db_type = 'postgres' if hasattr(conn, 'cursor_factory') or 'psycopg2' in str(type(conn)) else 'sqlite'
+
+    def execute(self, query, params=None):
+        cursor = self.conn.cursor()
+        if self.db_type == 'postgres':
+            # ? -> %s dönüşümü
+            query = query.replace('?', '%s')
+            # AUTOINCREMENT -> SERIAL (Sadece tablo oluştururken lazım, ama genel execute için de ufak dokunuşlar gerekebilir)
+            # Create table sorgularında manuel kontrol daha güvenli
+        
+        if params:
+            cursor.execute(query, params)
+        else:
+            cursor.execute(query)
+        return cursor
+
+    def commit(self):
+        self.conn.commit()
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        if exc_type:
+            self.conn.rollback()
+        else:
+            self.conn.commit()
+        self.conn.close()
 
 def db_olustur():
-    with db_baglantisi() as db:
-        # Ana yoklama tablosu
-        db.execute("""
+    db_type = os.environ.get('DB_TYPE', 'sqlite').lower()
+    
+    with db_baglantisi() as conn:
+        cursor = conn.cursor()
+        
+        # PostgreSQL için AUTOINCREMENT yerine SERIAL, PRIMARY KEY AUTOINCREMENT yerine SERIAL PRIMARY KEY
+        id_type = "SERIAL PRIMARY KEY" if db_type == 'postgres' else "INTEGER PRIMARY KEY AUTOINCREMENT"
+        
+        # Tabloları oluştur
+        cursor.execute(f"""
             CREATE TABLE IF NOT EXISTS yoklama (
-                id        INTEGER PRIMARY KEY AUTOINCREMENT,
+                id        {id_type},
                 tarih     TEXT NOT NULL,
                 ad_soyad  TEXT NOT NULL,
                 numara    TEXT NOT NULL,
                 saat      TEXT NOT NULL,
-                sinif     TEXT NOT NULL DEFAULT ''
+                sinif     TEXT NOT NULL DEFAULT '',
+                paket     TEXT NOT NULL DEFAULT '—',
+                ip        TEXT NOT NULL DEFAULT '',
+                kaynak    TEXT NOT NULL DEFAULT 'web'
             )
         """)
-        # Migration: eski veritabanına eksik kolonları ekle
-        try: db.execute("ALTER TABLE yoklama ADD COLUMN sinif TEXT NOT NULL DEFAULT ''")
-        except: pass
-        try: db.execute("ALTER TABLE yoklama ADD COLUMN paket TEXT NOT NULL DEFAULT '—'")
-        except: pass
-        try: db.execute("ALTER TABLE yoklama ADD COLUMN ip TEXT NOT NULL DEFAULT ''")
-        except: pass
-        try: db.execute("ALTER TABLE yoklama ADD COLUMN kaynak TEXT NOT NULL DEFAULT 'web'")
-        except: pass
 
-        # Sınıf listesi tablosu
-        db.execute("""
+        cursor.execute(f"""
             CREATE TABLE IF NOT EXISTS siniflar (
-                id   INTEGER PRIMARY KEY AUTOINCREMENT,
+                id   {id_type},
                 ad   TEXT UNIQUE NOT NULL
             )
         """)
 
-        # Kayıtlı öğrenci tablosu (whitelist)
-        db.execute("""
+        cursor.execute(f"""
             CREATE TABLE IF NOT EXISTS ogrenciler (
-                id        INTEGER PRIMARY KEY AUTOINCREMENT,
-                sinif_id  INTEGER NOT NULL REFERENCES siniflar(id),
+                id        {id_type},
+                sinif_id  INTEGER NOT NULL,
                 numara    TEXT UNIQUE NOT NULL,
                 ad        TEXT NOT NULL,
                 soyad     TEXT NOT NULL,
                 sifre     TEXT NOT NULL DEFAULT ''
             )
         """)
-        try: db.execute("ALTER TABLE ogrenciler ADD COLUMN sifre TEXT NOT NULL DEFAULT ''")
-        except: pass
 
-        # Şüpheli giriş denemeleri logu (başkası adına imza atma)
-        db.execute("""
+        cursor.execute(f"""
             CREATE TABLE IF NOT EXISTS sahte_giris_log (
-                id             INTEGER PRIMARY KEY AUTOINCREMENT,
+                id             {id_type},
                 tarih          TEXT NOT NULL,
                 saat           TEXT NOT NULL,
                 ip             TEXT NOT NULL,
@@ -82,18 +145,16 @@ def db_olustur():
             )
         """)
         
-        # Sistem ayarları tablosu (V14 Persistence)
-        db.execute("""
+        cursor.execute(f"""
             CREATE TABLE IF NOT EXISTS ayarlar (
                 anahtar  TEXT PRIMARY KEY,
                 deger    TEXT NOT NULL
             )
         """)
 
-        # Terminal güvenlik logu (yanlış öğrenci terminal erişimi)
-        db.execute("""
+        cursor.execute(f"""
             CREATE TABLE IF NOT EXISTS terminal_guvenlik_log (
-                id             INTEGER PRIMARY KEY AUTOINCREMENT,
+                id             {id_type},
                 tarih          TEXT NOT NULL,
                 saat           TEXT NOT NULL,
                 ip             TEXT NOT NULL,
@@ -105,55 +166,49 @@ def db_olustur():
             )
         """)
 
-        # ── Sınav / Quiz Modülü Tabloları ──
-        
-        # 1. Sınavlar
-        db.execute("""
+        cursor.execute(f"""
             CREATE TABLE IF NOT EXISTS sinavlar (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                id {id_type},
                 baslik TEXT NOT NULL,
                 aktif INTEGER DEFAULT 0,
                 olusturma_tarihi TEXT NOT NULL
             )
         """)
         
-        # 2. Sorular
-        db.execute("""
+        cursor.execute(f"""
             CREATE TABLE IF NOT EXISTS sorular (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                sinav_id INTEGER NOT NULL REFERENCES sinavlar(id) ON DELETE CASCADE,
+                id {id_type},
+                sinav_id INTEGER NOT NULL,
                 metin TEXT NOT NULL,
                 tip TEXT NOT NULL DEFAULT 'cok_secmeli',
                 puan INTEGER DEFAULT 10
             )
         """)
 
-        # 3. Seçenekler
-        db.execute("""
+        cursor.execute(f"""
             CREATE TABLE IF NOT EXISTS secenekler (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                soru_id INTEGER NOT NULL REFERENCES sorular(id) ON DELETE CASCADE,
+                id {id_type},
+                soru_id INTEGER NOT NULL,
                 metin TEXT NOT NULL,
                 dogru_mu INTEGER DEFAULT 0
             )
         """)
 
-        # 4. Öğrenci Cevapları
-        db.execute("""
+        cursor.execute(f"""
             CREATE TABLE IF NOT EXISTS ogrenci_cevaplari (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                sinav_id INTEGER NOT NULL REFERENCES sinavlar(id) ON DELETE CASCADE,
+                id {id_type},
+                sinav_id INTEGER NOT NULL,
                 ogrenci_numara TEXT NOT NULL,
-                soru_id INTEGER NOT NULL REFERENCES sorular(id) ON DELETE CASCADE,
+                soru_id INTEGER NOT NULL,
                 verilen_cevap TEXT NOT NULL,
-                puan INTEGER DEFAULT 0
+                puan INTEGER DEFAULT 0,
+                cevap_zamani TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         """)
 
-        # SEB Çıkış Logları
-        db.execute("""
+        cursor.execute(f"""
             CREATE TABLE IF NOT EXISTS seb_cikis_log (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                id {id_type},
                 tarih TEXT NOT NULL,
                 saat TEXT NOT NULL,
                 numara TEXT NOT NULL,
@@ -162,10 +217,9 @@ def db_olustur():
             )
         """)
 
-        # SEB Çıkış Talepleri
-        db.execute("""
+        cursor.execute(f"""
             CREATE TABLE IF NOT EXISTS seb_cikis_talepleri (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                id {id_type},
                 tarih TEXT NOT NULL,
                 saat TEXT NOT NULL,
                 numara TEXT NOT NULL,
@@ -174,10 +228,9 @@ def db_olustur():
             )
         """)
 
-        # Yardım Talepleri
-        db.execute("""
+        cursor.execute(f"""
             CREATE TABLE IF NOT EXISTS yardim_talepleri (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                id {id_type},
                 tarih TEXT NOT NULL,
                 saat TEXT NOT NULL,
                 numara TEXT NOT NULL,
@@ -186,13 +239,10 @@ def db_olustur():
                 kategori TEXT DEFAULT ''
             )
         """)
-        try: db.execute("ALTER TABLE yardim_talepleri ADD COLUMN kategori TEXT DEFAULT ''")
-        except: pass
 
-        # Öğrenci Çıkış Logu
-        db.execute("""
+        cursor.execute(f"""
             CREATE TABLE IF NOT EXISTS ogrenci_cikis_log (
-                id       INTEGER PRIMARY KEY AUTOINCREMENT,
+                id       {id_type},
                 tarih    TEXT NOT NULL,
                 saat     TEXT NOT NULL,
                 numara   TEXT NOT NULL,
@@ -202,5 +252,20 @@ def db_olustur():
                 kaynak   TEXT NOT NULL DEFAULT 'ogrenci'
             )
         """)
+
+        # Yeni Aktivite Log Tablosu
+        cursor.execute(f"""
+            CREATE TABLE IF NOT EXISTS ogrenci_aktivite_log (
+                id            {id_type},
+                numara        TEXT NOT NULL,
+                ip            TEXT NOT NULL,
+                aktivite_tipi TEXT NOT NULL,
+                detay         TEXT,
+                tarih         TEXT NOT NULL,
+                saat          TEXT NOT NULL
+            )
+        """)
+
+        conn.commit()
 
 

@@ -1,0 +1,32 @@
+services:
+  db:
+    image: postgres:15
+    container_name: ders_takip_db
+    environment:
+      POSTGRES_USER: ${DB_USER:-postgres}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-postgres_pass}
+      POSTGRES_DB: ${DB_NAME:-ders_takip}
+    ports:
+      - "5432:5432"
+    volumes:
+      - ./postgres_data:/var/lib/postgresql/data
+    restart: always
+
+  app:
+    build: .
+    container_name: ders_takip_app
+    depends_on:
+      - db
+    environment:
+      - DB_TYPE=postgres
+      - DB_HOST=db
+      - DB_PORT=5432
+      - DB_USER=${DB_USER:-postgres}
+      - DB_PASS=${DB_PASSWORD:-postgres_pass}
+      - DB_NAME=${DB_NAME:-ders_takip}
+      - SECRET_KEY=${SECRET_KEY}
+    ports:
+      - "3333:3333"
+    volumes:
+      - .:/app
+    restart: always

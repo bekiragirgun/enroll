@@ -9,6 +9,39 @@ let suAnkiDurum = {
   terminal_url: ''
 };
 
+let aktifSlayt = '';
+let isIdle = false;
+let idleTimer;
+
+function resetIdleTimer() {
+    isIdle = false;
+    clearTimeout(idleTimer);
+    idleTimer = setTimeout(() => {
+        isIdle = true;
+    }, 60000); // 1 dakika hareketsizlik sonrası idle
+}
+
+document.addEventListener('mousemove', resetIdleTimer);
+document.addEventListener('keypress', resetIdleTimer);
+resetIdleTimer();
+
+// Socket.io bağlantısı (Ana ogrenci.html içinde tanımlı varsayılıyor, 
+// değilse burada socket değişkeninin erişilebilir olduğundan emin olmalıyız)
+// Mevcut yapıda socket global bir değişken.
+
+function sendHeartbeat() {
+    if (typeof socket === 'undefined') return;
+    const data = {
+        numara: document.body.dataset.numara,
+        mod: suAnkiDurum.mod,
+        slayt: suAnkiDurum.dosya,
+        durum: isIdle ? 'pasif' : 'aktif'
+    };
+    socket.emit('ogrenci_heartbeat', data);
+}
+
+setInterval(sendHeartbeat, 30000); // 30 saniyede bir nabız
+
 // Tam ekran durumu
 let tamEkranModu = false;
 

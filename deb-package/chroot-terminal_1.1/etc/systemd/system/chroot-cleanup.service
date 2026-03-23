@@ -1,7 +1,0 @@
-[Unit]
-Description=Chroot PTY and Mount Cleanup
-After=network.target
-
-[Service]
-Type=oneshot
-ExecStart=/usr/local/bin/chroot-yonetici cleanup

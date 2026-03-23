@@ -168,7 +168,7 @@
         <select id="slayt-secici" onchange="slaytOnizleme(this.value)">
           {% for dosya in slaytlar %}
           <option value="{{ dosya }}" {% if dosya==aktif_dosya %}selected{% endif %}>
-            {{ dosya | replace('.html','') | replace('_',' ') }}
+            {{ dosya | replace('.html','') | replace('.pdf','') | replace('_',' ') }}
           </option>
           {% endfor %}
         </select>
@@ -597,6 +597,13 @@
             <small style="color:#718096;">Öğrenci ekranında gösterilecek terminal adresi (/terminal bırakın).</small>
           </div>
           <div>
+            <label style="display:block; color:#90cdf4; font-size:0.9rem; margin-bottom:0.5rem;">📁 Slayt (PDF) Klasör Yolu</label>
+            <input type="text" id="config-slayt-klasoru" value="{{ config.slayt_klasoru }}"
+              style="width:100%; padding:0.6rem; background:#2d3748; border:1px solid #4a5568; border-radius:6px; color:#fff;"
+              placeholder="Örn: C:\Egitim\PDF_Sunumlar veya /home/user/sunumlar">
+            <small style="color:#718096;">Slayt modunda gösterilecek PDF dökümanlarının tam dizin yolu (sunucu üzerinde).</small>
+          </div>
+          <div>
             <label style="display:block; color:#90cdf4; font-size:0.9rem; margin-bottom:0.5rem;">📅 Ders Günleri</label>
             <div id="ders-gunleri-secim" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:0.25rem;">
               <label style="color:#e2e8f0;font-size:0.85rem;cursor:pointer;display:flex;align-items:center;gap:3px;background:#2d3748;padding:4px 10px;border-radius:6px;border:1px solid #4a5568;">
@@ -624,6 +631,42 @@
               <small style="color:#718096;">ders (bu kadar veya daha fazla gelmeyenler raporda uyarılır)</small>
             </div>
           </div>
+
+          <hr style="border-color:#4a5568; margin:1.5rem 0;">
+          <h4 style="color:#90cdf4; margin-bottom:0.75rem;">🐘 PostgreSQL Bağlantı Ayarları</h4>
+          <div style="display:grid; grid-template-columns: 1fr 1fr; gap:1rem; margin-bottom:1rem;">
+            <div>
+              <label style="display:block; color:#a0aec0; font-size:0.85rem; margin-bottom:4px;">DB Type</label>
+              <select id="config-db-type" style="width:100%; padding:0.5rem; background:#2d3748; border:1px solid #4a5568; border-radius:6px; color:#fff;">
+                <option value="sqlite" {% if config.db_type == 'sqlite' %}selected{% endif %}>SQLite (Lokal)</option>
+                <option value="postgres" {% if config.db_type == 'postgres' %}selected{% endif %}>PostgreSQL (Docker/Uzak)</option>
+              </select>
+            </div>
+            <div>
+              <label style="display:block; color:#a0aec0; font-size:0.85rem; margin-bottom:4px;">DB Host</label>
+              <input type="text" id="config-db-host" value="{{ config.db_host }}" style="width:100%; padding:0.5rem; background:#2d3748; border:1px solid #4a5568; border-radius:6px; color:#fff;">
+            </div>
+          </div>
+          <div style="display:grid; grid-template-columns: 1fr 1fr 1fr; gap:1rem; margin-bottom:1rem;">
+            <div>
+              <label style="display:block; color:#a0aec0; font-size:0.85rem; margin-bottom:4px;">DB Port</label>
+              <input type="number" id="config-db-port" value="{{ config.db_port }}" style="width:100%; padding:0.5rem; background:#2d3748; border:1px solid #4a5568; border-radius:6px; color:#fff;">
+            </div>
+            <div>
+              <label style="display:block; color:#a0aec0; font-size:0.85rem; margin-bottom:4px;">DB User</label>
+              <input type="text" id="config-db-user" value="{{ config.db_user }}" style="width:100%; padding:0.5rem; background:#2d3748; border:1px solid #4a5568; border-radius:6px; color:#fff;">
+            </div>
+            <div>
+              <label style="display:block; color:#a0aec0; font-size:0.85rem; margin-bottom:4px;">DB Password</label>
+              <input type="password" id="config-db-pass" value="{{ config.db_pass }}" style="width:100%; padding:0.5rem; background:#2d3748; border:1px solid #4a5568; border-radius:6px; color:#fff;">
+            </div>
+          </div>
+          <div style="margin-bottom:1rem;">
+            <label style="display:block; color:#a0aec0; font-size:0.85rem; margin-bottom:4px;">DB Name</label>
+            <input type="text" id="config-db-name" value="{{ config.db_name }}" style="width:100%; padding:0.5rem; background:#2d3748; border:1px solid #4a5568; border-radius:6px; color:#fff;">
+          </div>
+          <p style="color:#718096; font-size:0.75rem; margin-bottom:1rem;">⚠️ Not: Veritabanı tipi değişikliği sonrası uygulamanın yeniden başlatılması gerekebilir.</p>
+
           <div style="display:flex; gap:1rem; align-items:center;">
             <button class="btn-kucuk" style="background:#48bb78;" onclick="ayarlariKaydet()">💾 Ayarları Kaydet</button>
             <button class="btn-kucuk" style="background:#2b6cb0;" onclick="baglantiTestEt()">🩺 Bağlantıyı Test

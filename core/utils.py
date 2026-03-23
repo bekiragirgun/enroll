@@ -1,6 +1,5 @@
 from datetime import datetime
 from flask import request
-from core.paths import SLAYT_DIR
 from core.db import db_baglantisi
 
 def bugun():
@@ -48,13 +47,21 @@ def paket_zaman_kontrolu(paket_str: str) -> tuple:
     return '', '', False
 
 def slayt_listesi():
-    if not SLAYT_DIR.exists():
+    from core.config import ders_durumu
+    from pathlib import Path
+    
+    klasor = ders_durumu.get('slayt_klasoru', '')
+    if not klasor:
         return []
+        
+    yol = Path(klasor)
+    if not yol.exists() or not yol.is_dir():
+        return []
+        
     dosyalar = sorted(
-        f.name for f in SLAYT_DIR.iterdir()
-        if f.suffix == '.html'
-        and '_test' not in f.name
-        and '_analyzed' not in f.name
+        f.name for f in yol.iterdir()
+        if f.suffix.lower() == '.pdf'
+        and not f.name.startswith('.')
     )
     return dosyalar
 
