@@ -276,6 +276,7 @@ def test_verilerini_yukle():
         
         # 1. Örnek Sınıflar
         siniflar = [
+            ('Test Sınıfı (30 Kişi)',),
             ('Bilgisayar Programcılığı',),
             ('Siber Güvenlik',),
             ('İnsansız Hava Aracı Teknolojisi',)
@@ -286,15 +287,16 @@ def test_verilerini_yukle():
         # Sınıf ID'lerini al
         cursor.execute("SELECT id, ad FROM siniflar")
         sinif_map = {ad: id for id, ad in cursor.fetchall()}
+        test_sinif_id = sinif_map['Test Sınıfı (30 Kişi)']
         
-        # 2. Örnek Öğrenciler
-        # Şifreler varsayılan olarak boştur (veya numara ile aynı yapılabilir)
-        ogrenciler = [
-            (sinif_map['Bilgisayar Programcılığı'], 'test1', 'Ahmet', 'Yılmaz', '1234'),
-            (sinif_map['Bilgisayar Programcılığı'], 'test2', 'Mehmet', 'Demir', '1234'),
-            (sinif_map['Siber Güvenlik'], 'siber1', 'Can', 'Öz', '1234'),
-            (sinif_map['İnsansız Hava Aracı Teknolojisi'], 'iha1', 'Gökhan', 'Bulut', '1234')
-        ]
+        # 2. 30 Tane Test Öğrencisi Oluştur
+        ogrenciler = []
+        for i in range(1, 31):
+            numara = f"test{i}"
+            ogrenciler.append((test_sinif_id, numara, f"Öğrenci-{i}", "TEST", "1234"))
+        
+        # Ekstra özel test kullanıcıları
+        ogrenciler.append((sinif_map['Siber Güvenlik'], 'siber1', 'Siber', 'Uzman', '1234'))
         
         for ogr in ogrenciler:
             cursor.execute("""
