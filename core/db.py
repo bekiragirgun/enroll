@@ -304,6 +304,20 @@ def test_verilerini_yukle(count=30):
         
         conn.commit()
         
+        # 2.5 Test modu için varsayılan ayarları ekle
+        test_ayarlar = [
+            ('kiosk_modu', '0'),          # SEB zorunluluğunu kapat
+            ('ip_kontrol', '0'),          # Aynı IP'den birden fazla giriş engeli kaldır
+            ('ders_gunleri', '0,1,2,3,4,5,6'),  # Her gün ders günü olsun
+            ('ogretmen_sifre', '1234'),   # Bilinen bir öğretmen şifresi
+            ('cikis_izni', '1'),          # SEB çıkış izni açık
+            ('devamsizlik_esik', '3'),    # Devamsızlık eşiği
+        ]
+        for anahtar, deger in test_ayarlar:
+            cursor.execute("INSERT OR REPLACE INTO ayarlar (anahtar, deger) VALUES (?, ?)", (anahtar, deger))
+        
+        conn.commit()
+        
         # 3. Tüm test öğrencilerini bugünün yoklamasına ekle (otomatik giriş)
         from datetime import datetime
         tarih = datetime.now().strftime('%Y-%m-%d')
