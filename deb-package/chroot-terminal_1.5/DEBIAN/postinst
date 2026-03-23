@@ -3,32 +3,44 @@ set -e
 
 echo "=== Chroot Terminal System v1.5 kurulumu ==="
 
-# ── LXC Boot Optimizasyonu ─────────────────
-echo "[1/7] LXC konteyner optimizasyonu..."
-# Konteyner'da çalışmayan servisleri devre dışı bırak (boot hızlandırma)
-for svc in systemd-udevd.service multipathd.service open-vm-tools.service tmp.mount; do
-    systemctl disable "$svc" 2>/dev/null || true
-    systemctl mask "$svc" 2>/dev/null || true
-done
-# udevd soketlerini de kapat
-for sock in systemd-udevd-kernel.socket systemd-udevd-control.socket; do
-    systemctl disable "$sock" 2>/dev/null || true
-    systemctl mask "$sock" 2>/dev/null || true
-done
-# systemd-resolved yerine statik DNS
-if systemctl is-active systemd-resolved >/dev/null 2>&1 || systemctl is-enabled systemd-resolved >/dev/null 2>&1; then
-    systemctl disable --now systemd-resolved.service 2>/dev/null || true
-    systemctl mask systemd-resolved.service 2>/dev/null || true
-    echo "nameserver 8.8.8.8" > /etc/resolv.conf 2>/dev/null || true
-fi
-# Systemd timeout'ları kısalt
-mkdir -p /etc/systemd/system.conf.d
-cat > /etc/systemd/system.conf.d/lxc-timeout.conf << 'TIMEOUTEOF'
+# ── LXC/Konteyner Tespiti ve Optimizasyonu ─────────────────
+_is_container() {
+    # systemd-detect-virt, /proc/1/environ veya /.dockerenv ile tespit
+    if command -v systemd-detect-virt >/dev/null 2>&1; then
+        local vtype
+        vtype=$(systemd-detect-virt --container 2>/dev/null || echo "none")
+        [ "$vtype" != "none" ] && return 0
+    fi
+    [ -f /.dockerenv ] && return 0
+    grep -qi 'container=lxc\|container=docker' /proc/1/environ 2>/dev/null && return 0
+    return 1
+}
+
+if _is_container; then
+    echo "[1/7] LXC/konteyner tespit edildi — gereksiz servisler devre dışı bırakılıyor..."
+    for svc in systemd-udevd.service multipathd.service open-vm-tools.service tmp.mount; do
+        systemctl disable "$svc" 2>/dev/null || true
+        systemctl mask "$svc" 2>/dev/null || true
+    done
+    for sock in systemd-udevd-kernel.socket systemd-udevd-control.socket; do
+        systemctl disable "$sock" 2>/dev/null || true
+        systemctl mask "$sock" 2>/dev/null || true
+    done
+    if systemctl is-active systemd-resolved >/dev/null 2>&1 || systemctl is-enabled systemd-resolved >/dev/null 2>&1; then
+        systemctl disable --now systemd-resolved.service 2>/dev/null || true
+        systemctl mask systemd-resolved.service 2>/dev/null || true
+        echo "nameserver 8.8.8.8" > /etc/resolv.conf 2>/dev/null || true
+    fi
+    mkdir -p /etc/systemd/system.conf.d
+    cat > /etc/systemd/system.conf.d/lxc-timeout.conf << 'TIMEOUTEOF'
 [Manager]
 DefaultTimeoutStartSec=10s
 DefaultTimeoutStopSec=10s
 DefaultDeviceTimeoutSec=10s
 TIMEOUTEOF
+else
+    echo "[1/7] Bare-metal/VM tespit edildi — sistem servisleri korunuyor."
+fi
 
 # ── Kernel Optimizasyonu ─────────────────────
 echo "[2/7] Kernel parametreleri uygulanıyor..."
@@ -84,10 +96,14 @@ echo "  NTP:"
 echo "    Timezone:       Europe/Istanbul"
 echo "    NTP Servers:    ntp.ubuntu.com, time.google.com, time.cloudflare.com"
 echo ""
+if _is_container; then
 echo "  LXC Boot Optimizasyonu:"
 echo "    udevd, multipathd, open-vm-tools, tmp.mount: devre dışı"
 echo "    systemd-resolved: statik DNS (8.8.8.8)"
 echo "    Timeout: 10s (start/stop/device)"
+else
+echo "  Ortam: Bare-metal/VM (sistem servisleri korundu)"
+fi
 echo ""
 echo "  Servisler:"
 echo "    chroot-pty-fix: boot'ta PTY onarımı"
