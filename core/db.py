@@ -336,4 +336,53 @@ def test_verilerini_yukle(count=30):
         conn.commit()
         _log.info(f"📊 {count} test öğrencisi başarıyla yüklendi.")
 
+        # 4. Test Sınavı Oluştur
+        cursor.execute("INSERT INTO sinavlar (baslik, aktif, olusturma_tarihi) VALUES (?, ?, ?)", 
+                       ("Python Temelleri Test Sınavı", 1, tarih))
+        sinav_id = cursor.lastrowid
+
+        # 5. 5 Tane Soru Ekle
+        sorular = [
+            ("Python'da ekrana yazı yazdırmak için hangi fonksiyon kullanılır?", 20),
+            ("Hangi veri tipi tam sayıları ifade eder?", 20),
+            ("Listeye eleman eklemek için hangi metod kullanılır?", 20),
+            ("Python dosya uzantısı nedir?", 20),
+            ("Hangisi bir döngü tipidir?", 20)
+        ]
+        
+        secenek_kumeleri = [
+            [("print()", 1), ("output()", 0), ("echo", 0), ("write()", 0)],
+            [("int", 1), ("str", 0), ("float", 0), ("bool", 0)],
+            [("append()", 1), ("add()", 0), ("insert_last()", 0), ("push()", 0)],
+            [(".py", 1), (".python", 0), (".txt", 0), (".exe", 0)],
+            [("for", 1), ("if", 0), ("def", 0), ("class", 0)]
+        ]
+
+        import random
+        for i, (soru_metni, puan) in enumerate(sorular):
+            cursor.execute("INSERT INTO sorular (sinav_id, metin, puan) VALUES (?, ?, ?)", 
+                           (sinav_id, soru_metni, puan))
+            soru_id = cursor.lastrowid
+            
+            eklenen_secenekler = []
+            for sec_metin, dogru_mu in secenek_kumeleri[i]:
+                cursor.execute("INSERT INTO secenekler (soru_id, metin, dogru_mu) VALUES (?, ?, ?)", 
+                               (soru_id, sec_metin, dogru_mu))
+                eklenen_secenekler.append((cursor.lastrowid, dogru_mu))
+
+            # 6. Öğrenci Cevaplarını Simüle Et
+            for j in range(1, count + 1):
+                numara = f"test{j}"
+                # Rastgele bir seçenek seç (öğrencilerin bir kısmı doğru bilsin)
+                secilen_id, dogru_mu = random.choice(eklenen_secenekler)
+                ogr_puan = puan if dogru_mu else 0
+                
+                cursor.execute("""
+                    INSERT INTO ogrenci_cevaplari (sinav_id, ogrenci_numara, soru_id, verilen_cevap, puan)
+                    VALUES (?, ?, ?, ?, ?)
+                """, (sinav_id, numara, soru_id, str(secilen_id), ogr_puan))
+        
+        conn.commit()
+        _log.info("📝 Test sınavı ve 30 öğrencinin cevapları simüle edildi.")
+
 
