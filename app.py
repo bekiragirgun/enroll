@@ -254,13 +254,18 @@ def ogretmen_baglan_event(veri=None):
             '-o', 'ControlPath=none',
             '-p', str(CHROOT_REAL_SSH_PORT),
             f'{CHROOT_USER}@{CHROOT_HOST}',
-            f"sudo /bin/bash -c \"while true; do chroot '{safe_chroot_path}' /bin/su - '{safe_username}'; echo 'Oturum kapatılamaz, yeniden başlatılıyor...'; sleep 1; done\""
+            f"sudo -S /bin/bash -c \"while true; do chroot '{safe_chroot_path}' /bin/su - '{safe_username}'; echo 'Oturum kapatılamaz, yeniden başlatılıyor...'; sleep 1; done\""
         ]
         if CHROOT_PASS:
             ssh_cmd = ['sshpass', '-p', CHROOT_PASS] + ssh_cmd
 
-        proc = subprocess.Popen(ssh_cmd, stdin=slave_fd, stdout=slave_fd, stderr=slave_fd, preexec_fn=os.setsid)
+        proc = subprocess.Popen(ssh_cmd, stdin=subprocess.PIPE, stdout=slave_fd, stderr=slave_fd, preexec_fn=os.setsid)
         os.close(slave_fd)
+        
+        # Sudo şifresini gönder
+        if CHROOT_USER != "root" and CHROOT_PASS:
+            proc.stdin.write(f"{CHROOT_PASS}\n".encode())
+            proc.stdin.flush()
 
         ogretmen_pty_fd = master_fd
         ogretmen_pty_pid = proc.pid
