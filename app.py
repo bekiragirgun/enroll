@@ -440,7 +440,18 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Ders Takip Sistemi')
     parser.add_argument('--test', action='store_true', help='Test modunda başlat (SQLite + Örnek Veri)')
     parser.add_argument('--port', type=int, default=3333, help='Dinlenecek port')
+    parser.add_argument('--host', type=str, help='Chroot Host IP (Örn: 10.211.55.27)')
+    parser.add_argument('--user', type=str, help='Chroot SSH Kullanıcısı (Örn: bekir)')
+    parser.add_argument('--pass', dest='password', type=str, help='Chroot SSH Şifresi')
     args = parser.parse_args()
+
+    # CLI Argümanlarını Environment Variable olarak ata (config.py tarafından okunması için)
+    if args.host:
+        os.environ['CHROOT_HOST'] = args.host
+    if args.user:
+        os.environ['CHROOT_USER'] = args.user
+    if args.password:
+        os.environ['CHROOT_PASS'] = args.password
 
     # Moved db_olustur and related imports here
     import core.db
