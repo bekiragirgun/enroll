@@ -80,6 +80,13 @@ def api_mod_degistir():
             ders_durumu['slayt_hash'] = ''
     return jsonify({'durum': 'ok', 'mod': ders_durumu['mod']})
 
+@api_bp.route('/config', methods=['GET'])
+@ogretmen_giris_gerekli
+def api_config_get():
+    return jsonify({
+        'ders_gunleri': ayar_getir('ders_gunleri', '1'),
+    })
+
 @api_bp.route('/config', methods=['POST'])
 @ogretmen_giris_gerekli
 def api_config():
@@ -145,6 +152,9 @@ def api_config():
         cikis = str(veri['cikis_izni'])
         ders_durumu['cikis_izni'] = cikis
         ayar_kaydet('cikis_izni', cikis)
+
+    if 'ders_gunleri' in veri:
+        ayar_kaydet('ders_gunleri', str(veri['ders_gunleri']))
 
     return jsonify({'durum': 'ok'})
 
@@ -247,7 +257,16 @@ def api_ogrenci_devam():
         ).fetchall()
 
     katilim_tarihleri = {r['tarih'] for r in katilimlar}
-    tum_tarihler = [r['tarih'] for r in tum_gunler]
+    tum_tarihler_ham = [r['tarih'] for r in tum_gunler]
+
+    # Ders günü filtresi
+    from datetime import datetime as _dt
+    ders_gunleri_ayar = ayar_getir('ders_gunleri', '')
+    if ders_gunleri_ayar:
+        gecerli_gunler = {int(g.strip()) for g in ders_gunleri_ayar.split(',') if g.strip().isdigit()}
+        tum_tarihler = [t for t in tum_tarihler_ham if _dt.strptime(t, '%Y-%m-%d').weekday() in gecerli_gunler]
+    else:
+        tum_tarihler = tum_tarihler_ham
 
     gecmis = []
     for tarih in tum_tarihler:
@@ -849,7 +868,16 @@ def api_yoklama_rapor():
             tarih_sql += ' AND paket = ?'
             tarih_params.append(paket)
         tarih_sql += ' ORDER BY tarih'
-        ders_gunleri = [r['tarih'] for r in db.execute(tarih_sql, tarih_params).fetchall()]
+        tum_tarihler = [r['tarih'] for r in db.execute(tarih_sql, tarih_params).fetchall()]
+
+        # Ders günü filtresi: sadece belirlenen hafta günlerindeki kayıtları say
+        from datetime import datetime as _dt
+        ders_gunleri_ayar = ayar_getir('ders_gunleri', '')  # "1" veya "1,3" gibi
+        if ders_gunleri_ayar:
+            gecerli_gunler = {int(g.strip()) for g in ders_gunleri_ayar.split(',') if g.strip().isdigit()}
+            ders_gunleri = [t for t in tum_tarihler if _dt.strptime(t, '%Y-%m-%d').weekday() in gecerli_gunler]
+        else:
+            ders_gunleri = tum_tarihler  # Ayar yoksa tüm günleri say
 
         # Ogrenci listesi (sinif filtreli)
         if sinif_id:
@@ -909,6 +937,49 @@ def api_yoklama_rapor():
         'esik': esik,
         'rapor': rapor
     })
+
+
+@api_bp.route('/yoklama/duzenle', methods=['POST'])
+@ogretmen_giris_gerekli
+def api_yoklama_duzenle():
+    """Öğretmen yoklama kaydını düzenler: gelmedi→geldi veya geldi→gelmedi."""
+    veri = request.get_json() or {}
+    numara = veri.get('numara', '').strip()
+    tarih = veri.get('tarih', '').strip()
+    durum = veri.get('durum', '')  # 'geldi' veya 'gelmedi'
+    paket = veri.get('paket', '').strip()
+
+    if not numara or not tarih or durum not in ('geldi', 'gelmedi'):
+        return jsonify({'durum': 'hata', 'mesaj': 'Eksik veya geçersiz parametre'}), 400
+
+    with db_baglantisi() as db:
+        ogrenci = db.execute('SELECT ad, soyad FROM ogrenciler WHERE numara=?', (numara,)).fetchone()
+        if not ogrenci:
+            return jsonify({'durum': 'hata', 'mesaj': 'Öğrenci bulunamadı'}), 404
+
+        ad_soyad = (ogrenci['ad'] + ' ' + ogrenci['soyad']).upper()
+
+        if durum == 'geldi':
+            # Zaten kayıt var mı kontrol et
+            mevcut = db.execute(
+                'SELECT id FROM yoklama WHERE tarih=? AND numara=?', (tarih, numara)
+            ).fetchone()
+            if mevcut:
+                return jsonify({'durum': 'ok', 'mesaj': 'Zaten kayıtlı'})
+            # Manuel yoklama ekle
+            db.execute(
+                'INSERT INTO yoklama (tarih, ad_soyad, numara, saat, sinif, paket, ip, kaynak) VALUES (?,?,?,?,?,?,?,?)',
+                (tarih, ad_soyad, numara, '00:00', '', paket or '-', '', 'ogretmen_duzeltme')
+            )
+            db.commit()
+            log.info(f"✏️ Yoklama düzeltme: {numara} ({ad_soyad}) {tarih} → geldi (öğretmen)")
+        else:
+            # Yoklama kaydını sil
+            db.execute('DELETE FROM yoklama WHERE tarih=? AND numara=?', (tarih, numara))
+            db.commit()
+            log.info(f"✏️ Yoklama düzeltme: {numara} ({ad_soyad}) {tarih} → gelmedi (öğretmen)")
+
+    return jsonify({'durum': 'ok'})
 
 
 @api_bp.route('/yoklama/devamsizlik_esik', methods=['GET'])

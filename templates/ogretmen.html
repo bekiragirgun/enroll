@@ -568,6 +568,15 @@
             <small style="color:#718096;">Öğrencilerin sadece Safe Exam Browser ile girmesini zorunlu kılar.</small>
           </div>
           <div>
+            <label style="display:block; color:#90cdf4; font-size:0.9rem; margin-bottom:0.5rem;">🚪 SEB Çıkış İzni</label>
+            <select id="config-cikis-izni"
+              style="width:100%; padding:0.6rem; background:#2d3748; border:1px solid #4a5568; border-radius:6px; color:#fff;">
+              <option value="1" {% if config.cikis_izni=='1' %}selected{% endif %}>Açık (Öğrenciye Çıkış butonu gösterilir)</option>
+              <option value="0" {% if config.cikis_izni=='0' %}selected{% endif %}>Kapalı (Çıkış butonu gizlenir)</option>
+            </select>
+            <small style="color:#718096;">Öğrencilerin SEB içerisinden çıkış talep edebilmesini sağlar.</small>
+          </div>
+          <div>
             <label style="display:block; color:#90cdf4; font-size:0.9rem; margin-bottom:0.5rem;">🌐 Aynı IP Kontrolü
               (Fraud Detection)</label>
             <select id="config-ip-kontrol"
@@ -586,6 +595,26 @@
             <input type="text" id="config-ttyd-url" value="{{ config.terminal_url }}"
               style="width:100%; padding:0.6rem; background:#2d3748; border:1px solid #4a5568; border-radius:6px; color:#fff;">
             <small style="color:#718096;">Öğrenci ekranında gösterilecek terminal adresi (/terminal bırakın).</small>
+          </div>
+          <div>
+            <label style="display:block; color:#90cdf4; font-size:0.9rem; margin-bottom:0.5rem;">📅 Ders Günleri</label>
+            <div id="ders-gunleri-secim" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:0.25rem;">
+              <label style="color:#e2e8f0;font-size:0.85rem;cursor:pointer;display:flex;align-items:center;gap:3px;background:#2d3748;padding:4px 10px;border-radius:6px;border:1px solid #4a5568;">
+                <input type="checkbox" class="ders-gun-cb" value="0"> Pzr</label>
+              <label style="color:#e2e8f0;font-size:0.85rem;cursor:pointer;display:flex;align-items:center;gap:3px;background:#2d3748;padding:4px 10px;border-radius:6px;border:1px solid #4a5568;">
+                <input type="checkbox" class="ders-gun-cb" value="1" checked> Pzt</label>
+              <label style="color:#e2e8f0;font-size:0.85rem;cursor:pointer;display:flex;align-items:center;gap:3px;background:#2d3748;padding:4px 10px;border-radius:6px;border:1px solid #4a5568;">
+                <input type="checkbox" class="ders-gun-cb" value="2"> Sal</label>
+              <label style="color:#e2e8f0;font-size:0.85rem;cursor:pointer;display:flex;align-items:center;gap:3px;background:#2d3748;padding:4px 10px;border-radius:6px;border:1px solid #4a5568;">
+                <input type="checkbox" class="ders-gun-cb" value="3"> Çar</label>
+              <label style="color:#e2e8f0;font-size:0.85rem;cursor:pointer;display:flex;align-items:center;gap:3px;background:#2d3748;padding:4px 10px;border-radius:6px;border:1px solid #4a5568;">
+                <input type="checkbox" class="ders-gun-cb" value="4"> Per</label>
+              <label style="color:#e2e8f0;font-size:0.85rem;cursor:pointer;display:flex;align-items:center;gap:3px;background:#2d3748;padding:4px 10px;border-radius:6px;border:1px solid #4a5568;">
+                <input type="checkbox" class="ders-gun-cb" value="5"> Cum</label>
+              <label style="color:#e2e8f0;font-size:0.85rem;cursor:pointer;display:flex;align-items:center;gap:3px;background:#2d3748;padding:4px 10px;border-radius:6px;border:1px solid #4a5568;">
+                <input type="checkbox" class="ders-gun-cb" value="6"> Cmt</label>
+            </div>
+            <small style="color:#718096;">Devam raporunda sadece seçilen günler sayılır. Test günleri otomatik hariç tutulur.</small>
           </div>
           <div>
             <label style="display:block; color:#90cdf4; font-size:0.9rem; margin-bottom:0.5rem;">⚠️ Devamsızlık Uyarı Eşiği</label>

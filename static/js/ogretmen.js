@@ -81,6 +81,9 @@ async function ayarlariKaydet() {
   const cikisIzniSelect = document.getElementById('config-cikis-izni');
   const cikisIzni = cikisIzniSelect ? cikisIzniSelect.value : '0';
 
+  // Ders Günleri
+  const dersGunleri = Array.from(document.querySelectorAll('.ders-gun-cb:checked')).map(cb => cb.value).join(',');
+
   const yanit = await safeFetch('/api/config', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -93,7 +96,8 @@ async function ayarlariKaydet() {
       ttyd_url: ttydUrl,
       kiosk_modu: kioskModu,
       ip_kontrol: ipKontrol,
-      cikis_izni: cikisIzni
+      cikis_izni: cikisIzni,
+      ders_gunleri: dersGunleri
     })
   });
 
@@ -1398,6 +1402,17 @@ async function devamRaporuCSV() {
   }
 }
 
+async function dersGunleriYukle() {
+  try {
+    const yanit = await safeFetch('/api/config');
+    const veri = await yanit.json();
+    const gunler = (veri.ders_gunleri || '1').split(',').map(g => g.trim());
+    document.querySelectorAll('.ders-gun-cb').forEach(cb => {
+      cb.checked = gunler.includes(cb.value);
+    });
+  } catch (e) {}
+}
+
 async function devamsizlikEsikYukle() {
   try {
     var yanit = await safeFetch('/api/yoklama/devamsizlik_esik');
@@ -1418,6 +1433,7 @@ document.addEventListener('DOMContentLoaded', () => {
   sinifDurumCek();        // Kayıtlı öğrenci sayısını güncelle
   guvenlikSoketBaslat();  // Güvenlik uyarılarını dinle
   devamsizlikEsikYukle(); // Devamsizlik esigini yukle
+  dersGunleriYukle();    // Ders günlerini yükle
 
   // Eski URL kontrolü ve otomatik düzeltme (Eskiden /terminal-yayin kullanılıyordu)
   const ttydUrlInput = document.getElementById('config-ttyd-url');

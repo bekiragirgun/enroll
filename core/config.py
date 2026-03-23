@@ -44,7 +44,8 @@ def ayarlari_yukle():
     kiosk_modu  = ayar_getir('kiosk_modu', '1')
     cikis_izni  = ayar_getir('cikis_izni', '0')
     ip_kontrol  = ayar_getir('ip_kontrol', '1')
-    
+    ders_gunleri = ayar_getir('ders_gunleri', '1')  # 0=Pzr,1=Pzt,2=Sal,...,6=Cmt — virgülle ayrılmış
+
     ders_durumu['chroot_host'] = chroot_host
     ders_durumu['chroot_port'] = chroot_port
     ders_durumu['terminal_url'] = terminal_url
