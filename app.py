@@ -248,9 +248,6 @@ def ogretmen_baglan_event(veri=None):
         safe_username = ogretmen_numara.replace("'", "'\\''")
         safe_chroot_path = f"{CHROOT_BASE}/{safe_username}".replace("'", "'\\''")
 
-        safe_password = CHROOT_PASS.replace("'", "'\\''") if CHROOT_PASS else ""
-        # Parantez kullanmazsak pipe 'sudo' yerine ana shell'e gidebilir
-        sudo_cmd = f"(echo '{safe_password}' | sudo -S" if (CHROOT_USER != "root" and CHROOT_PASS) else "(sudo"
 
         ssh_cmd = [
             'ssh', '-t',
@@ -258,7 +255,7 @@ def ogretmen_baglan_event(veri=None):
             '-o', 'ControlPath=none',
             '-p', f'{CHROOT_REAL_SSH_PORT}',
             f'{CHROOT_USER}@{CHROOT_HOST}',
-            f"{sudo_cmd} /bin/bash -c \"while true; do chroot '{safe_chroot_path}' /bin/su - '{safe_username}'; echo 'Oturum kapatılamaz, yeniden başlatılıyor...'; sleep 1; done\")"
+            f"sudo /bin/bash -c \"while true; do chroot '{safe_chroot_path}' /bin/su - '{safe_username}'; echo 'Oturum kapatılamaz, yeniden başlatılıyor...'; sleep 1; done\""
         ]
         if CHROOT_PASS:
             ssh_cmd = ['sshpass', '-p', CHROOT_PASS] + ssh_cmd
@@ -396,15 +393,13 @@ def ogrenci_baglan_event(veri):
         master_fd, slave_fd = pty.openpty()
         safe_username = username.replace("'", "'\\''")
         safe_chroot_path = f"{CHROOT_BASE}/{safe_username}".replace("'", "'\\''")
-        safe_password = CHROOT_PASS.replace("'", "'\\''") if CHROOT_PASS else ""
-        sudo_cmd = f"(echo '{safe_password}' | sudo -S" if (CHROOT_USER != "root" and CHROOT_PASS) else "(sudo"
 
         ssh_cmd = [
             'ssh', '-t',
             '-o', 'StrictHostKeyChecking=no',
             '-o', 'ControlPath=none',
             '-p', str(CHROOT_REAL_SSH_PORT), f'{CHROOT_USER}@{CHROOT_HOST}',
-            f"{sudo_cmd} /bin/bash -c \"while true; do chroot '{safe_chroot_path}' /bin/su - '{safe_username}'; echo 'Oturum kapatılamaz, yeniden başlatılıyor...'; sleep 1; done\")"
+            f"sudo /bin/bash -c \"while true; do chroot '{safe_chroot_path}' /bin/su - '{safe_username}'; echo 'Oturum kapatılamaz, yeniden başlatılıyor...'; sleep 1; done\""
         ]
         if CHROOT_PASS:
             ssh_cmd = ['sshpass', '-p', CHROOT_PASS] + ssh_cmd
