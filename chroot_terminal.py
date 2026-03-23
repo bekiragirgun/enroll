@@ -220,7 +220,11 @@ def _ct991_exec(command: list, retries: int = 2) -> subprocess.CompletedProcess:
 
     final_command = command
     if CHROOT_USER != "root":
-        final_command = ["sudo"] + command
+        # Sudo ile komutu çalıştır, -S ile şifreyi stdin'den almasını sağla
+        if CHROOT_PASS:
+            final_command = ["sudo", "-S"] + command
+        else:
+            final_command = ["sudo"] + command
 
     # Pool hazırsa ControlPath ile hızlı bağlan, değilse pool'u başlat
     use_pool = _ssh_pool_baslat()
@@ -250,7 +254,16 @@ def _ct991_exec(command: list, retries: int = 2) -> subprocess.CompletedProcess:
         _ssh_semaphore.acquire()
         try:
             log.debug(f"SSH exec (attempt {attempt+1}): {' '.join(command)}")
-            result = subprocess.run(ssh_cmd, capture_output=True, text=True, timeout=30)
+            # Şifre gerekiyorsa stdin'e gönder (sudo -S için)
+            input_data = f"{CHROOT_PASS}\n" if (CHROOT_USER != "root" and CHROOT_PASS) else None
+            
+            result = subprocess.run(
+                ssh_cmd, 
+                capture_output=True, 
+                text=True, 
+                input=input_data, 
+                check=False
+            )
 
             if result.returncode == 0:
                 return result
@@ -471,11 +484,10 @@ def chroot_olustur_batch(users: list) -> dict:
     # Tek SSH bağlantısında bash loop — tüm create + mount komutları sırayla
     # JSON çıktısı ile sonuç takibi: "OK:username" veya "ERR:username"
     loop_lines = []
-    for slug, tam_ad in prepared:
-        safe_ad = tam_ad.replace("'", "'\\''")  # bash single-quote escape
+        sudo_prefix = "sudo -S " if CHROOT_USER != "root" else ""
         loop_lines.append(
-            f"{PYTHON_PATH} {CHROOT_MANAGE_SCRIPT} create '{slug}' '{safe_ad}' "
-            f"&& {PYTHON_PATH} {CHROOT_MANAGE_SCRIPT} mount '{slug}' "
+            f"echo '{CHROOT_PASS}' | {sudo_prefix}{PYTHON_PATH} {CHROOT_MANAGE_SCRIPT} create '{slug}' '{safe_ad}' "
+            f"&& echo '{CHROOT_PASS}' | {sudo_prefix}{PYTHON_PATH} {CHROOT_MANAGE_SCRIPT} mount '{slug}' "
             f"&& echo 'OK:{slug}' || echo 'ERR:{slug}'"
         )
 
@@ -493,11 +505,13 @@ def chroot_olustur_batch(users: list) -> dict:
 
     for line in result.stdout.splitlines():
         line = line.strip()
-        if line.startswith("OK:"):
-            slug = line[3:]
-            sonuclar[slug] = True
-            _chroot_cache.add(slug)
             log.info(f"✅ Chroot oluşturuldu (batch): {slug}")
+        elif line.startswith("ERR:"):
+            slug = line[4:]
+            log.error(f"❌ Chroot oluşturulamadı (batch): {slug}")
+            
+    if not any(sonuclar.values()):
+        log.error(f"Batch oluşturma başarısız görünüyor! Çıktı: {result.stdout} {result.stderr}")
         elif line.startswith("ERR:"):
             slug = line[4:]
             sonuclar[slug] = False
