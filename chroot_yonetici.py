@@ -130,8 +130,9 @@ def run_daemon():
                 subprocess.run(["ln", "-s", "/dev/pts/ptmx", "/dev/ptmx"], check=False)
                 subprocess.run(["chmod", "666", "/dev/ptmx"], check=False)
             
-            # /dev/pts kontrolü
-            if not os.path.ismount("/dev/pts"):
+            # /dev/pts kontrolü (Daha güvenli kontrol için grep kullan)
+            pts_check = subprocess.run(["mount"], capture_output=True, text=True).stdout
+            if "on /dev/pts type devpts" not in pts_check:
                 log.warning("⚠️ Daemon: /dev/pts unmount edilmiş! Yeniden mount ediliyor...")
                 subprocess.run(["mount", "-t", "devpts", "devpts", "/dev/pts", "-o", "rw,nosuid,noexec,relatime,gid=5,mode=620,ptmxmode=666"], check=False)
 
@@ -925,8 +926,17 @@ def mount_student_chroot(username):
     subprocess.run(["mount", "-o", "bind", "/dev", str(dev_path)], check=False)
     subprocess.run(["mount", "-o", "remount,bind,ro", str(dev_path)], check=False)
     
-    # 3. /dev/pts (Bind Mount) - LXC içinde PTY paylaşımı için kritik
-    subprocess.run(["mount", "-o", "bind", "/dev/pts", str(pts_path)], check=False)
+    # 3. /dev/pts (Isolated New Instance) - LXC içinde PTY çatışmalarını önlemek için en iyi yöntem
+    # Her chroot kendi PTY havuzuna sahip olur, host sistemin /dev/pts yapısını bozmaz.
+    subprocess.run([
+        "mount", "-t", "devpts", "devpts", str(pts_path), 
+        "-o", "newinstance,rw,nosuid,noexec,relatime,gid=5,mode=620,ptmxmode=666"
+    ], check=False)
+    
+    # LXC için /dev/ptmx -> /dev/pts/ptmx linkini tazele (chroot içinde)
+    chroot_ptmx = student_path / "dev" / "ptmx"
+    subprocess.run(["rm", "-f", str(chroot_ptmx)], check=False)
+    subprocess.run(["ln", "-s", "pts/ptmx", str(chroot_ptmx)], check=False)
     
     # Resolv.conf tazele
     subprocess.run(["cp", "-f", "/etc/resolv.conf", str(student_path / "etc" / "resolv.conf")], check=False)
