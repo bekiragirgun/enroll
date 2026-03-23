@@ -17,7 +17,7 @@ import logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 log = logging.getLogger(__name__)
 
-VERSION = "2026-03-05-CHROOT-MULTIARCH-V13"
+VERSION = "2026-03-23-CHROOT-DEBIAN12-V14"
 log.info(f"🚀 Chroot Manager Script Version: {VERSION}")
 
 # Yapılandırma
@@ -25,6 +25,7 @@ CHROOT_BASE = Path("/home/chroot")
 STUDENT_TEMPLATE = CHROOT_BASE / "template"
 STUDENT_GROUP = "ogrenciler"
 SUDOERS_FILE = "/etc/sudoers.d/chroot-ogrenciler"
+DEBIAN_SUITE = "bookworm"  # Ubuntu Jammy -> Debian Bookworm
 
 
 def _run(cmd, check=True, **kwargs):
@@ -170,38 +171,28 @@ def setup_template():
     for p in ["proc", "sys", "dev/pts", "dev"]:
         subprocess.run(["umount", "-l", str(STUDENT_TEMPLATE / p)], check=False)
 
-    # Ubuntu base kur (debootstrap)
+    # Debian base kur (mmdebstrap)
     if not STUDENT_TEMPLATE.exists():
         STUDENT_TEMPLATE.parent.mkdir(parents=True, exist_ok=True)
-        # GNUPG ve Keyring'i baştan dahil et ki apt update doğrulamada hata vermesin (V8)
+        # Debian için mmdebstrap komutu (debootstrap'tan daha hızlı ve modern)
         _run([
-            "debootstrap", f"--arch={target_arch}", 
-            "--include=gnupg,ubuntu-keyring,gpgv,ca-certificates",
-            "jammy",
+            "mmdebstrap", f"--arch={target_arch}", 
+            f"--include=gnupg,debian-archive-keyring,gpgv,ca-certificates",
+            DEBIAN_SUITE,
             str(STUDENT_TEMPLATE),
-            "http://ports.ubuntu.com/ubuntu-ports/" if target_arch == "arm64" else "http://archive.ubuntu.com/ubuntu/"
+            "http://deb.debian.org/debian"
         ])
 
-    # 1. Full Repositories (V7)
+    # 1. Full Repositories (Debian 12)
     sources_list = STUDENT_TEMPLATE / "etc" / "apt" / "sources.list"
     
-    # ARM64 için ports mirror kullan (V13)
-    if target_arch == "arm64":
-        repo_content = """
-deb http://ports.ubuntu.com/ubuntu-ports/ jammy main restricted universe multiverse
-deb http://ports.ubuntu.com/ubuntu-ports/ jammy-updates main restricted universe multiverse
-deb http://ports.ubuntu.com/ubuntu-ports/ jammy-backports main restricted universe multiverse
-deb http://ports.ubuntu.com/ubuntu-ports/ jammy-security main restricted universe multiverse
-"""
-    else:
-        repo_content = """
-deb http://archive.ubuntu.com/ubuntu/ jammy main restricted universe multiverse
-deb http://archive.ubuntu.com/ubuntu/ jammy-updates main restricted universe multiverse
-deb http://archive.ubuntu.com/ubuntu/ jammy-backports main restricted universe multiverse
-deb http://security.ubuntu.com/ubuntu/ jammy-security main restricted universe multiverse
+    repo_content = f"""
+deb http://deb.debian.org/debian {DEBIAN_SUITE} main contrib non-free non-free-firmware
+deb http://deb.debian.org/debian {DEBIAN_SUITE}-updates main contrib non-free non-free-firmware
+deb http://security.debian.org/debian-security {DEBIAN_SUITE}-security main contrib non-free non-free-firmware
 """
     sources_list.write_text(repo_content.strip() + "\n")
-    log.info("📝 sources.list full depo desteği ile güncellendi.")
+    log.info("📝 sources.list Debian 12 mirrorları ile güncellendi.")
 
     # DNS filtering - şablonda yap
     resolv_conf = STUDENT_TEMPLATE / "etc" / "resolv.conf"
@@ -271,14 +262,14 @@ deb http://security.ubuntu.com/ubuntu/ jammy-security main restricted universe m
         _run(["chroot", str(STUDENT_TEMPLATE), "apt-get", "-o", "Acquire::Check-Valid-Until=false", "-o", "Acquire::Check-Date=false", "update"], env=env)
         
         _run(["chroot", str(STUDENT_TEMPLATE), "apt-get", "install", "-y", 
-              "ubuntu-minimal", "build-essential", "python3", "python3-pip", 
+              "debian-minimal", "build-essential", "python3", "python3-pip", 
               "git", "curl", "wget", "vim", "nano", "sudo", "locales",
               "dnsutils", "net-tools", "iputils-ping", "iproute2",
               "man-db", "tree", "zip", "unzip", "bzip2", "xz-utils", "tar", "gzip",
               "htop", "psmisc", "acl", "gawk", "sed", "grep", "findutils", "lsof", 
               "openssh-client", "less", "file"], env=env)
 
-        log.info("🧹 PTY sorunlarına yol açan sudo-rs paketi tamamen kaldırılıyor...")
+        log.info("🧹 Gereksiz paketler temizleniyor...")
         _run(["chroot", str(STUDENT_TEMPLATE), "apt-get", "purge", "-y", "--auto-remove", "sudo-rs"], check=False)
     finally:
         log.info("🧹 Geçici filesystem'ler çözülüyor...")
