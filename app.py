@@ -248,24 +248,22 @@ def ogretmen_baglan_event(veri=None):
         safe_username = ogretmen_numara.replace("'", "'\\''")
         safe_chroot_path = f"{CHROOT_BASE}/{safe_username}".replace("'", "'\\''")
 
+        safe_password = CHROOT_PASS.replace("'", "'\\''") if CHROOT_PASS else ""
+        sudo_cmd = f"echo '{safe_password}' | sudo -S" if (CHROOT_USER != "root" and CHROOT_PASS) else "sudo"
+
         ssh_cmd = [
             'ssh', '-t',
             '-o', 'StrictHostKeyChecking=no',
             '-o', 'ControlPath=none',
-            '-p', str(CHROOT_REAL_SSH_PORT),
+            '-p', f'{CHROOT_REAL_SSH_PORT}',
             f'{CHROOT_USER}@{CHROOT_HOST}',
-            f"sudo -S /bin/bash -c \"while true; do chroot '{safe_chroot_path}' /bin/su - '{safe_username}'; echo 'Oturum kapatılamaz, yeniden başlatılıyor...'; sleep 1; done\""
+            f"{sudo_cmd} /bin/bash -c \"while true; do chroot '{safe_chroot_path}' /bin/su - '{safe_username}'; echo 'Oturum kapatılamaz, yeniden başlatılıyor...'; sleep 1; done\""
         ]
         if CHROOT_PASS:
             ssh_cmd = ['sshpass', '-p', CHROOT_PASS] + ssh_cmd
 
-        proc = subprocess.Popen(ssh_cmd, stdin=subprocess.PIPE, stdout=slave_fd, stderr=slave_fd, preexec_fn=os.setsid)
+        proc = subprocess.Popen(ssh_cmd, stdin=slave_fd, stdout=slave_fd, stderr=slave_fd, preexec_fn=os.setsid)
         os.close(slave_fd)
-        
-        # Sudo şifresini gönder
-        if CHROOT_USER != "root" and CHROOT_PASS:
-            proc.stdin.write(f"{CHROOT_PASS}\n".encode())
-            proc.stdin.flush()
 
         ogretmen_pty_fd = master_fd
         ogretmen_pty_pid = proc.pid
@@ -397,12 +395,15 @@ def ogrenci_baglan_event(veri):
         master_fd, slave_fd = pty.openpty()
         safe_username = username.replace("'", "'\\''")
         safe_chroot_path = f"{CHROOT_BASE}/{safe_username}".replace("'", "'\\''")
+        safe_password = CHROOT_PASS.replace("'", "'\\''") if CHROOT_PASS else ""
+        sudo_cmd = f"echo '{safe_password}' | sudo -S" if (CHROOT_USER != "root" and CHROOT_PASS) else "sudo"
+
         ssh_cmd = [
             'ssh', '-t',
             '-o', 'StrictHostKeyChecking=no',
             '-o', 'ControlPath=none',
             '-p', str(CHROOT_REAL_SSH_PORT), f'{CHROOT_USER}@{CHROOT_HOST}',
-            f"sudo /bin/bash -c \"while true; do chroot '{safe_chroot_path}' /bin/su - '{safe_username}'; echo 'Oturum kapatılamaz, yeniden başlatılıyor...'; sleep 1; done\""
+            f"{sudo_cmd} /bin/bash -c \"while true; do chroot '{safe_chroot_path}' /bin/su - '{safe_username}'; echo 'Oturum kapatılamaz, yeniden başlatılıyor...'; sleep 1; done\""
         ]
         if CHROOT_PASS:
             ssh_cmd = ['sshpass', '-p', CHROOT_PASS] + ssh_cmd
