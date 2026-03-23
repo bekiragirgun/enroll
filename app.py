@@ -463,9 +463,21 @@ if __name__ == '__main__':
                 print(f"  ⚠️ Veritabanı silinemedi (Kilitli olabilir): {e}")
 
         import core.db
-        from core.db import db_olustur, test_verilerini_yukle
+        from core.db import db_olustur, test_verilerini_yukle, db_baglantisi
         db_olustur()
         test_verilerini_yukle()
+
+        # TEST MODU: Chroot'ları önceden toplu oluştur (Giriş yapıldığında gecikme olmasın)
+        print("  🏗️  Test chroot'ları toplu olarak oluşturuluyor (Bu biraz zaman alabilir)...")
+        from chroot_terminal import chroot_olustur_batch
+        with db_baglantisi() as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT numara, ad, soyad FROM ogrenciler")
+            ogrenciler = [{"username": r[0], "ad": r[1], "soyad": r[2]} for r in cursor.fetchall()]
+        
+        if ogrenciler:
+            chroot_olustur_batch(ogrenciler)
+            print("  ✅ 30 Test Chroot'u hazır.")
     else:
         db_olustur()
     
