@@ -394,6 +394,8 @@ def ogrenci_baglan_event(veri):
         chroot_olustur(username, ad_soyad, "") 
 
         master_fd, slave_fd = pty.openpty()
+        safe_username = username.replace("'", "'\\''")
+        safe_chroot_path = f"{CHROOT_BASE}/{safe_username}".replace("'", "'\\''")
         safe_password = CHROOT_PASS.replace("'", "'\\''") if CHROOT_PASS else ""
         sudo_cmd = f"(echo '{safe_password}' | sudo -S" if (CHROOT_USER != "root" and CHROOT_PASS) else "(sudo"
 
