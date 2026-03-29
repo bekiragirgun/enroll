@@ -469,7 +469,15 @@ if __name__ == '__main__':
         
         os.environ['DB_TYPE'] = 'sqlite'
         os.environ['TEST_MODE'] = '1'
+        os.environ['DERS_TAKIP_TEST'] = '1'  # ÖNCE ayarla, sonra paths import et
+        import importlib
         import core.paths
+        importlib.reload(core.paths)  # TEST flag ile yeniden yükle → test_yoklama.db kullanır
+        # GÜVENLİK: Production DB'yi asla silme
+        if 'test' not in str(core.paths.DB_YOLU):
+            print(f"  ⛔ HATA: Test modu ama DB yolu production'a işaret ediyor: {core.paths.DB_YOLU}")
+            print(f"  ⛔ İşlem iptal edildi. Production veritabanı korundu.")
+            sys.exit(1)
         if core.paths.DB_YOLU.exists():
             try:
                 core.paths.DB_YOLU.unlink()
