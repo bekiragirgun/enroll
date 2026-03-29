@@ -1,0 +1,58 @@
+site_name: Ders Takip Sistemi
+site_description: Kapadokya Universitesi Linux Laboratuvari Ders Takip Dokumantasyonu
+site_author: Bekir Agirgun
+
+theme:
+  name: material
+  language: tr
+  palette:
+    - scheme: slate
+      primary: blue
+      accent: cyan
+      toggle:
+        icon: material/brightness-7
+        name: Acik tema
+    - scheme: default
+      primary: blue
+      accent: cyan
+      toggle:
+        icon: material/brightness-4
+        name: Koyu tema
+  features:
+    - navigation.sections
+    - navigation.expand
+    - search.highlight
+    - content.code.copy
+
+nav:
+  - Ana Sayfa: index.md
+  - Kurulum:
+    - Hizli Baslangic: kurulum/hizli-baslangic.md
+    - Chroot Sunucusu (DEB): kurulum/deb-paketi.md
+    - Docker Compose: kurulum/docker.md
+  - Kullanim:
+    - Ogretmen Paneli: kullanim/ogretmen.md
+    - Ogrenci Tarafi: kullanim/ogrenci.md
+    - SEB Entegrasyonu: kullanim/seb.md
+    - Sinav Modulu: kullanim/sinav.md
+  - API Referansi:
+    - Genel: api/genel.md
+    - Yoklama: api/yoklama.md
+    - Terminal: api/terminal.md
+    - Sinav: api/sinav.md
+    - Ayarlar: api/ayarlar.md
+  - Sorun Giderme: sorun-giderme.md
+  - Mimari: mimari.md
+
+markdown_extensions:
+  - tables
+  - admonition
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.superfences
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.details
+  - attr_list
+
+docs_dir: docs/site
