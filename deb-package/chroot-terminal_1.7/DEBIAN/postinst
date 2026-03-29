@@ -5,14 +5,26 @@ echo "=== Chroot Terminal System v1.5 kurulumu ==="
 
 # ── LXC/Konteyner Tespiti ve Optimizasyonu ─────────────────
 _is_container() {
-    # systemd-detect-virt, /proc/1/environ veya /.dockerenv ile tespit
-    if command -v systemd-detect-virt >/dev/null 2>&1; then
-        local vtype
-        vtype=$(systemd-detect-virt --container 2>/dev/null || echo "none")
-        [ "$vtype" != "none" ] && return 0
-    fi
+    # Sadece gerçek konteyner ortamlarını tespit et (VM'ler hariç)
+    # LXC, Docker, systemd-nspawn gibi ortamları yakalar
+    # Parallels, VMware, VirtualBox gibi VM'leri YAKALAMASIN
+
+    # 1. /proc/1/environ'da container= varsa (LXC, systemd-nspawn)
+    grep -qi 'container=lxc\|container=docker\|container=systemd-nspawn' /proc/1/environ 2>/dev/null && return 0
+
+    # 2. Docker ortamı
     [ -f /.dockerenv ] && return 0
-    grep -qi 'container=lxc\|container=docker' /proc/1/environ 2>/dev/null && return 0
+
+    # 3. systemd-detect-virt --container: SADECE "lxc", "docker", "systemd-nspawn" dönerse
+    if command -v systemd-detect-virt >/dev/null 2>&1; then
+        local ctype
+        ctype=$(systemd-detect-virt --container 2>/dev/null || echo "none")
+        case "$ctype" in
+            lxc|lxc-libvirt|docker|podman|systemd-nspawn|openvz)
+                return 0 ;;
+        esac
+    fi
+
     return 1
 }
 
