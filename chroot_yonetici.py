@@ -530,7 +530,7 @@ def create_ssh_entry(username):
     if match_group_cmd not in ssh_config_text:
         force_command = (
             f"\nMatch Group {STUDENT_GROUP}\n"
-            f"    ForceCommand /bin/bash -c \"while true; do sudo /usr/sbin/chroot {CHROOT_BASE}/%u /bin/su - %u; "
+            f"    ForceCommand /bin/bash -c \"while true; do sudo /usr/sbin/chroot {CHROOT_BASE}/%u /usr/bin/su - %u; "
             f"echo 'Oturum kapatilamaz, yeniden baslatiliyor...'; sleep 1; done\"\n"
         )
         with open(ssh_config, 'a') as f:
