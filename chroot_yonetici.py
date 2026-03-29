@@ -528,9 +528,12 @@ def create_ssh_entry(username):
     
     ssh_config_text = ssh_config.read_text()
     if match_group_cmd not in ssh_config_text:
+        # su komutunun yolunu otomatik bul (Debian 12: /usr/bin/su, Ubuntu: /bin/su)
+        import shutil
+        su_path = shutil.which("su") or "/usr/bin/su"
         force_command = (
             f"\nMatch Group {STUDENT_GROUP}\n"
-            f"    ForceCommand /bin/bash -c \"while true; do sudo /usr/sbin/chroot {CHROOT_BASE}/%u /usr/bin/su - %u; "
+            f"    ForceCommand /bin/bash -c \"while true; do sudo /usr/sbin/chroot {CHROOT_BASE}/%u {su_path} - %u; "
             f"echo 'Oturum kapatilamaz, yeniden baslatiliyor...'; sleep 1; done\"\n"
         )
         with open(ssh_config, 'a') as f:
