@@ -448,6 +448,24 @@ if __name__ == '__main__':
     parser.add_argument('--student', type=int, default=0, help='Test öğrenci sayısı (Örn: --student 30)')
     args = parser.parse_args()
 
+    # ── Otomatik DB Backup (her başlatmada) ──────────────────
+    if not args.test:
+        from pathlib import Path
+        import shutil
+        from datetime import datetime
+        db_path = Path(__file__).parent / 'data' / 'yoklama.db'
+        if db_path.exists() and db_path.stat().st_size > 0:
+            backup_dir = Path(__file__).parent / 'data' / 'backups'
+            backup_dir.mkdir(exist_ok=True)
+            ts = datetime.now().strftime('%Y%m%d_%H%M%S')
+            backup_path = backup_dir / f'yoklama_{ts}.db'
+            shutil.copy2(db_path, backup_path)
+            # Son 10 backup'ı tut, eskileri sil
+            backups = sorted(backup_dir.glob('yoklama_*.db'))
+            for old in backups[:-10]:
+                old.unlink()
+            print(f'  💾 DB backup: {backup_path.name} ({len(backups)} backup mevcut)')
+
     # CLI Argümanlarını Environment Variable olarak ata (config.py tarafından okunması için)
     if args.host:
         os.environ['CHROOT_HOST'] = args.host
