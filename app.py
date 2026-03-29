@@ -556,4 +556,4 @@ if __name__ == '__main__':
     print(f'  Sistem IP          : 🛠️ {yerel_ip}')
     print('=' * 55 + '\n')
 
-    socketio.run(app, host='0.0.0.0', port=args.port, debug=True) # Modified to use args.port and debug=True
+    socketio.run(app, host='0.0.0.0', port=args.port, log_output=True, use_reloader=False)
