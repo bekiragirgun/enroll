@@ -17,7 +17,7 @@ import logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 log = logging.getLogger(__name__)
 
-VERSION = "2026-03-23-CHROOT-DEBIAN12-V14"
+VERSION = "2026-03-05-CHROOT-MULTIARCH-V13"
 log.info(f"🚀 Chroot Manager Script Version: {VERSION}")
 
 # Yapılandırma
@@ -25,7 +25,6 @@ CHROOT_BASE = Path("/home/chroot")
 STUDENT_TEMPLATE = CHROOT_BASE / "template"
 STUDENT_GROUP = "ogrenciler"
 SUDOERS_FILE = "/etc/sudoers.d/chroot-ogrenciler"
-DEBIAN_SUITE = "bookworm"  # Ubuntu Jammy -> Debian Bookworm
 
 
 def _run(cmd, check=True, **kwargs):
@@ -77,76 +76,31 @@ def repair_system_pty():
 
 def setup_persistence():
     """
-    Onarım ve koruma işlemini sürekli arka planda çalışacak bir systemd servisi (daemon) olarak kurar.
+    Onarım işlemini her açılışta çalışacak bir systemd servisi olarak kurar.
     """
     service_content = f"""[Unit]
-Description=Chroot PTY Health Monitor Daemon
+Description=Chroot PTY Repair Service
 After=network.target
 
 [Service]
-Type=simple
-ExecStart={os.path.abspath(__file__)} daemon
-Restart=always
-RestartSec=10
+Type=oneshot
+ExecStart={os.path.abspath(__file__)} repair
+RemainAfterExit=yes
 
 [Install]
 WantedBy=multi-user.target
 """
-    service_path = Path("/etc/systemd/system/chroot-pty-health.service")
+    service_path = Path("/etc/systemd/system/chroot-pty-fix.service")
     log.info(f"📝 Servis dosyası oluşturuluyor: {service_path}")
     
     try:
-        # Eski servisi temizle
-        old_service = Path("/etc/systemd/system/chroot-pty-fix.service")
-        if old_service.exists():
-            subprocess.run(["systemctl", "stop", "chroot-pty-fix.service"], check=False)
-            subprocess.run(["systemctl", "disable", "chroot-pty-fix.service"], check=False)
-            try: old_service.unlink()
-            except: pass
-
         service_path.write_text(service_content)
         _run(["systemctl", "daemon-reload"])
-        _run(["systemctl", "enable", "chroot-pty-health.service"])
-        _run(["systemctl", "start", "chroot-pty-health.service"])
-        log.info("✅ PTY sağlık izleme servisi (daemon) başarıyla kuruldu ve başlatıldı.")
+        _run(["systemctl", "enable", "chroot-pty-fix.service"])
+        _run(["systemctl", "start", "chroot-pty-fix.service"])
+        log.info("✅ PTY onarım servisi başarıyla kuruldu ve başlatıldı.")
     except Exception as e:
         log.error(f"❌ Servis kurulum hatası: {e}")
-
-def run_daemon():
-    """Arka planda çalışarak sistemi sürekli sağlıklı tutar."""
-    import time
-    log.info("🛡️ Chroot Health Monitor Daemon başlatıldı. (15s aralıklarla kontrol edilecek)")
-    while True:
-        try:
-            ptmx = Path("/dev/ptmx")
-            if ptmx.exists():
-                import stat
-                mode = os.stat(ptmx).st_mode
-                # log basmamak için sessizce kontrol ediyoruz
-                if stat.S_IMODE(mode) != 0o666:
-                    subprocess.run(["chmod", "666", "/dev/ptmx"], check=False)
-            else:
-                log.warning("⚠️ Daemon: /dev/ptmx bulunamadı! Onarılıyor...")
-                subprocess.run(["ln", "-s", "/dev/pts/ptmx", "/dev/ptmx"], check=False)
-                subprocess.run(["chmod", "666", "/dev/ptmx"], check=False)
-            
-            # /dev/pts kontrolü (Daha güvenli kontrol için grep kullan)
-            pts_check = subprocess.run(["mount"], capture_output=True, text=True).stdout
-            if "on /dev/pts type devpts" not in pts_check:
-                log.warning("⚠️ Daemon: /dev/pts unmount edilmiş! Yeniden mount ediliyor...")
-                subprocess.run(["mount", "-t", "devpts", "devpts", "/dev/pts", "-o", "rw,nosuid,noexec,relatime,gid=5,mode=620,ptmxmode=666"], check=False)
-
-            # /dev/tty izinleri
-            tty = Path("/dev/tty")
-            if tty.exists():
-                mode = os.stat(tty).st_mode
-                if stat.S_IMODE(mode) != 0o666:
-                    subprocess.run(["chmod", "666", "/dev/tty"], check=False)
-
-            time.sleep(15)
-        except Exception as e:
-            log.error(f"Daemon error: {e}")
-            time.sleep(15)
 
 
 def setup_template():
@@ -165,32 +119,32 @@ def setup_template():
         target_arch = "arm64"
     else:
         target_arch = machine # Fallback
-    log.info(f"Detected architecture: {machine} (Target arch for debootstrap: {target_arch})")
+    log.info(f"Detected architecture: {machine} (Target arch for mmdebstrap: {target_arch})")
 
     # ÖNCE TEMİZLİK (V11): Eski mount'ları temizle ki rm -rf veya init hata vermesin
     log.info("🧹 Eski şablon mount'ları temizleniyor...")
     for p in ["proc", "sys", "dev/pts", "dev"]:
         subprocess.run(["umount", "-l", str(STUDENT_TEMPLATE / p)], check=False)
 
-    # Debian base kur (mmdebstrap)
+    # Ubuntu base kur (mmdebstrap)
     if not STUDENT_TEMPLATE.exists():
         STUDENT_TEMPLATE.parent.mkdir(parents=True, exist_ok=True)
-        # Debian için mmdebstrap komutu (debootstrap'tan daha hızlı ve modern)
+        # GNUPG ve Keyring'i baştan dahil et ki apt update doğrulamada hata vermesin (V8)
         _run([
             "mmdebstrap", f"--arch={target_arch}", 
-            f"--include=gnupg,debian-archive-keyring,gpgv,ca-certificates",
-            DEBIAN_SUITE,
+            "--include=gnupg,debian-archive-keyring,gpgv,ca-certificates",
+            "bookworm",
             str(STUDENT_TEMPLATE),
-            "http://deb.debian.org/debian"
+            "http://ports.ubuntu.com/ubuntu-ports/" if target_arch == "arm64" else "http://archive.ubuntu.com/ubuntu/"
         ])
 
     # 1. Full Repositories (Debian 12)
     sources_list = STUDENT_TEMPLATE / "etc" / "apt" / "sources.list"
     
     repo_content = f"""
-deb http://deb.debian.org/debian {DEBIAN_SUITE} main contrib non-free non-free-firmware
-deb http://deb.debian.org/debian {DEBIAN_SUITE}-updates main contrib non-free non-free-firmware
-deb http://security.debian.org/debian-security {DEBIAN_SUITE}-security main contrib non-free non-free-firmware
+deb http://deb.debian.org/debian bookworm main contrib non-free non-free-firmware
+deb http://deb.debian.org/debian bookworm-updates main contrib non-free non-free-firmware
+deb http://security.debian.org/debian-security bookworm-security main contrib non-free non-free-firmware
 """
     sources_list.write_text(repo_content.strip() + "\n")
     log.info("📝 sources.list Debian 12 mirrorları ile güncellendi.")
@@ -235,11 +189,12 @@ deb http://security.debian.org/debian-security {DEBIAN_SUITE}-security main cont
     subprocess.run(["mount", "-t", "proc", "proc", str(p)], check=False)
     subprocess.run(["mount", "-t", "sysfs", "sysfs", str(s)], check=False)
     
-    # LXC DESTEĞİ: /dev bind mount et ama okuma koruması (RO) ile tam izolasyon sağla
+    # LXC DESTEĞİ: /dev bind mount et ama nodev/nosuid gibi bayraklar gelmiş olabilir
     subprocess.run(["mount", "-o", "bind", "/dev", str(d)], check=False)
-    subprocess.run(["mount", "-o", "remount,bind,ro", str(d)], check=False)
-    # dev/pts yazılabilir olmalı ki PTY tahsisi yapılabilsin
     subprocess.run(["mount", "-o", "bind", "/dev/pts", str(pts)], check=False)
+    
+    # KRİTİK: Cihazları onar (V11)
+    _restore_device_nodes(d)
 
     # DNS Ayarları
     log.info("🌐 DNS ayarları yapılandırılıyor...")
@@ -269,9 +224,6 @@ deb http://security.debian.org/debian-security {DEBIAN_SUITE}-security main cont
               "man-db", "tree", "zip", "unzip", "bzip2", "xz-utils", "tar", "gzip",
               "htop", "psmisc", "acl", "gawk", "sed", "grep", "findutils", "lsof", 
               "openssh-client", "less", "file"], env=env)
-
-        log.info("🧹 Gereksiz paketler temizleniyor...")
-        _run(["chroot", str(STUDENT_TEMPLATE), "apt-get", "purge", "-y", "--auto-remove", "sudo-rs"], check=False)
     finally:
         log.info("🧹 Geçici filesystem'ler çözülüyor...")
         subprocess.run(["umount", "-l", str(pts)], check=False)
@@ -281,22 +233,9 @@ deb http://security.debian.org/debian-security {DEBIAN_SUITE}-security main cont
     
     # İzinler
     _run(["chmod", "1777", str(STUDENT_TEMPLATE / "tmp")])
-
+    
     # Temizlik
     _run(["chroot", str(STUDENT_TEMPLATE), "apt-get", "clean"])
-
-    # su binary'sini host'tan chroot'a kopyala (symlink değil, gerçek dosya)
-    import shutil
-    host_su = shutil.which("su") or "/usr/bin/su"
-    chroot_su = STUDENT_TEMPLATE / "usr" / "bin" / "su"
-    chroot_su.parent.mkdir(parents=True, exist_ok=True)
-    if Path(host_su).exists():
-        # Önce eski symlink/dosyayı temizle
-        chroot_su.unlink(missing_ok=True)
-        # Gerçek binary'yi kopyala (symlink DEĞİL)
-        subprocess.run(["cp", "--no-dereference", "--remove-destination", host_su, str(chroot_su)], check=False)
-        subprocess.run(["chmod", "4755", str(chroot_su)], check=False)
-        log.info(f"✅ su binary chroot'a kopyalandı: {host_su} → {chroot_su}")
 
     # Öğrenci grubu oluştur
     try:
@@ -535,26 +474,27 @@ def create_ssh_entry(username):
             f.write(sudoers_line)
         subprocess.run(["chmod", "0440", str(sudoers_file)], check=False)
 
-    # SSH config'e ForceCommand ekle (Match Group ile toplu yönetim - V15)
+    # SSH config'e ForceCommand ekle (V10 - Sticky Shell)
     ssh_config = Path("/etc/ssh/sshd_config")
-    match_group_cmd = "Match Group ogrenciler"
-    
+    # Önemli: Chroot dizini ve su komutunu bir döngüye al
+    force_command = f"Match User {username}\n    ForceCommand /bin/bash -c \"while true; do sudo /usr/sbin/chroot {student_path} /bin/su - {username}; echo 'Oturum kapatılamaz, yeniden başlatılıyor...'; sleep 1; done\"\n"
+
+    # SSH config'e ekle
     ssh_config_text = ssh_config.read_text()
-    if match_group_cmd not in ssh_config_text:
-        # su komutunun yolunu otomatik bul (Debian 12: /usr/bin/su, Ubuntu: /bin/su)
-        import shutil
-        su_path = shutil.which("su") or "/usr/bin/su"
-        force_command = (
-            f"\nMatch Group {STUDENT_GROUP}\n"
-            f"    ForceCommand /bin/bash -c \"while true; do sudo /usr/sbin/chroot {CHROOT_BASE}/%u {su_path} - %u; "
-            f"echo 'Oturum kapatilamaz, yeniden baslatiliyor...'; sleep 1; done\"\n"
-        )
+    if force_command not in ssh_config_text:
         with open(ssh_config, 'a') as f:
             f.write(force_command)
-        # SSH'yi restart et
-        subprocess.run(["systemctl", "restart", "sshd"], check=False)
-        log.info(f"✅ {STUDENT_GROUP} grubu için toplu SSH yapılandırması eklendi")
 
+    # Chroot login script'ini kopyala
+    chrootlogin_src = Path("/usr/sbin/chrootlogin")
+    chrootlogin_dst = student_path / "usr" / "sbin" / "chrootlogin"
+    if chrootlogin_src.exists():
+        chrootlogin_dst.parent.mkdir(parents=True, exist_ok=True)
+        subprocess.run(["cp", str(chrootlogin_src), str(chrootlogin_dst)], check=False)
+        subprocess.run(["chmod", "+x", str(chrootlogin_dst)], check=False)
+
+    # SSH'yi restart et
+    subprocess.run(["systemctl", "restart", "sshd"], check=False)
     log.info(f"✅ {username} SSH/Sudoers yapılandırması tamam")
 
 
@@ -904,7 +844,51 @@ def delete_student_chroot(username):
 
 
 
+def _restore_device_nodes(dev_path):
+    """
+    Kritik cihaz düğümlerini (/dev/null, /dev/ptmx vb.) onarır.
+    LXC içinde mknod çalışmazsa, host'tan bind-mount ile aktarır (V11).
+    """
+    devices = [
+        ("null", "c 1 3"),
+        ("zero", "c 1 5"),
+        ("full", "c 1 7"),
+        ("tty", "c 5 0"),
+        ("random", "c 1 8"),
+        ("urandom", "c 1 9")
+    ]
+    
+    for dev_name, mode in devices:
+        d_p = dev_path / dev_name
+        
+        # 1. Eğer zaten doğru bir karakter cihazıysa, sadece izinleri tazele (V12 Safety)
+        if d_p.exists() and d_p.is_char_device():
+            subprocess.run(["chmod", "666", str(d_p)], check=False)
+            continue
 
+        # 2. Karakter cihazı değilse (veya yoksa) silmeyi dene
+        # Busy hatası almamak için sadece karakter cihazı değilse sileriz
+        if d_p.exists() and not d_p.is_char_device():
+            subprocess.run(["rm", "-f", str(d_p)], check=False)
+        
+        # 3. mknod dene (Privileged modda çalışır)
+        if not d_p.exists():
+            res = subprocess.run(["mknod", "-m", "666", str(d_p)] + mode.split(), capture_output=True)
+            
+            # 4. mknod başarısızsa (LXC Unprivileged), Host'tan BIND-MOUNT yap (V11 fallback)
+            if res.returncode != 0:
+                if not d_p.exists():
+                    subprocess.run(["touch", str(d_p)], check=False)
+                subprocess.run(["mount", "-o", "bind", f"/dev/{dev_name}", str(d_p)], check=False)
+                subprocess.run(["chmod", "666", str(d_p)], check=False)
+        else:
+            # Dosya var ama karakter cihazı değilse (yukarıdaki rm başarısız olduysa)
+            log.warning(f"⚠️ {d_p} karakter cihazı değil ve silinemedi (Busy olabilir).")
+
+    # /dev/ptmx (Sembolik Link) - PTY ler için hayati
+    ptmx_node = dev_path / "ptmx"
+    subprocess.run(["rm", "-f", str(ptmx_node)], check=False)
+    subprocess.run(["ln", "-snf", "pts/ptmx", str(ptmx_node)], check=False)
 
 
 def mount_student_chroot(username):
@@ -938,21 +922,14 @@ def mount_student_chroot(username):
     subprocess.run(["mount", "-t", "proc", "proc", str(proc_path)], check=False)
     subprocess.run(["mount", "-t", "sysfs", "sysfs", str(sys_path)], check=False)
 
-    # 2. /dev (Bind Mount) - İzolasyon ve Korumalı Read-Only yapı
+    # 2. /dev (Bind Mount) - LXC içinde en güvenli yöntem
     subprocess.run(["mount", "-o", "bind", "/dev", str(dev_path)], check=False)
-    subprocess.run(["mount", "-o", "remount,bind,ro", str(dev_path)], check=False)
     
-    # 3. /dev/pts (Isolated New Instance) - LXC içinde PTY çatışmalarını önlemek için en iyi yöntem
-    # Her chroot kendi PTY havuzuna sahip olur, host sistemin /dev/pts yapısını bozmaz.
-    subprocess.run([
-        "mount", "-t", "devpts", "devpts", str(pts_path), 
-        "-o", "newinstance,rw,nosuid,noexec,relatime,gid=5,mode=620,ptmxmode=666"
-    ], check=False)
+    # 3. /dev/pts (Bind Mount) - LXC içinde PTY paylaşımı için kritik
+    subprocess.run(["mount", "-o", "bind", "/dev/pts", str(pts_path)], check=False)
     
-    # LXC için /dev/ptmx -> /dev/pts/ptmx linkini tazele (chroot içinde)
-    chroot_ptmx = student_path / "dev" / "ptmx"
-    subprocess.run(["rm", "-f", str(chroot_ptmx)], check=False)
-    subprocess.run(["ln", "-s", "pts/ptmx", str(chroot_ptmx)], check=False)
+    # 4. KRİTİK CİHAZ DÜZELTMELERİ (V9)
+    _restore_device_nodes(dev_path)
     
     # Resolv.conf tazele
     subprocess.run(["cp", "-f", "/etc/resolv.conf", str(student_path / "etc" / "resolv.conf")], check=False)
@@ -1018,7 +995,8 @@ def cleanup_stale_resources():
     except Exception as e:
         log.warning(f"Mount temizleme hatası: {e}")
 
-    # 3. /dev/pts repair manuel komutlarla (repair) bırakıldı. Temizlik esnasında host PTY'sini bozmamalı.
+    # 3. /dev/pts repairini her temizlikte çalıştır
+    repair_system_pty()
 
     log.info(f"✅ Temizlik tamamlandı: {cleaned} kaynak temizlendi")
     return cleaned
@@ -1134,8 +1112,7 @@ def main():
         print("  Kurulum & Bakim:")
         print("    init                    Ubuntu chroot sablonunu olustur (ilk kurulum)")
         print("    repair                  /dev/pts ve PTY izinlerini onar")
-        print("    persist                 PTY sagligi icin arkaplan servisini kur")
-        print("    daemon                  Surekli calisarak PTY sagligini koru")
+        print("    persist                 PTY onarimi icin systemd servisi kur")
         print("    cleanup                 Zombie process ve stale mount temizligi")
         print("    health                  Sistem saglk raporu (PTY, SSH, disk, mount)")
         print()
@@ -1170,9 +1147,6 @@ def main():
 
     elif command == "persist":
         setup_persistence()
-
-    elif command == "daemon":
-        run_daemon()
 
     elif command == "create":
         if len(sys.argv) < 3:
