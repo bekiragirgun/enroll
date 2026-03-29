@@ -1249,13 +1249,55 @@ async function paketSonu() {
   }
 }
 
+let _girisAcik = false;
+
+async function girisToggle() {
+  const yeniDurum = !_girisAcik;
+  try {
+    const res = await safeFetch('/api/giris_toggle', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ acik: yeniDurum })
+    });
+    const veri = await res.json();
+    if (veri.durum === 'ok') {
+      _girisAcik = veri.giris_acik;
+      girisButonGuncelle();
+    }
+  } catch (e) {
+    alert('Bağlantı hatası');
+  }
+}
+
+function girisButonGuncelle() {
+  const btn = document.getElementById('btn-giris-toggle');
+  if (!btn) return;
+  if (_girisAcik) {
+    btn.textContent = '🔓 Giriş Açık';
+    btn.style.background = '#48bb78';
+  } else {
+    btn.textContent = '🔒 Giriş Aç';
+    btn.style.background = '#2b6cb0';
+  }
+}
+
+// Sayfa yüklendiğinde giriş durumunu kontrol et
+fetch('/api/durum').then(r => r.json()).then(v => {
+  _girisAcik = v.giris_acik || false;
+  girisButonGuncelle();
+}).catch(() => {});
+
 async function topluCikis() {
   if (!confirm('Tüm öğrencilerin oturumunu kapatmak istediğinize emin misiniz?\n\nBu işlem tüm öğrencileri giriş sayfasına yönlendirecektir.')) return;
   try {
     const res = await safeFetch('/api/toplu_cikis', { method: 'POST', headers: { 'Content-Type': 'application/json' } });
     const data = await res.json();
     if (data.durum === 'ok') {
-      alert('Tüm öğrenci oturumları kapatılıyor. Öğrenciler giriş sayfasına yönlendirilecek.');
+      // Girişi de kapat
+      _girisAcik = false;
+      girisButonGuncelle();
+      safeFetch('/api/giris_toggle', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ acik: false }) });
+      alert('Tüm öğrenci oturumları kapatılıyor.');
       yoklamaCek();
     }
   } catch (e) {

@@ -125,7 +125,8 @@
         <h1>🐧 Öğretmen Paneli</h1>
         <div class="tarih">{{ tarih }}</div>
       </div>
-      <div style="display:flex;gap:0.5rem;">
+      <div style="display:flex;gap:0.5rem;flex-wrap:wrap;">
+        <button id="btn-giris-toggle" onclick="girisToggle()" class="btn-kucuk" style="background:#2b6cb0;">🔒 Giriş Aç</button>
         <button onclick="bekletModu()" class="btn-kucuk" style="background:#48bb78;">⏸️ Beklet</button>
         <button onclick="slaytModu()" class="btn-kucuk" style="background:#ed8936;">📊 Slayt</button>
         <button onclick="topluCikis()" class="btn-kucuk" style="background:#c53030;">🚪 Toplu Çıkış</button>

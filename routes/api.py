@@ -54,7 +54,8 @@ def api_durum():
         'cikis_izni': ders_durumu.get('cikis_izni', '0') == '1',
         'kiosk_modu': ders_durumu.get('kiosk_modu', '1') == '1',
         'sinav_terminal': ders_durumu.get('sinav_terminal', False),
-        'db_saglikli': __import__('core.db', fromlist=['db_saglikli']).db_saglikli
+        'db_saglikli': __import__('core.db', fromlist=['db_saglikli']).db_saglikli,
+        'giris_acik': ders_durumu.get('giris_acik', False)
     }
     return jsonify(response)
 
@@ -170,6 +171,19 @@ def api_config():
             # ders_durumu güncellemesi (isteğe bağlı, db_baglantisi os.environ veya ayar_getir kullanmalı)
 
     return jsonify({'durum': 'ok'})
+
+
+@api_bp.route('/giris_toggle', methods=['POST'])
+@ogretmen_giris_gerekli
+def api_giris_toggle():
+    """Öğrenci girişini aç/kapat."""
+    veri = request.get_json() or {}
+    acik = veri.get('acik', not ders_durumu.get('giris_acik', False))
+    ders_durumu['giris_acik'] = bool(acik)
+    durum = 'açıldı' if acik else 'kapatıldı'
+    log.info(f"🚪 Öğrenci girişi {durum}")
+    return jsonify({'durum': 'ok', 'giris_acik': ders_durumu['giris_acik']})
+
 
 @api_bp.route('/healthcheck', methods=['POST'])
 @ogretmen_giris_gerekli

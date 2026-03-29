@@ -28,7 +28,8 @@ ders_durumu = {
     'cikis_izni': '0',
     'ip_kontrol': '1',
     'toplu_cikis_zamani': 0,
-    'force_cikis': {}    # {numara: timestamp} — öğretmen bireysel çıkartma
+    'force_cikis': {},    # {numara: timestamp} — öğretmen bireysel çıkartma
+    'giris_acik': False,  # Öğretmen açana kadar öğrenci girişi kapalı
 }
 
 def ayar_kaydet(anahtar, deger):

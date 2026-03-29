@@ -82,8 +82,23 @@
             <option value="3">Paket 3</option>
           </select>
         </div>
-        <button type="submit" class="btn-ana">✅ Derse Katıl</button>
+        <button type="submit" class="btn-ana" {% if giris_kapali %}disabled style="opacity:0.5;cursor:not-allowed;"{% endif %}>
+          {% if giris_kapali %}🔒 Giriş Henüz Açılmadı{% else %}✅ Derse Katıl{% endif %}
+        </button>
       </form>
+      {% if giris_kapali %}
+      <div style="background:#2d3748; border:1px solid #4a5568; border-radius:8px; padding:0.75rem 1rem; margin-top:1rem; text-align:center; font-size:0.9rem; color:#fbd38d;">
+        🔒 Öğretmen dersi henüz başlatmadı. Lütfen bekleyin...
+      </div>
+      <script>
+        // Giriş açılınca sayfayı otomatik yenile
+        setInterval(function() {
+          fetch('/api/durum').then(r => r.json()).then(v => {
+            if (v.giris_acik) window.location.reload();
+          }).catch(() => {});
+        }, 3000);
+      </script>
+      {% endif %}
 
       <script>
         async function ogrenciListesiYukle(sinifId) {

@@ -49,20 +49,24 @@ def ana():
                                        tekrar_giris=True)
 
     siniflar = sinif_listesi()
-    return render_template('login.html', siniflar=siniflar, paket_varsayilan=paket_hesapla(), paket_secenekleri=PAKET_SECENEKLERI)
+    giris_kapali = not ders_durumu.get('giris_acik', False)
+    return render_template('login.html', siniflar=siniflar, paket_varsayilan=paket_hesapla(), paket_secenekleri=PAKET_SECENEKLERI, giris_kapali=giris_kapali)
 
 @student_bp.route('/giris', methods=['POST'])
 @seb_gerekli
 def giris():
-    # DB sağlık kontrolü — veritabanı erişilemezse girişi engelle
+    # DB sağlık kontrolü
     from core.db import db_saglikli
     if not db_saglikli:
-        siniflar = []
         return render_template('login.html',
-                               hata='⛔ Sistem bakımda — veritabanı şu anda erişilemiyor. Lütfen öğretmeninize bildirin ve birkaç dakika sonra tekrar deneyin.',
-                               siniflar=siniflar,
-                               paket_secenekleri=PAKET_SECENEKLERI,
-                               paket_varsayilan=paket_hesapla())
+                               hata='⛔ Sistem bakımda — veritabanı şu anda erişilemiyor. Lütfen öğretmeninize bildirin.',
+                               siniflar=[], paket_secenekleri=PAKET_SECENEKLERI, paket_varsayilan=paket_hesapla())
+
+    # Giriş açık mı kontrolü
+    if not ders_durumu.get('giris_acik', False):
+        return render_template('login.html',
+                               hata='🔒 Giriş henüz açılmadı — öğretmeninizin dersi başlatmasını bekleyin.',
+                               siniflar=sinif_listesi(), paket_secenekleri=PAKET_SECENEKLERI, paket_varsayilan=paket_hesapla())
 
     sinif_id  = request.form.get('sinif_id', '').strip()
     ad_soyad  = request.form.get('ad_soyad', '').strip().upper()
