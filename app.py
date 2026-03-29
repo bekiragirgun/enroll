@@ -255,7 +255,7 @@ def ogretmen_baglan_event(veri=None):
             '-o', 'ControlPath=none',
             '-p', f'{CHROOT_REAL_SSH_PORT}',
             f'{CHROOT_USER}@{CHROOT_HOST}',
-            f"sudo /bin/bash -c \"while true; do chroot '{safe_chroot_path}' /bin/su - '{safe_username}'; echo 'Oturum kapatılamaz, yeniden başlatılıyor...'; sleep 1; done\""
+            f"sudo /bin/bash -c \"while true; do chroot '{safe_chroot_path}' /usr/bin/su - '{safe_username}'; echo 'Oturum kapatılamaz, yeniden başlatılıyor...'; sleep 1; done\""
         ]
         if CHROOT_PASS:
             ssh_cmd = ['sshpass', '-p', CHROOT_PASS] + ssh_cmd
@@ -399,7 +399,7 @@ def ogrenci_baglan_event(veri):
             '-o', 'StrictHostKeyChecking=no',
             '-o', 'ControlPath=none',
             '-p', str(CHROOT_REAL_SSH_PORT), f'{CHROOT_USER}@{CHROOT_HOST}',
-            f"sudo /bin/bash -c \"while true; do chroot '{safe_chroot_path}' /bin/su - '{safe_username}'; echo 'Oturum kapatılamaz, yeniden başlatılıyor...'; sleep 1; done\""
+            f"sudo /bin/bash -c \"while true; do chroot '{safe_chroot_path}' /usr/bin/su - '{safe_username}'; echo 'Oturum kapatılamaz, yeniden başlatılıyor...'; sleep 1; done\""
         ]
         if CHROOT_PASS:
             ssh_cmd = ['sshpass', '-p', CHROOT_PASS] + ssh_cmd
