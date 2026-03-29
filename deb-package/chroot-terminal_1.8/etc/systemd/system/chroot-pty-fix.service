@@ -1,0 +1,15 @@
+[Unit]
+Description=Chroot PTY Repair on Boot
+# local-fs.target sonrası, SSH başlamadan önce çalış
+After=local-fs.target
+Before=ssh.service sshd.service multi-user.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/chroot-yonetici repair
+RemainAfterExit=yes
+# Başarısız olursa sistemi engelleme, devam et
+SuccessExitStatus=0 1
+
+[Install]
+WantedBy=multi-user.target

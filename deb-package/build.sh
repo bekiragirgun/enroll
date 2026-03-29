@@ -4,8 +4,8 @@ set -e
 
 cd "$(dirname "$0")"
 
-# En güncel dizini bul (chroot-terminal_*)
-PKG=$(ls -d chroot-terminal_* | sort -V | tail -n 1)
+# En güncel dizini bul (chroot-terminal_*/ — sadece dizinler, .deb hariç)
+PKG=$(ls -d chroot-terminal_*/ 2>/dev/null | sed 's|/$||' | sort -V | tail -n 1)
 
 # Kaynak: varsa ../chroot_yonetici.py, yoksa paketin kendi kopyasını kullan
 if [ -f "../chroot_yonetici.py" ]; then
