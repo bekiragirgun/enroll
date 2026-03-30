@@ -21,11 +21,11 @@ def api_durum():
     cikis_onaylandi = False
     from flask import session
     numara = session.get('numara')
+    # SEB çıkış onayı — in-memory dict'ten kontrol et (DB'ye gitme)
     if numara:
-        with db_baglantisi() as db:
-            kayit = db.execute("SELECT durum FROM seb_cikis_talepleri WHERE numara=? AND tarih=? ORDER BY id DESC LIMIT 1", (numara, bugun())).fetchone()
-            if kayit and kayit['durum'] == 'onaylandi':
-                cikis_onaylandi = True
+        onaylanan = ders_durumu.get('seb_cikis_onaylanan', {})
+        if numara in onaylanan:
+            cikis_onaylandi = True
 
     # Toplu çıkış kontrolü
     toplu_cikis = False
@@ -558,8 +558,15 @@ def api_seb_cikis_onayla():
     durum_val = data.get('durum', 'onaylandi')
     
     with db_baglantisi() as db:
+        # Onaylanan öğrencinin numarasını al
+        talep = db.execute("SELECT numara FROM seb_cikis_talepleri WHERE id=?", (talep_id,)).fetchone()
         db.execute("UPDATE seb_cikis_talepleri SET durum=? WHERE id=?", (durum_val, talep_id))
         db.commit()
+        # In-memory dict'e yaz — /api/durum DB'ye gitmeden kontrol eder
+        if talep and durum_val == 'onaylandi':
+            if 'seb_cikis_onaylanan' not in ders_durumu:
+                ders_durumu['seb_cikis_onaylanan'] = {}
+            ders_durumu['seb_cikis_onaylanan'][talep['numara']] = True
     return jsonify({'durum': 'ok'})
 
 @api_bp.route('/toplu_cikis', methods=['POST'])
@@ -571,6 +578,7 @@ def api_toplu_cikis():
     ders_durumu['mod'] = 'bekleme'
     ders_durumu['dosya'] = ''
     ders_durumu['giris_acik'] = False
+    ders_durumu['seb_cikis_onaylanan'] = {}  # SEB onay cache temizle
     log.info(f"🚪 Toplu çıkış tetiklendi - tüm oturumlar sonlandırılıyor, giriş kapatıldı")
     return jsonify({'durum': 'ok', 'mesaj': 'Tüm öğrenciler çıkış yapacak'})
 
