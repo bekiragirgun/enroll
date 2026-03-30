@@ -29,9 +29,9 @@ def api_durum():
 
     # Toplu çıkış kontrolü
     toplu_cikis = False
-    giris_zamani = session.get('giris_zamani', 0)
-    toplu_cikis_zamani = ders_durumu.get('toplu_cikis_zamani', 0)
-    if toplu_cikis_zamani and giris_zamani and toplu_cikis_zamani > giris_zamani:
+    giris_zamani = session.get('giris_zamani', 0) or 0
+    toplu_cikis_zamani = ders_durumu.get('toplu_cikis_zamani', 0) or 0
+    if toplu_cikis_zamani > 0 and toplu_cikis_zamani > giris_zamani:
         toplu_cikis = True
         session.clear()
 
