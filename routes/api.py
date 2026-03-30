@@ -570,7 +570,8 @@ def api_toplu_cikis():
     ders_durumu['toplu_cikis_zamani'] = time.time()
     ders_durumu['mod'] = 'bekleme'
     ders_durumu['dosya'] = ''
-    log.info(f"🚪 Toplu çıkış tetiklendi - tüm öğrenci oturumları sonlandırılıyor")
+    ders_durumu['giris_acik'] = False
+    log.info(f"🚪 Toplu çıkış tetiklendi - tüm oturumlar sonlandırılıyor, giriş kapatıldı")
     return jsonify({'durum': 'ok', 'mesaj': 'Tüm öğrenciler çıkış yapacak'})
 
 
