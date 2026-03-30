@@ -60,7 +60,7 @@ def slayt_listesi():
         
     dosyalar = sorted(
         f.name for f in yol.iterdir()
-        if f.suffix.lower() == '.pdf'
+        if f.suffix.lower() in ('.html', '.pdf')
         and not f.name.startswith('.')
     )
     return dosyalar
