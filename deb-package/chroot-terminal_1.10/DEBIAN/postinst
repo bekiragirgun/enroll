@@ -68,11 +68,14 @@ groupadd -f ogrenciler
 # ── Network: systemd-networkd → NetworkManager ──
 echo "[5/9] Network katmanı yapılandırılıyor (NetworkManager)..."
 
-# systemd-networkd'yi tamamen devre dışı bırak (crash ediyor)
-systemctl disable systemd-networkd.service 2>/dev/null || true
-systemctl disable systemd-networkd.socket 2>/dev/null || true
-systemctl disable systemd-networkd-wait-online.service 2>/dev/null || true
-systemctl mask systemd-networkd.service 2>/dev/null || true
+# Crash eden systemd servislerini tamamen devre dışı bırak
+for svc in systemd-networkd.service systemd-networkd.socket \
+           systemd-networkd-wait-online.service \
+           systemd-resolved.service \
+           systemd-timesyncd.service; do
+    systemctl disable "$svc" 2>/dev/null || true
+    systemctl mask "$svc" 2>/dev/null || true
+done
 
 # Eski cloud-init netplan config'ini kaldır (networkd renderer kullanıyor)
 rm -f /etc/netplan/50-cloud-init.yaml 2>/dev/null || true
@@ -118,6 +121,15 @@ else
     # Paket içindeki DHCP config kullanılacak (99-chroot-terminal.yaml)
 fi
 
+# Statik DNS — resolved olmayınca resolv.conf boş kalabilir
+rm -f /etc/resolv.conf 2>/dev/null || true
+cat > /etc/resolv.conf << 'DNSEOF'
+nameserver 8.8.8.8
+nameserver 1.1.1.1
+DNSEOF
+# resolv.conf'un üzerine yazılmasını engelle
+chattr +i /etc/resolv.conf 2>/dev/null || true
+
 # NetworkManager'ı etkinleştir
 systemctl unmask NetworkManager.service 2>/dev/null || true
 systemctl enable NetworkManager.service 2>/dev/null || true
@@ -128,9 +140,12 @@ netplan generate 2>/dev/null || true
 # Fallback network service
 systemctl enable chroot-network-fallback.service 2>/dev/null || true
 
-echo "    systemd-networkd → devre dışı (mask)"
-echo "    NetworkManager   → aktif"
-echo "    Fallback service → aktif"
+echo "    systemd-networkd  → devre dışı (mask)"
+echo "    systemd-resolved  → devre dışı (mask, statik DNS)"
+echo "    systemd-timesyncd → devre dışı (mask)"
+echo "    NetworkManager    → aktif"
+echo "    DNS:              → 8.8.8.8, 1.1.1.1 (statik, immutable)"
+echo "    Fallback service  → aktif"
 
 # ── Systemd Servisleri ───────────────────────
 echo "[6/9] Servisler aktifleştiriliyor..."
@@ -144,9 +159,11 @@ systemctl reload sshd 2>/dev/null || systemctl reload ssh 2>/dev/null || true
 
 # ── NTP Senkronizasyonu ──────────────────────
 echo "[8/9] NTP zaman senkronizasyonu ayarlanıyor..."
-timedatectl set-ntp true 2>/dev/null || true
-systemctl restart systemd-timesyncd 2>/dev/null || true
 timedatectl set-timezone Europe/Istanbul 2>/dev/null || true
+# systemd-timesyncd mask'lı — chrony veya NM üzerinden NTP
+if command -v chronyd >/dev/null 2>&1; then
+    systemctl enable --now chrony.service 2>/dev/null || true
+fi
 
 # ── Systemd Pin (Reboot Koruması) ────────────
 echo "[9/9] Kritik paketler pinleniyor (otomatik güncelleme koruması)..."
