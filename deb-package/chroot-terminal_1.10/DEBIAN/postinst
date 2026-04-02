@@ -68,13 +68,17 @@ groupadd -f ogrenciler
 # ── Network: systemd-networkd → NetworkManager ──
 echo "[5/9] Network katmanı yapılandırılıyor (NetworkManager)..."
 
-# Crash eden systemd servislerini tamamen devre dışı bırak
-for svc in systemd-networkd.service systemd-networkd.socket \
+# Crash eden systemd servislerini doğrudan symlink ile mask'la
+# (systemctl mask apt install sırasında güvenilmez, ln -sf her zaman çalışır)
+for svc in multipathd.service \
+           systemd-networkd.service \
+           systemd-networkd.socket \
            systemd-networkd-wait-online.service \
            systemd-resolved.service \
            systemd-timesyncd.service; do
     systemctl disable "$svc" 2>/dev/null || true
-    systemctl mask "$svc" 2>/dev/null || true
+    systemctl stop "$svc" 2>/dev/null || true
+    ln -sf /dev/null /etc/systemd/system/"$svc"
 done
 
 # Eski cloud-init netplan config'ini kaldır (networkd renderer kullanıyor)
@@ -140,6 +144,7 @@ netplan generate 2>/dev/null || true
 # Fallback network service
 systemctl enable chroot-network-fallback.service 2>/dev/null || true
 
+echo "    multipathd         → devre dışı (mask)"
 echo "    systemd-networkd  → devre dışı (mask)"
 echo "    systemd-resolved  → devre dışı (mask, statik DNS)"
 echo "    systemd-timesyncd → devre dışı (mask)"
