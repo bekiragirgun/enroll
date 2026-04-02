@@ -14,10 +14,6 @@ api_bp = Blueprint('api_bp', __name__, url_prefix='/api')
 
 @api_bp.route('/durum')
 def api_durum():
-    hash_param = request.args.get('hash', '')
-    if hash_param:
-        ders_durumu['slayt_hash'] = hash_param
-
     cikis_onaylandi = False
     from flask import session
     numara = session.get('numara')
@@ -202,7 +198,7 @@ def api_healthcheck():
         import subprocess
         ssh_cmd = [
             "ssh", "-o", "ConnectTimeout=5",
-            "-o", "StrictHostKeyChecking=no",
+            "-o", "StrictHostKeyChecking=accept-new",
             "-o", "BatchMode=yes" if not password else "BatchMode=no",
             "-p", str(port),
             f"{user}@{host}",
@@ -261,6 +257,7 @@ def api_siniflar():
     return jsonify({'siniflar': sonuc})
 
 @api_bp.route('/ogrenci_listesi/<int:sinif_id>')
+@ogretmen_giris_gerekli
 def api_ogrenci_listesi(sinif_id):
     with db_baglantisi() as db:
         ogrenciler = db.execute('SELECT numara, ad, soyad FROM ogrenciler WHERE sinif_id=? ORDER BY soyad, ad', (sinif_id,)).fetchall()

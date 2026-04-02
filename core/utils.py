@@ -1,6 +1,16 @@
+import re
 from datetime import datetime
 from flask import request
 from core.db import db_baglantisi
+
+# IPv4 ve IPv6 temel doğrulama deseni
+_IP_PATTERN = re.compile(
+    r'^('
+    r'(\d{1,3}\.){3}\d{1,3}'        # IPv4
+    r'|'
+    r'[0-9a-fA-F:]{2,39}'           # IPv6 (basitleştirilmiş)
+    r')$'
+)
 
 def bugun():
     return datetime.now().strftime('%Y-%m-%d')
@@ -12,7 +22,11 @@ def istemci_ip():
     """Gerçek istemci IP'sini al (proxy arkasında bile çalışır)."""
     xff = request.headers.get('X-Forwarded-For')
     if xff:
-        return xff.split(',')[0].strip()
+        candidate = xff.split(',')[0].strip()
+        # Sadece geçerli IP formatındaysa güven
+        if _IP_PATTERN.match(candidate) and len(candidate) <= 45:
+            return candidate
+        # Geçersiz format — X-Forwarded-For'a güvenme, remote_addr kullan
     return request.remote_addr or '0.0.0.0'
 
 def paket_hesapla():

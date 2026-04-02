@@ -7,7 +7,7 @@ services:
       POSTGRES_PASSWORD: ${DB_PASSWORD:-postgres_pass}
       POSTGRES_DB: ${DB_NAME:-ders_takip}
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"
     volumes:
       - ./postgres_data:/var/lib/postgresql/data
     restart: always
@@ -28,5 +28,5 @@ services:
     ports:
       - "3333:3333"
     volumes:
-      - .:/app
+      - ./data:/app/data
     restart: always

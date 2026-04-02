@@ -17,6 +17,7 @@ import os
 import pty
 import subprocess
 import signal
+import shlex
 import threading
 from flask import Flask, session, request, Response
 from flask_socketio import SocketIO, emit
@@ -38,7 +39,12 @@ from routes.exam import exam_bp
 from dotenv import load_dotenv
 load_dotenv()
 
-SECRET_KEY = os.environ.get('SECRET_KEY', 'kapadokya-linux-2024')
+secret = os.environ.get('SECRET_KEY')
+if not secret:
+    import secrets as _s
+    secret = _s.token_hex(32)
+    print("⚠️ SECRET_KEY environment variable ayarlanmamış! Geçici key üretildi.")
+SECRET_KEY = secret
 
 # ── In-memory log buffer (UI için) ────────────────────────────
 log_buffer = collections.deque(maxlen=500)  # Son 500 log satırı
@@ -71,7 +77,14 @@ _buf_handler.setFormatter(logging.Formatter('%(name)s — %(message)s'))
 logging.getLogger().addHandler(_buf_handler)
 
 # eventlet ile daha performanslı ve stabil WebSocket desteği
-socketio = SocketIO(app, cors_allowed_origins="*", async_mode='eventlet')
+socketio = SocketIO(app, cors_allowed_origins=[], async_mode='eventlet')
+
+@app.after_request
+def security_headers(response):
+    response.headers['X-Content-Type-Options'] = 'nosniff'
+    response.headers['X-Frame-Options'] = 'SAMEORIGIN'
+    response.headers['X-XSS-Protection'] = '1; mode=block'
+    return response
 
 @app.route('/favicon.ico')
 def favicon():
@@ -215,6 +228,8 @@ def terminal_kopma(*args):
 
 @socketio.on('ogretmen_baglan', namespace='/terminal')
 def ogretmen_baglan_event(veri=None):
+    if not session.get('ogretmen'):
+        return
     global ogretmen_sid, ogretmen_pty_fd, ogretmen_pty_pid, ders_durumu
     ogretmen_sid = request.sid
     ogretmen_numara = 'ogretmen'
@@ -245,17 +260,16 @@ def ogretmen_baglan_event(veri=None):
             chroot_olustur(ogretmen_numara, "Öğretmen", "Paneli")
 
         master_fd, slave_fd = pty.openpty()
-        safe_username = ogretmen_numara.replace("'", "'\\''")
-        safe_chroot_path = f"{CHROOT_BASE}/{safe_username}".replace("'", "'\\''")
-
+        safe_username = shlex.quote(ogretmen_numara)
+        safe_chroot_path = shlex.quote(f"{CHROOT_BASE}/{ogretmen_numara}")
 
         ssh_cmd = [
             'ssh', '-t',
-            '-o', 'StrictHostKeyChecking=no',
+            '-o', 'StrictHostKeyChecking=accept-new',
             '-o', 'ControlPath=none',
             '-p', f'{CHROOT_REAL_SSH_PORT}',
             f'{CHROOT_USER}@{CHROOT_HOST}',
-            f"sudo /bin/bash -c \"while true; do chroot '{safe_chroot_path}' /usr/bin/su - '{safe_username}'; echo 'Oturum kapatılamaz, yeniden başlatılıyor...'; sleep 1; done\""
+            f"sudo /bin/bash -c \"while true; do chroot {safe_chroot_path} /usr/bin/su - {safe_username}; echo 'Oturum kapatılamaz, yeniden başlatılıyor...'; sleep 1; done\""
         ]
         if CHROOT_PASS:
             ssh_cmd = ['sshpass', '-p', CHROOT_PASS] + ssh_cmd
@@ -360,6 +374,8 @@ def ogretmen_mudahale_toggle_event(veri):
 
 @socketio.on('ogrenci_baglan', namespace='/terminal')
 def ogrenci_baglan_event(veri):
+    if not session.get('numara'):
+        return
     sid = request.sid
     username = veri.get('username', '')
 
@@ -391,15 +407,15 @@ def ogrenci_baglan_event(veri):
         chroot_olustur(username, ad_soyad, "") 
 
         master_fd, slave_fd = pty.openpty()
-        safe_username = username.replace("'", "'\\''")
-        safe_chroot_path = f"{CHROOT_BASE}/{safe_username}".replace("'", "'\\''")
+        safe_username = shlex.quote(username)
+        safe_chroot_path = shlex.quote(f"{CHROOT_BASE}/{username}")
 
         ssh_cmd = [
             'ssh', '-t',
-            '-o', 'StrictHostKeyChecking=no',
+            '-o', 'StrictHostKeyChecking=accept-new',
             '-o', 'ControlPath=none',
             '-p', str(CHROOT_REAL_SSH_PORT), f'{CHROOT_USER}@{CHROOT_HOST}',
-            f"sudo /bin/bash -c \"while true; do chroot '{safe_chroot_path}' /usr/bin/su - '{safe_username}'; echo 'Oturum kapatılamaz, yeniden başlatılıyor...'; sleep 1; done\""
+            f"sudo /bin/bash -c \"while true; do chroot {safe_chroot_path} /usr/bin/su - {safe_username}; echo 'Oturum kapatılamaz, yeniden başlatılıyor...'; sleep 1; done\""
         ]
         if CHROOT_PASS:
             ssh_cmd = ['sshpass', '-p', CHROOT_PASS] + ssh_cmd

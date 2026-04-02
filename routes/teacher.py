@@ -15,7 +15,6 @@ def ogretmen_giris():
     if request.method == 'POST':
         pw_input = request.form.get('sifre')
         pw_expected = _ogretmen_sifre()
-        print(f"DEBUG: Login attempt - Input: '{pw_input}', Expected: '{pw_expected}'")
         if pw_input == pw_expected:
             session['ogretmen'] = True
             return redirect(url_for('teacher_bp.ogretmen_panel'), 303)

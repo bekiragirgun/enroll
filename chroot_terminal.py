@@ -7,6 +7,7 @@ import subprocess
 import os
 import time
 import threading
+import shlex
 from pathlib import Path
 import logging
 import atexit
@@ -129,7 +130,7 @@ def _ssh_pool_baslat() -> bool:
         cmd = [
             "ssh",
             "-o", "ConnectTimeout=15",
-            "-o", "StrictHostKeyChecking=no",
+            "-o", "StrictHostKeyChecking=accept-new",
             "-o", "BatchMode=yes" if not CHROOT_PASS else "BatchMode=no",
             "-o", "ControlMaster=yes",
             "-o", f"ControlPath={socket_path}",
@@ -232,7 +233,7 @@ def _ct991_exec(command: list, retries: int = 2) -> subprocess.CompletedProcess:
 
     ssh_cmd = [
         "ssh", "-o", "ConnectTimeout=10",
-        "-o", "StrictHostKeyChecking=no",
+        "-o", "StrictHostKeyChecking=accept-new",
         "-o", "BatchMode=yes" if not CHROOT_PASS else "BatchMode=no",
         "-o", f"ControlPath={control_path}",
         "-o", "ControlMaster=no",  # Master zaten _pool_process, biz slave olarak bağlanıyoruz
@@ -279,7 +280,7 @@ def _ct991_exec(command: list, retries: int = 2) -> subprocess.CompletedProcess:
                 control_path = _pool_socket if use_pool else "none"
                 ssh_cmd = [
                     "ssh", "-o", "ConnectTimeout=10",
-                    "-o", "StrictHostKeyChecking=no",
+                    "-o", "StrictHostKeyChecking=accept-new",
                     "-o", "BatchMode=yes" if not CHROOT_PASS else "BatchMode=no",
                     "-o", f"ControlPath={control_path}",
                     "-o", "ControlMaster=no",
@@ -485,11 +486,12 @@ def chroot_olustur_batch(users: list) -> dict:
     # JSON çıktısı ile sonuç takibi: "OK:username" veya "ERR:username"
     loop_lines = []
     for slug, tam_ad in prepared:
-        safe_ad = tam_ad.replace("'", "'\\''")
+        safe_slug = shlex.quote(slug)
+        safe_ad = shlex.quote(tam_ad)
         # NOPASSWD sudo sayesinde artık şifre pipe etmeye gerek yok
         cmd = (
-            f"sudo {PYTHON_PATH} {CHROOT_MANAGE_SCRIPT} create '{slug}' '{safe_ad}' && "
-            f"sudo {PYTHON_PATH} {CHROOT_MANAGE_SCRIPT} mount '{slug}' && "
+            f"sudo {PYTHON_PATH} {CHROOT_MANAGE_SCRIPT} create {safe_slug} {safe_ad} && "
+            f"sudo {PYTHON_PATH} {CHROOT_MANAGE_SCRIPT} mount {safe_slug} && "
             f"echo 'OK:{slug}' || echo 'ERR:{slug}'"
         )
         loop_lines.append(cmd)
@@ -561,8 +563,9 @@ def chroot_sil_batch(usernames: list) -> dict:
     # Tek SSH oturumunda hepsini sil
     loop_lines = []
     for slug in slugged:
+        safe_slug = shlex.quote(slug)
         loop_lines.append(
-            f"{PYTHON_PATH} {CHROOT_MANAGE_SCRIPT} delete '{slug}' "
+            f"{PYTHON_PATH} {CHROOT_MANAGE_SCRIPT} delete {safe_slug} "
             f"&& echo 'OK:{slug}' || echo 'ERR:{slug}'"
         )
 

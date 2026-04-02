@@ -16,8 +16,12 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Uygulama kodunu kopyala
 COPY . .
 
+# Non-root user
+RUN useradd -m appuser
+
 # Flask portu
 EXPOSE 3333
 
 # Uygulamayı başlat (app.py içindeki config'e göre)
+USER appuser
 CMD ["python", "app.py"]

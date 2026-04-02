@@ -1,3 +1,6 @@
+// XSS koruması — kullanıcı verisini HTML'e güvenli şekilde ekle
+function esc(s) { var d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+
 // Öğrenci tarafı — mod değişimini 500ms'de bir kontrol eder
 const POLLING_ARALIK = 1000; // 1 saniyeye düşürelim (sunucu yükü için)
 
@@ -206,14 +209,14 @@ async function aktifSinaviGetir(hedefContainer) {
     veri.aktif_sinav.sorular.forEach((soru, i) => {
       const tip = soru.tip || 'cok_secmeli';
       html += `<div class="sinav-soru" data-soru-id="${soru.id}" data-tip="${tip}" style="background:#2d3748; padding:1.5rem; border-radius:8px; margin-bottom:1.5rem; border:1px solid #4a5568;">
-                <h3 style="margin-top:0; color:#e2e8f0; font-size:1.1rem; margin-bottom:1rem;">${i + 1}. ${soru.metin}</h3>
+                <h3 style="margin-top:0; color:#e2e8f0; font-size:1.1rem; margin-bottom:1rem;">${i + 1}. ${esc(soru.metin)}</h3>
                 <div style="display:flex; flex-direction:column; gap:0.75rem;">`;
 
       if (tip === 'cok_secmeli' || tip === 'dogru_yanlis') {
         soru.secenekler.forEach(secenek => {
           html += `<label style="display:flex; align-items:center; gap:0.5rem; cursor:pointer; background:#1a202c; padding:0.75rem; border-radius:6px; border:1px solid #4a5568; transition:all 0.2s;">
                     <input type="radio" name="soru_${soru.id}" value="${secenek.id}" style="width:18px;height:18px;">
-                    <span style="font-size:1rem;">${secenek.metin}</span>
+                    <span style="font-size:1rem;">${esc(secenek.metin)}</span>
                  </label>`;
         });
       } else if (tip === 'bosluk_doldurma') {
@@ -748,7 +751,7 @@ async function cikisTalepEt() {
 // ── Split Screen Sınav Render ────────────────────────────────
 function _sinavSplitRender(container, veri) {
   const sinav = veri.aktif_sinav;
-  let html = `<h2 style="color:#90cdf4;border-bottom:2px solid #2b6cb0;padding-bottom:0.5rem;margin-top:0;">${sinav.baslik}</h2>`;
+  let html = `<h2 style="color:#90cdf4;border-bottom:2px solid #2b6cb0;padding-bottom:0.5rem;margin-top:0;">${esc(sinav.baslik)}</h2>`;
 
   if (sinav.zaten_cevapladi) {
     html += `<div style="text-align:center;padding:2rem;"><div style="font-size:3rem;">✅</div>
@@ -761,12 +764,12 @@ function _sinavSplitRender(container, veri) {
   sinav.sorular.forEach(function(soru, i) {
     var tip = soru.tip || 'cok_secmeli';
     html += `<div class="sinav-soru" data-soru-id="${soru.id}" data-tip="${tip}" style="background:#2d3748;padding:1rem;border-radius:8px;margin-bottom:1rem;border:1px solid #4a5568;">
-      <h3 style="margin:0 0 0.75rem;color:#e2e8f0;font-size:1rem;">${i+1}. ${soru.metin}</h3>
+      <h3 style="margin:0 0 0.75rem;color:#e2e8f0;font-size:1rem;">${i+1}. ${esc(soru.metin)}</h3>
       <div style="display:flex;flex-direction:column;gap:0.5rem;">`;
     if (tip === 'cok_secmeli' || tip === 'dogru_yanlis') {
       soru.secenekler.forEach(function(s) {
         html += `<label style="display:flex;align-items:center;gap:0.5rem;cursor:pointer;background:#1a202c;padding:0.6rem;border-radius:6px;border:1px solid #4a5568;font-size:0.9rem;">
-          <input type="radio" name="soru_${soru.id}" value="${s.id}" style="width:16px;height:16px;"> ${s.metin}
+          <input type="radio" name="soru_${soru.id}" value="${s.id}" style="width:16px;height:16px;"> ${esc(s.metin)}
         </label>`;
       });
     } else if (tip === 'bosluk_doldurma') {

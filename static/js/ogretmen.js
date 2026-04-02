@@ -1,3 +1,6 @@
+// XSS koruması — kullanıcı verisini HTML'e güvenli şekilde ekle
+function esc(s) { var d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+
 const YOKLAMA_ARALIK = 5000;
 
 // Centralized Fetch for Cloudflare Access Session Handling
@@ -330,15 +333,15 @@ async function yoklamaCek() {
     liste.innerHTML = veri.ogrenciler.map(o => `
       <div class="ogrenci-satir">
         <div class="badge"></div>
-        <div class="isim">${o.ad_soyad}</div>
-        <div class="numara">${o.numara}</div>
-        <div class="sinif-etiket" style="font-size:0.75rem;color:#90cdf4;margin-left:auto;">${o.sinif || ''}</div>
-        <div style="font-size:0.75rem;color:#a0aec0;margin-left:0.5rem;" title="Bağlantı IP Adresi">🌐 ${o.ip || ''}</div>
-        ${o.paket && o.paket !== '—' ? `<div class="paket-etiket" style="font-size:0.7rem;color:#68d391;background:#1a3a2a;border:1px solid #2d6a4a;border-radius:4px;padding:0.1rem 0.4rem;margin-left:0.4rem;">📦 ${o.paket.split(' ')[0] + ' ' + o.paket.split(' ')[1]}</div>` : ''}
+        <div class="isim">${esc(o.ad_soyad)}</div>
+        <div class="numara">${esc(o.numara)}</div>
+        <div class="sinif-etiket" style="font-size:0.75rem;color:#90cdf4;margin-left:auto;">${esc(o.sinif || '')}</div>
+        <div style="font-size:0.75rem;color:#a0aec0;margin-left:0.5rem;" title="Bağlantı IP Adresi">🌐 ${esc(o.ip || '')}</div>
+        ${o.paket && o.paket !== '—' ? `<div class="paket-etiket" style="font-size:0.7rem;color:#68d391;background:#1a3a2a;border:1px solid #2d6a4a;border-radius:4px;padding:0.1rem 0.4rem;margin-left:0.4rem;">📦 ${esc(o.paket.split(' ')[0] + ' ' + o.paket.split(' ')[1])}</div>` : ''}
         ${o.kaynak === 'manuel' ? `<span title="Manuel giriş" style="font-size:0.7rem;color:#f6c90e;background:#2d2a00;border:1px solid #6b5900;border-radius:4px;padding:0.1rem 0.4rem;margin-left:0.4rem;">👨‍🏫 M</span>` : ''}
-        <div class="saat">${o.saat}</div>
+        <div class="saat">${esc(o.saat)}</div>
         <button
-          onclick="tekSil('${o.numara}', '${o.ad_soyad.replace(/'/g, "\\'")}')"
+          onclick="tekSil('${esc(o.numara)}', '${esc(o.ad_soyad).replace(/'/g, "\\'")}')"
           style="margin-left:0.5rem;padding:0.15rem 0.5rem;font-size:0.7rem;background:#742a2a;border:1px solid #9b2c2c;border-radius:4px;color:#feb2b2;cursor:pointer;"
           title="Kaydı sil">
           🗑️
@@ -373,19 +376,19 @@ async function sinifDurumCek() {
       html += `
         <div class="sinif-kart">
           <h4>
-            ${sinif.ad}
+            ${esc(sinif.ad)}
             <span class="sinif-badge ${tamKatilim ? 'tam' : ''}">${sinif.bugun}/${sinif.kayitli}</span>
           </h4>
           <div class="sinif-ozet">Bugün ${sinif.bugun} katıldı · ${sinif.kayitli - sinif.bugun} eksik</div>
           ${veri.ogrenciler.map(o => `
-            <div class="ogrenci-mini ${o.geldi ? '' : 'devamsiz'}" id="ogrenci-${o.numara}">
+            <div class="ogrenci-mini ${o.geldi ? '' : 'devamsiz'}" id="ogrenci-${esc(o.numara)}">
               <div class="${o.geldi ? 'dot-geldi' : 'dot-gelmedi'}"></div>
-              <span>${o.ad_soyad}</span>
-              ${o.geldi && o.paket && o.paket !== '—' ? `<span style="font-size:0.65rem;color:#68d391;background:#1a3a2a;border-radius:3px;padding:0 0.3rem;margin-left:0.3rem;">${o.paket.split(' ')[0] + ' ' + o.paket.split(' ')[1]}</span>` : ''}
+              <span>${esc(o.ad_soyad)}</span>
+              ${o.geldi && o.paket && o.paket !== '—' ? `<span style="font-size:0.65rem;color:#68d391;background:#1a3a2a;border-radius:3px;padding:0 0.3rem;margin-left:0.3rem;">${esc(o.paket.split(' ')[0] + ' ' + o.paket.split(' ')[1])}</span>` : ''}
               ${o.geldi && o.paket === 'manuel' ? `<span style="font-size:0.65rem;color:#f6c90e;margin-left:0.2rem;" title="Manuel giriş">👨‍🏫</span>` : ''}
-              <span style="margin-left:auto;color:#718096;font-size:0.75rem;">${o.numara}</span>
+              <span style="margin-left:auto;color:#718096;font-size:0.75rem;">${esc(o.numara)}</span>
               ${!o.geldi ? `<button
-                onclick="manuelGiris(${sinif.id}, '${o.numara}', '${o.ad_soyad.replace(/'/g, '\\\'')}')"
+                onclick="manuelGiris(${sinif.id}, '${esc(o.numara)}', '${esc(o.ad_soyad).replace(/'/g, '\\\'')}')"
                 style="margin-left:0.5rem;padding:0.15rem 0.5rem;font-size:0.7rem;background:#2d3a1a;border:1px solid #4a6a2a;border-radius:4px;color:#a0d070;cursor:pointer;"
                 title="Manuel giriş ekle">
                 + Giriş
@@ -576,7 +579,7 @@ async function sahteCek() {
           <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.3rem;">
             <span style="color:#f6ad55;font-weight:600;">⚠️ Sahte Giriş Girişimi</span>
             <div style="display:flex;align-items:center;gap:0.5rem;">
-              <span style="color:#718096;">${k.tarih} ${k.saat.substring(0, 5)} · ${k.sinif}</span>
+              <span style="color:#718096;">${esc(k.tarih)} ${esc(k.saat.substring(0, 5))} · ${esc(k.sinif)}</span>
               <button
                 onclick="sahteLogSil(${k.id})"
                 style="padding:0.15rem 0.5rem;font-size:0.7rem;background:#742a2a;border:1px solid #9b2c2c;border-radius:4px;color:#feb2b2;cursor:pointer;"
@@ -587,17 +590,17 @@ async function sahteCek() {
           </div>
           <div style="color:#e2e8f0;">
             <span style="color:#fc8181;">🔒 Gerçek:</span>
-            <strong>${k.gercek_ad}</strong>
-            <span style="color:#718096;">(#${k.gercek_numara})</span>
+            <strong>${esc(k.gercek_ad)}</strong>
+            <span style="color:#718096;">(#${esc(k.gercek_numara)})</span>
             &nbsp;—&nbsp;bu IP'den önceden giriş yapmıştı.
           </div>
           <div style="color:#e2e8f0;">
             <span style="color:#fbd38d;">🚫 Deneme:</span>
-            <strong>${k.denenen_ad}</strong>
-            <span style="color:#718096;">(#${k.denenen_numara})</span>
+            <strong>${esc(k.denenen_ad)}</strong>
+            <span style="color:#718096;">(#${esc(k.denenen_numara)})</span>
             &nbsp;aynı cihazdan giriş yapmaya çalıştı.
           </div>
-          <div style="color:#718096;font-size:0.75rem;margin-top:0.2rem;">IP: ${k.ip}</div>
+          <div style="color:#718096;font-size:0.75rem;margin-top:0.2rem;">IP: ${esc(k.ip)}</div>
         </div>`;
     }
     kutu.innerHTML = html;
@@ -663,10 +666,10 @@ async function cikisLogCek() {
       const kaynak_renk = k.kaynak === 'force' ? '#fc8181' : '#68d391';
       const kaynak_etiket = k.kaynak === 'force' ? '👨‍🏫 Force' : '🧑 Öğrenci';
       html += `<tr style="border-bottom:1px solid #2d3748;">
-        <td style="padding:5px 8px;color:#a0aec0;">${k.saat}</td>
-        <td style="padding:5px 8px;">${k.numara}</td>
-        <td style="padding:5px 8px;">${k.ad_soyad}</td>
-        <td style="padding:5px 8px;color:#90cdf4;">${k.paket}</td>
+        <td style="padding:5px 8px;color:#a0aec0;">${esc(k.saat)}</td>
+        <td style="padding:5px 8px;">${esc(k.numara)}</td>
+        <td style="padding:5px 8px;">${esc(k.ad_soyad)}</td>
+        <td style="padding:5px 8px;color:#90cdf4;">${esc(k.paket)}</td>
         <td style="padding:5px 8px;color:${kaynak_renk};">${kaynak_etiket}</td>
         <td style="padding:5px 8px;"></td>
       </tr>`;
@@ -727,19 +730,19 @@ async function guvenlikLogCek() {
           font-size: 0.82rem;
         ">
           <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.3rem;">
-            <span style="color:${renk};font-weight:600;">${ikon} ${log.durum}</span>
-            <span style="color:#718096;">${log.tarih} ${log.saat.substring(0, 5)}</span>
+            <span style="color:${renk};font-weight:600;">${ikon} ${esc(log.durum)}</span>
+            <span style="color:#718096;">${esc(log.tarih)} ${esc(log.saat.substring(0, 5))}</span>
           </div>
           <div style="color:#e2e8f0;">
-            <span style="color:#90cdf4;">${log.session_ad}</span>
-            (${log.session_numara})
+            <span style="color:#90cdf4;">${esc(log.session_ad)}</span>
+            (${esc(log.session_numara)})
           </div>
           ${log.durum === 'GUVENLIK_IHLALI' ? `
             <div style="color:#fc8181;">
-              Girmeye çalışan: <strong>${log.girilen_numara}</strong>
+              Girmeye çalışan: <strong>${esc(log.girilen_numara)}</strong>
             </div>
           ` : ''}
-          <div style="color:#718096;font-size:0.75rem;">IP: ${log.ip}</div>
+          <div style="color:#718096;font-size:0.75rem;">IP: ${esc(log.ip)}</div>
         </div>
       `;
     }
@@ -769,10 +772,10 @@ async function sebCikisCek() {
 
     veri.loglar.forEach(log => {
       html += `<tr style="border-bottom:1px solid #2d3748; background:rgba(229,62,62,0.1);">
-            <td style="padding:0.5rem;color:#fc8181;">${log.tarih} ${log.saat.substring(0, 5)}</td>
-            <td style="padding:0.5rem;">${log.numara}</td>
-            <td style="padding:0.5rem;">${log.ad_soyad}</td>
-            <td style="padding:0.5rem;color:#a0aec0;font-size:0.85rem;">${log.ip}</td>
+            <td style="padding:0.5rem;color:#fc8181;">${esc(log.tarih)} ${esc(log.saat.substring(0, 5))}</td>
+            <td style="padding:0.5rem;">${esc(log.numara)}</td>
+            <td style="padding:0.5rem;">${esc(log.ad_soyad)}</td>
+            <td style="padding:0.5rem;color:#a0aec0;font-size:0.85rem;">${esc(log.ip)}</td>
         </tr>`;
     });
 
@@ -802,9 +805,9 @@ async function cikisTalepleriCek() {
 
     veri.talepler.forEach(t => {
       html += `<tr style="border-bottom:1px solid #2d3748; background:rgba(237,137,54,0.1);">
-            <td style="padding:0.5rem;color:#fbd38d;">${t.tarih} ${t.saat.substring(0, 5)}</td>
-            <td style="padding:0.5rem;">${t.numara}</td>
-            <td style="padding:0.5rem;">${t.ad_soyad}</td>
+            <td style="padding:0.5rem;color:#fbd38d;">${esc(t.tarih)} ${esc(t.saat.substring(0, 5))}</td>
+            <td style="padding:0.5rem;">${esc(t.numara)}</td>
+            <td style="padding:0.5rem;">${esc(t.ad_soyad)}</td>
             <td style="padding:0.5rem;text-align:right;">
               <button onclick="cikisOnayla(${t.id}, 'onaylandi')" style="background:#38a169; border:none; padding:4px 8px; border-radius:4px; color:white; cursor:pointer; margin-right:4px;">İzin Ver</button>
               <button onclick="cikisOnayla(${t.id}, 'reddedildi')" style="background:#c53030; border:none; padding:4px 8px; border-radius:4px; color:white; cursor:pointer;">Reddet</button>
@@ -1531,13 +1534,13 @@ async function sinavListesiniGuncelle() {
       '<span style="background:#718096;color:#fff;padding:2px 8px;border-radius:12px;font-size:0.75rem;">Beklemede</span>';
 
     html += `<tr style="border-bottom:1px solid #2d3748;">
-          <td style="padding:0.5rem;">${s.baslik}</td>
+          <td style="padding:0.5rem;">${esc(s.baslik)}</td>
           <td style="padding:0.5rem;">${s.soru_sayisi} Soru</td>
           <td style="padding:0.5rem;">${durumBadge}</td>
           <td style="padding:0.5rem;text-align:right;">
-             <button class="btn-kucuk" style="background:#3182ce;" onclick="soruYonetiminiAc(${s.id}, '${s.baslik}')">📝 Sorular</button>
-             <button class="btn-kucuk" style="background:#d69e2e;" onclick="rubrikFormuAc(${s.id}, '${s.baslik}')">📋 Rubrik</button>
-             <button class="btn-kucuk yeşil" onclick="sinavSonuclariniAc(${s.id}, '${s.baslik}')">📊 Sonuçlar</button>
+             <button class="btn-kucuk" style="background:#3182ce;" onclick="soruYonetiminiAc(${s.id}, '${esc(s.baslik).replace(/'/g, "\\'")}')">📝 Sorular</button>
+             <button class="btn-kucuk" style="background:#d69e2e;" onclick="rubrikFormuAc(${s.id}, '${esc(s.baslik).replace(/'/g, "\\'")}')">📋 Rubrik</button>
+             <button class="btn-kucuk yeşil" onclick="sinavSonuclariniAc(${s.id}, '${esc(s.baslik).replace(/'/g, "\\'")}')">📊 Sonuçlar</button>
              <button class="btn-kucuk" style="background:${s.aktif ? '#e53e3e' : '#48bb78'};" onclick="sinavDurumDegistir(${s.id}, ${!s.aktif})">
                 ${s.aktif ? '⏹ Yayını Durdur' : '▶ Sınavı Başlat'}
              </button>
@@ -1670,16 +1673,16 @@ async function mevcutSorulariGetir(sinavId) {
   veri.sorular.forEach((s, idx) => {
     const badge = `<span style="background:${tipRenk[s.tip] || '#718096'};color:#1a202c;padding:1px 8px;border-radius:10px;font-size:0.7rem;font-weight:bold;margin-left:0.5rem;">${tipEtiket[s.tip] || s.tip}</span>`;
     html += `<div style="background:#1a202c; padding:1rem; border-radius:6px; margin-bottom:1rem; border:1px solid #4a5568;">
-          <div style="font-weight:bold; color:#e2e8f0; margin-bottom:0.5rem;">Soru ${idx + 1}: ${s.metin} ${badge} <span style="color:#a0aec0;font-size:0.8rem;font-weight:normal;">(${s.puan} Puan)</span></div>`;
+          <div style="font-weight:bold; color:#e2e8f0; margin-bottom:0.5rem;">Soru ${idx + 1}: ${esc(s.metin)} ${badge} <span style="color:#a0aec0;font-size:0.8rem;font-weight:normal;">(${s.puan} Puan)</span></div>`;
 
     if (s.tip === 'cok_secmeli' || s.tip === 'dogru_yanlis') {
       s.secenekler.forEach((sec, sIdx) => {
         const color = sec.dogru_mu ? '#48bb78' : '#a0aec0';
-        html += `<div style="color:${color}; font-size:0.9rem; margin-left:1rem; margin-bottom:0.25rem;">${String.fromCharCode(65 + sIdx)}) ${sec.metin} ${sec.dogru_mu ? '(Doğru Cevap)' : ''}</div>`;
+        html += `<div style="color:${color}; font-size:0.9rem; margin-left:1rem; margin-bottom:0.25rem;">${String.fromCharCode(65 + sIdx)}) ${esc(sec.metin)} ${sec.dogru_mu ? '(Doğru Cevap)' : ''}</div>`;
       });
     } else if (s.tip === 'bosluk_doldurma') {
       const dogru = s.secenekler.find(x => x.dogru_mu);
-      html += `<div style="color:#9ae6b4; font-size:0.9rem; margin-left:1rem;">Doğru cevap: <strong>${dogru ? dogru.metin : '?'}</strong></div>`;
+      html += `<div style="color:#9ae6b4; font-size:0.9rem; margin-left:1rem;">Doğru cevap: <strong>${dogru ? esc(dogru.metin) : '?'}</strong></div>`;
     } else if (s.tip === 'acik_uclu') {
       html += `<div style="color:#d6bcfa; font-size:0.9rem; margin-left:1rem;">Öğrenci serbest metin yazacak (manuel puanlama)</div>`;
     }
@@ -1778,12 +1781,12 @@ async function ogrenciYonetimCek() {
 
     if (ekleSinif) {
       ekleSinif.innerHTML = '<option value="">Sınıf seçin...</option>' +
-        _yonetimSiniflari.map(s => '<option value="' + s.id + '">' + s.ad + ' (' + s.kayitli + ')</option>').join('');
+        _yonetimSiniflari.map(s => '<option value="' + s.id + '">' + esc(s.ad) + ' (' + s.kayitli + ')</option>').join('');
     }
     if (filtreSinif) {
       const secili = filtreSinif.value;
       filtreSinif.innerHTML = '<option value="">Tüm sınıflar</option>' +
-        _yonetimSiniflari.map(s => '<option value="' + s.id + '"' + (s.id == secili ? ' selected' : '') + '>' + s.ad + ' (' + s.kayitli + ')</option>').join('');
+        _yonetimSiniflari.map(s => '<option value="' + s.id + '"' + (s.id == secili ? ' selected' : '') + '>' + esc(s.ad) + ' (' + s.kayitli + ')</option>').join('');
     }
 
     ogrenciYonetimListele(filtreSinif ? filtreSinif.value : '');
@@ -1991,8 +1994,8 @@ async function ciktiListesiniGuncelle(sinavId) {
     let html = '';
     _mevcutCiktilar.forEach(c => {
       html += `<div style="display:flex;align-items:center;gap:0.5rem;margin-bottom:0.4rem;background:#1a202c;padding:0.4rem 0.6rem;border-radius:6px;border:1px solid #4a5568;">
-        <span style="color:#fbd38d;font-weight:bold;min-width:24px;">${c.numara}.</span>
-        <span style="flex:1;color:#e2e8f0;">${c.metin}</span>
+        <span style="color:#fbd38d;font-weight:bold;min-width:24px;">${esc(String(c.numara))}.</span>
+        <span style="flex:1;color:#e2e8f0;">${esc(c.metin)}</span>
         <button class="btn-kucuk" style="background:#742a2a;font-size:0.7rem;padding:2px 6px;" onclick="ciktiSil(${c.id})">x</button>
       </div>`;
     });
@@ -2008,7 +2011,7 @@ async function ciktiListesiniGuncelle(sinavId) {
     _mevcutCiktilar.forEach(c => {
       html += `<label style="display:flex;align-items:center;gap:4px;background:#1a202c;padding:3px 8px;border-radius:6px;border:1px solid #4a5568;cursor:pointer;font-size:0.8rem;color:#e2e8f0;">
         <input type="checkbox" value="${c.id}" style="width:14px;height:14px;">
-        <span style="color:#fbd38d;font-weight:bold;">${c.numara}</span>- ${c.metin.substring(0, 40)}${c.metin.length > 40 ? '...' : ''}
+        <span style="color:#fbd38d;font-weight:bold;">${esc(String(c.numara))}</span>- ${esc(c.metin.substring(0, 40))}${c.metin.length > 40 ? '...' : ''}
       </label>`;
     });
     secimKutu.innerHTML = html;
@@ -2069,7 +2072,7 @@ async function rubrikFormuAc(sinavId, baslik) {
   // Başlık
   html += `<div style="text-align:center;margin-bottom:1.5rem;">
     <div style="font-size:0.75rem;color:#a0aec0;">DKM.FR.033 SINAV RUBRİK FORMU</div>
-    <h3 style="color:#e2e8f0;margin:0.25rem 0;">${veri.sinav.baslik}</h3>
+    <h3 style="color:#e2e8f0;margin:0.25rem 0;">${esc(veri.sinav.baslik)}</h3>
   </div>`;
 
   // Öğrenme Çıktıları
@@ -2077,7 +2080,7 @@ async function rubrikFormuAc(sinavId, baslik) {
     html += `<div style="margin-bottom:1.5rem;background:#1a202c;padding:1rem;border-radius:8px;border:1px solid #4a5568;">
       <h4 style="color:#fbd38d;margin:0 0 0.5rem;">Dersin Öğrenme Çıktıları</h4>`;
     veri.ciktilar.forEach(c => {
-      html += `<div style="color:#e2e8f0;font-size:0.85rem;margin-bottom:0.3rem;"><strong style="color:#fbd38d;">${c.numara}.</strong> ${c.metin}</div>`;
+      html += `<div style="color:#e2e8f0;font-size:0.85rem;margin-bottom:0.3rem;"><strong style="color:#fbd38d;">${esc(String(c.numara))}.</strong> ${esc(c.metin)}</div>`;
     });
     html += '</div>';
   }
@@ -2097,12 +2100,12 @@ async function rubrikFormuAc(sinavId, baslik) {
   veri.sorular.forEach((s, idx) => {
     toplamPuan += s.puan;
     const kazanimNo = s.ciktilar.length > 0 ? s.ciktilar.map(c => c.numara).join(', ') : '-';
-    const ciktiMetinleri = s.ciktilar.length > 0 ? s.ciktilar.map(c => c.metin).join('; ') : '-';
+    const ciktiMetinleri = s.ciktilar.length > 0 ? s.ciktilar.map(c => esc(c.metin)).join('; ') : '-';
     html += `<tr style="border:1px solid #4a5568;">
       <td style="padding:6px;border:1px solid #4a5568;text-align:center;font-weight:bold;">${idx + 1}</td>
-      <td style="padding:6px;border:1px solid #4a5568;text-align:center;">${tipEtiket[s.tip] || s.tip}</td>
+      <td style="padding:6px;border:1px solid #4a5568;text-align:center;">${tipEtiket[s.tip] || esc(s.tip)}</td>
       <td style="padding:6px;border:1px solid #4a5568;text-align:center;">${s.puan}</td>
-      <td style="padding:6px;border:1px solid #4a5568;text-align:center;color:#fbd38d;">${kazanimNo}</td>
+      <td style="padding:6px;border:1px solid #4a5568;text-align:center;color:#fbd38d;">${esc(String(kazanimNo))}</td>
       <td style="padding:6px;border:1px solid #4a5568;font-size:0.75rem;">${ciktiMetinleri}</td>
     </tr>`;
   });
