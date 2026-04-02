@@ -218,11 +218,12 @@ deb http://security.debian.org/debian-security bookworm-security main contrib no
         _run(["chroot", str(STUDENT_TEMPLATE), "apt-get", "-o", "Acquire::Check-Valid-Until=false", "-o", "Acquire::Check-Date=false", "update"], env=env)
         
         _run(["chroot", str(STUDENT_TEMPLATE), "apt-get", "install", "-y", 
-              "build-essential", "python3", "python3-pip", 
+              "build-essential", "python3", "python3-pip",
               "git", "curl", "wget", "vim", "nano", "sudo", "locales",
+              "login", "util-linux", "passwd",
               "dnsutils", "net-tools", "iputils-ping", "iproute2",
               "man-db", "tree", "zip", "unzip", "bzip2", "xz-utils", "tar", "gzip",
-              "htop", "psmisc", "acl", "gawk", "sed", "grep", "findutils", "lsof", 
+              "htop", "psmisc", "acl", "gawk", "sed", "grep", "findutils", "lsof",
               "openssh-client", "less", "file"], env=env)
     finally:
         log.info("🧹 Geçici filesystem'ler çözülüyor...")
