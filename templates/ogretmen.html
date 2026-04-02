@@ -352,13 +352,29 @@
         style="display:none; margin-top:1rem; padding:1rem; background:#2d3748; border-radius:8px; border:1px solid #4a5568;">
         <h4 style="color:#90cdf4; margin-top:0; margin-bottom:1rem;" id="aktif-sinav-baslik">Soru Yönetimi</h4>
         <input type="hidden" id="soru-sinav-id">
+
+        <!-- Soru Tipi Seçimi -->
+        <div style="margin-bottom:1rem;">
+          <label style="display:block;font-size:0.85rem;margin-bottom:4px;color:#a0aec0;">Soru Tipi:</label>
+          <select id="soru-tipi" onchange="soruTipiDegistir()"
+            style="padding:0.4rem;border-radius:6px;border:1px solid #4a5568;background:#1a202c;color:#fff;width:100%;">
+            <option value="cok_secmeli">Çoktan Seçmeli</option>
+            <option value="dogru_yanlis">Doğru / Yanlış</option>
+            <option value="bosluk_doldurma">Boşluk Doldurma</option>
+            <option value="acik_uclu">Açık Uçlu</option>
+          </select>
+        </div>
+
+        <!-- Soru Metni -->
         <div style="margin-bottom:1rem;">
           <label style="display:block;font-size:0.85rem;margin-bottom:4px;color:#a0aec0;">Soru Metni:</label>
           <textarea id="soru-metni" rows="3"
             style="width:100%;padding:0.5rem;border-radius:6px;border:1px solid #4a5568;background:#1a202c;color:#fff;resize:vertical;"
             placeholder="Soru metnini yazın..."></textarea>
         </div>
-        <div style="margin-bottom:1rem;">
+
+        <!-- Çoktan Seçmeli Seçenekler -->
+        <div id="secenekler-alani" style="margin-bottom:1rem;">
           <label style="display:block;font-size:0.85rem;margin-bottom:4px;color:#a0aec0;">Seçenekler (Doğru cevabın
             yanındaki kutuyu işaretleyin):</label>
           <div style="display:flex;align-items:center;gap:0.5rem;margin-bottom:0.5rem;">
@@ -382,6 +398,72 @@
               style="flex:1;padding:0.4rem;border-radius:6px;border:1px solid #4a5568;background:#1a202c;color:#fff;">
           </div>
         </div>
+
+        <!-- Doğru/Yanlış -->
+        <div id="dogru-yanlis-alani" style="display:none;margin-bottom:1rem;">
+          <label style="display:block;font-size:0.85rem;margin-bottom:4px;color:#a0aec0;">Doğru cevap:</label>
+          <div style="display:flex;gap:1.5rem;">
+            <label style="display:flex;align-items:center;gap:0.5rem;cursor:pointer;color:#e2e8f0;">
+              <input type="radio" name="dy_cevap" value="dogru" checked style="width:18px;height:18px;"> Doğru
+            </label>
+            <label style="display:flex;align-items:center;gap:0.5rem;cursor:pointer;color:#e2e8f0;">
+              <input type="radio" name="dy_cevap" value="yanlis" style="width:18px;height:18px;"> Yanlış
+            </label>
+          </div>
+        </div>
+
+        <!-- Boşluk Doldurma -->
+        <div id="bosluk-doldurma-alani" style="display:none;margin-bottom:1rem;">
+          <label style="display:block;font-size:0.85rem;margin-bottom:4px;color:#a0aec0;">Doğru Cevap (büyük/küçük harf duyarsız):</label>
+          <input type="text" id="dogru-cevap-metin" placeholder="Doğru cevabı yazın"
+            style="width:100%;padding:0.4rem;border-radius:6px;border:1px solid #4a5568;background:#1a202c;color:#fff;">
+        </div>
+
+        <!-- Açık Uçlu Bilgi -->
+        <div id="acik-uclu-alani" style="display:none;margin-bottom:1rem;">
+          <div style="background:#2b6cb0;padding:0.75rem;border-radius:6px;color:#bee3f8;font-size:0.85rem;">
+            Öğrenci serbest metin yazacak. Puanlama öğretmen tarafından manuel yapılır.
+          </div>
+        </div>
+
+        <!-- Rubrik Bilgileri -->
+        <div style="border-top:1px solid #4a5568;padding-top:1rem;margin-top:0.5rem;margin-bottom:1rem;">
+          <label style="display:block;font-size:0.85rem;margin-bottom:8px;color:#fbd38d;font-weight:bold;">Rubrik Bilgileri (DKM.FR.033)</label>
+          <div style="display:flex;gap:0.75rem;margin-bottom:0.75rem;">
+            <div style="flex:1;">
+              <label style="display:block;font-size:0.8rem;margin-bottom:3px;color:#a0aec0;">Bloom Taksonomisi:</label>
+              <select id="soru-bloom"
+                style="width:100%;padding:0.4rem;border-radius:6px;border:1px solid #4a5568;background:#1a202c;color:#fff;font-size:0.85rem;">
+                <option value="">Seçilmedi</option>
+                <option value="bilgi">1 - Bilgi (Hatırlama)</option>
+                <option value="kavrama">2 - Kavrama (Anlama)</option>
+                <option value="uygulama">3 - Uygulama</option>
+                <option value="analiz">4 - Analiz</option>
+                <option value="degerlendirme">5 - Değerlendirme</option>
+                <option value="yaratma">6 - Yaratma</option>
+              </select>
+            </div>
+            <div style="flex:1;">
+              <label style="display:block;font-size:0.8rem;margin-bottom:3px;color:#a0aec0;">Zorluk Düzeyi:</label>
+              <select id="soru-zorluk"
+                style="width:100%;padding:0.4rem;border-radius:6px;border:1px solid #4a5568;background:#1a202c;color:#fff;font-size:0.85rem;">
+                <option value="">Seçilmedi</option>
+                <option value="cok_kolay">Çok Kolay (1)</option>
+                <option value="kolay">Kolay (2)</option>
+                <option value="orta">Orta (3)</option>
+                <option value="zor">Zor (4)</option>
+                <option value="cok_zor">Çok Zor (5)</option>
+              </select>
+            </div>
+          </div>
+          <div>
+            <label style="display:block;font-size:0.8rem;margin-bottom:3px;color:#a0aec0;">Öğrenme Çıktıları (ilişkili olanları seçin):</label>
+            <div id="cikti-secim-listesi" style="display:flex;flex-wrap:wrap;gap:0.4rem;min-height:28px;">
+              <span style="color:#718096;font-size:0.8rem;">Önce öğrenme çıktısı ekleyin</span>
+            </div>
+          </div>
+        </div>
+
         <div style="text-align:right;">
           <button class="btn-kucuk" style="background:#718096;" onclick="soruEklemeKapat()">İptal</button>
           <button class="btn-kucuk yeşil" onclick="soruKaydet()">💾 Soruyu Ekle</button>
@@ -389,6 +471,29 @@
         <hr style="border-color:#4a5568;margin:1.5rem 0;">
         <h4 style="color:#e2e8f0;margin-top:0;">Mevcut Sorular: <span id="mevcut-soru-sayisi">0</span></h4>
         <div id="mevcut-sorular-listesi"></div>
+
+        <!-- Öğrenme Çıktıları Yönetimi -->
+        <hr style="border-color:#4a5568;margin:1.5rem 0;">
+        <h4 style="color:#fbd38d;margin-top:0;margin-bottom:0.75rem;">Dersin Öğrenme Çıktıları</h4>
+        <div style="display:flex;gap:0.5rem;margin-bottom:0.75rem;">
+          <input type="text" id="yeni-cikti-metin" placeholder="Örn: Dosya yönetim komutlarını bilir ve uygular"
+            style="flex:1;padding:0.4rem;border-radius:6px;border:1px solid #4a5568;background:#1a202c;color:#fff;font-size:0.85rem;">
+          <button class="btn-kucuk yeşil" onclick="ciktiEkle()" style="font-size:0.8rem;">+ Çıktı Ekle</button>
+        </div>
+        <div id="cikti-listesi-kutu" style="font-size:0.85rem;"></div>
+      </div>
+
+      <!-- Rubrik Formu Alanı -->
+      <div id="rubrik-formu-alani"
+        style="display:none; margin-top:1rem; padding:1rem; background:#2d3748; border-radius:8px; border:1px solid #4a5568;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;">
+          <h4 style="color:#fbd38d; margin:0;" id="rubrik-sinav-baslik">Rubrik Formu</h4>
+          <div style="display:flex;gap:0.5rem;">
+            <button class="btn-kucuk" style="background:#2b6cb0;" onclick="rubrikYazdir()">Yazdır</button>
+            <button class="btn-kucuk" onclick="document.getElementById('rubrik-formu-alani').style.display='none'">Kapat</button>
+          </div>
+        </div>
+        <div id="rubrik-formu-icerik"></div>
       </div>
 
       <!-- Sınav Sonuçları Alanı -->

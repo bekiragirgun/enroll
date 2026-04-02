@@ -204,26 +204,89 @@ async function aktifSinaviGetir(hedefContainer) {
 
     let html = '';
     veri.aktif_sinav.sorular.forEach((soru, i) => {
-      html += `<div class="sinav-soru" data-soru-id="${soru.id}" style="background:#2d3748; padding:1.5rem; border-radius:8px; margin-bottom:1.5rem; border:1px solid #4a5568;">
+      const tip = soru.tip || 'cok_secmeli';
+      html += `<div class="sinav-soru" data-soru-id="${soru.id}" data-tip="${tip}" style="background:#2d3748; padding:1.5rem; border-radius:8px; margin-bottom:1.5rem; border:1px solid #4a5568;">
                 <h3 style="margin-top:0; color:#e2e8f0; font-size:1.1rem; margin-bottom:1rem;">${i + 1}. ${soru.metin}</h3>
                 <div style="display:flex; flex-direction:column; gap:0.75rem;">`;
 
-      soru.secenekler.forEach(secenek => {
-        html += `
-                 <label style="display:flex; align-items:center; gap:0.5rem; cursor:pointer; background:#1a202c; padding:0.75rem; border-radius:6px; border:1px solid #4a5568; transition:all 0.2s;">
+      if (tip === 'cok_secmeli' || tip === 'dogru_yanlis') {
+        soru.secenekler.forEach(secenek => {
+          html += `<label style="display:flex; align-items:center; gap:0.5rem; cursor:pointer; background:#1a202c; padding:0.75rem; border-radius:6px; border:1px solid #4a5568; transition:all 0.2s;">
                     <input type="radio" name="soru_${soru.id}" value="${secenek.id}" style="width:18px;height:18px;">
                     <span style="font-size:1rem;">${secenek.metin}</span>
-                 </label>
-               `;
-      });
+                 </label>`;
+        });
+      } else if (tip === 'bosluk_doldurma') {
+        html += `<input type="text" name="soru_metin_${soru.id}" placeholder="Cevabınızı yazın..."
+                   style="width:100%;padding:0.75rem;border-radius:6px;border:1px solid #4a5568;background:#1a202c;color:#fff;font-size:1rem;">`;
+      } else if (tip === 'acik_uclu') {
+        html += `<textarea name="soru_metin_${soru.id}" rows="4" placeholder="Cevabınızı yazın..."
+                   style="width:100%;padding:0.75rem;border-radius:6px;border:1px solid #4a5568;background:#1a202c;color:#fff;font-size:1rem;resize:vertical;"></textarea>`;
+      }
+
       html += `</div></div>`;
     });
 
     alan.innerHTML = html;
 
+    // localStorage'dan önceki cevapları geri yükle
+    _sinavCevaplariYukle(mevcutSinavId);
+    // Her değişiklikte otomatik kaydet
+    _sinavCevapDinleyicileriKur(mevcutSinavId);
+
   } catch (e) {
     console.error("Sınav çekilemedi", e);
   }
+}
+
+function _sinavCevaplariKaydet(sinavId) {
+  const cevaplar = {};
+  document.querySelectorAll('.sinav-soru').forEach(div => {
+    const soruId = div.dataset.soruId;
+    const tip = div.dataset.tip || 'cok_secmeli';
+    if (tip === 'cok_secmeli' || tip === 'dogru_yanlis') {
+      const secili = document.querySelector(`input[name="soru_${soruId}"]:checked`);
+      if (secili) cevaplar[soruId] = { tip: 'radio', val: secili.value };
+    } else if (tip === 'bosluk_doldurma') {
+      const input = document.querySelector(`input[name="soru_metin_${soruId}"]`);
+      if (input) cevaplar[soruId] = { tip: 'text', val: input.value };
+    } else if (tip === 'acik_uclu') {
+      const ta = document.querySelector(`textarea[name="soru_metin_${soruId}"]`);
+      if (ta) cevaplar[soruId] = { tip: 'textarea', val: ta.value };
+    }
+  });
+  try { localStorage.setItem(`sinav_cevap_${sinavId}`, JSON.stringify(cevaplar)); } catch(e) {}
+}
+
+function _sinavCevaplariYukle(sinavId) {
+  try {
+    const kayitli = localStorage.getItem(`sinav_cevap_${sinavId}`);
+    if (!kayitli) return;
+    const cevaplar = JSON.parse(kayitli);
+    Object.entries(cevaplar).forEach(([soruId, data]) => {
+      if (data.tip === 'radio') {
+        const radio = document.querySelector(`input[name="soru_${soruId}"][value="${data.val}"]`);
+        if (radio) radio.checked = true;
+      } else if (data.tip === 'text') {
+        const input = document.querySelector(`input[name="soru_metin_${soruId}"]`);
+        if (input) input.value = data.val;
+      } else if (data.tip === 'textarea') {
+        const ta = document.querySelector(`textarea[name="soru_metin_${soruId}"]`);
+        if (ta) ta.value = data.val;
+      }
+    });
+  } catch(e) {}
+}
+
+function _sinavCevapDinleyicileriKur(sinavId) {
+  // Radio ve checkbox değişiklikleri
+  document.querySelectorAll('.sinav-soru input[type="radio"]').forEach(r => {
+    r.addEventListener('change', () => _sinavCevaplariKaydet(sinavId));
+  });
+  // Text input değişiklikleri
+  document.querySelectorAll('.sinav-soru input[type="text"], .sinav-soru textarea').forEach(el => {
+    el.addEventListener('input', () => _sinavCevaplariKaydet(sinavId));
+  });
 }
 
 async function sinavCevaplariniGonder() {
@@ -235,19 +298,30 @@ async function sinavCevaplariniGonder() {
 
   sorular.forEach(soruDiv => {
     const soruId = soruDiv.dataset.soruId;
-    const secili = document.querySelector(`input[name="soru_${soruId}"]:checked`);
-    if (secili) {
-      cevaplar.push({
-        soru_id: parseInt(soruId),
-        secenek_id: parseInt(secili.value)
-      });
-    } else {
-      eksikVar = true;
+    const tip = soruDiv.dataset.tip || 'cok_secmeli';
+
+    if (tip === 'cok_secmeli' || tip === 'dogru_yanlis') {
+      const secili = document.querySelector(`input[name="soru_${soruId}"]:checked`);
+      if (secili) {
+        cevaplar.push({ soru_id: parseInt(soruId), secenek_id: parseInt(secili.value) });
+      } else {
+        eksikVar = true;
+      }
+    } else if (tip === 'bosluk_doldurma') {
+      const input = document.querySelector(`input[name="soru_metin_${soruId}"]`);
+      const metin = input ? input.value.trim() : '';
+      if (!metin) { eksikVar = true; }
+      else { cevaplar.push({ soru_id: parseInt(soruId), metin_cevap: metin }); }
+    } else if (tip === 'acik_uclu') {
+      const textarea = document.querySelector(`textarea[name="soru_metin_${soruId}"]`);
+      const metin = textarea ? textarea.value.trim() : '';
+      if (!metin) { eksikVar = true; }
+      else { cevaplar.push({ soru_id: parseInt(soruId), metin_cevap: metin }); }
     }
   });
 
   if (eksikVar) {
-    alert("Lütfen tüm soruları işaretlediğinizden emin olun.");
+    alert("Lütfen tüm soruları cevaplayın.");
     return;
   }
 
@@ -262,6 +336,9 @@ async function sinavCevaplariniGonder() {
     });
 
     if (yanit.ok) {
+      // Başarılı gönderimde localStorage'ı temizle
+      try { localStorage.removeItem(`sinav_cevap_${mevcutSinavId}`); } catch(e) {}
+
       // Normal mod elementleri
       const sorularAlani = document.getElementById('ogrenci-sorular-alani');
       const gonderBtn = document.getElementById('btn-sinav-gonder');
@@ -349,12 +426,151 @@ async function durumKontrol() {
 }
 
 // Tam ekran değişimini izle (Kaldıysa veya ESC ile çıkıldıysa)
+let _ihlalPollingInterval = null;
+
 document.addEventListener('fullscreenchange', () => {
   if (!document.fullscreenElement && suAnkiDurum.mod !== 'bekleme') {
-    // Tam ekrandan çıkıldı ve ders aktif, overlay göster
+    // Sınav modunda tam ekrandan çıkış = ihlal
+    if (suAnkiDurum.mod === 'sinav' && mevcutSinavId) {
+      _sinavIhlalBaslat();
+      return;
+    }
+    // Normal modlarda overlay göster
     modalGoster(suAnkiDurum.mod, suAnkiDurum);
   }
 });
+
+async function _sinavIhlalBaslat() {
+  // 1. Mevcut cevapları taslak olarak sunucuya kaydet
+  const cevaplar = _mevcutCevaplariTopla();
+  try {
+    await fetch('/api/sinav/taslak_kaydet', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ sinav_id: mevcutSinavId, cevaplar: cevaplar })
+    });
+  } catch(e) {}
+
+  // 2. Otomatik ihlal bildirimi gönder
+  try {
+    await fetch('/api/sinav/ihlal_bildir', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ sinav_id: mevcutSinavId, aciklama: '' })
+    });
+  } catch(e) {}
+
+  // 3. Sınav ekranını kilitle ve ihlal ekranını göster
+  _sinavIhlalEkraniGoster();
+}
+
+function _mevcutCevaplariTopla() {
+  const cevaplar = [];
+  document.querySelectorAll('.sinav-soru').forEach(div => {
+    const soruId = div.dataset.soruId;
+    const tip = div.dataset.tip || 'cok_secmeli';
+    if (tip === 'cok_secmeli' || tip === 'dogru_yanlis') {
+      const secili = document.querySelector('input[name="soru_' + soruId + '"]:checked');
+      if (secili) cevaplar.push({ soru_id: parseInt(soruId), secenek_id: parseInt(secili.value) });
+    } else if (tip === 'bosluk_doldurma') {
+      const input = document.querySelector('input[name="soru_metin_' + soruId + '"]');
+      if (input && input.value.trim()) cevaplar.push({ soru_id: parseInt(soruId), metin_cevap: input.value.trim() });
+    } else if (tip === 'acik_uclu') {
+      const ta = document.querySelector('textarea[name="soru_metin_' + soruId + '"]');
+      if (ta && ta.value.trim()) cevaplar.push({ soru_id: parseInt(soruId), metin_cevap: ta.value.trim() });
+    }
+  });
+  return cevaplar;
+}
+
+function _sinavIhlalEkraniGoster() {
+  // Tüm sınav ekranlarını gizle
+  var sinav = document.getElementById('sinav-ekrani');
+  var sinavSplit = document.getElementById('sinav-split-ekrani');
+  if (sinav) sinav.style.display = 'none';
+  if (sinavSplit) sinavSplit.style.display = 'none';
+
+  // İhlal ekranı oluştur (yoksa)
+  var ihlalEkrani = document.getElementById('sinav-ihlal-ekrani');
+  if (!ihlalEkrani) {
+    ihlalEkrani = document.createElement('div');
+    ihlalEkrani.id = 'sinav-ihlal-ekrani';
+    ihlalEkrani.style.cssText = 'display:flex;flex-direction:column;align-items:center;justify-content:center;width:100%;height:100%;background:#1a202c;color:#e2e8f0;padding:2rem;text-align:center;';
+    document.body.appendChild(ihlalEkrani);
+  }
+
+  ihlalEkrani.style.display = 'flex';
+  ihlalEkrani.innerHTML = '<div style="max-width:500px;">' +
+    '<div style="font-size:4rem;margin-bottom:1rem;">⚠️</div>' +
+    '<h2 style="color:#fc8181;margin:0 0 0.5rem;">Sınavınız Durduruldu</h2>' +
+    '<p style="color:#a0aec0;margin-bottom:1.5rem;">Tam ekrandan çıktığınız tespit edildi. Cevaplarınız kaydedildi.</p>' +
+    '<p style="color:#a0aec0;font-size:0.9rem;margin-bottom:1rem;">Öğretmeninize otomatik bildirim gönderildi.</p>' +
+    '<textarea id="ihlal-aciklama" rows="3" placeholder="Açıklama yazın (ör: Yanlışlıkla ESC tuşuna bastım)" ' +
+      'style="width:100%;padding:0.75rem;border-radius:8px;border:1px solid #4a5568;background:#2d3748;color:#fff;font-size:0.95rem;resize:vertical;margin-bottom:1rem;"></textarea>' +
+    '<button onclick="_ihlalAciklamaGonder()" style="background:#d69e2e;color:#fff;border:none;padding:12px 28px;border-radius:8px;font-weight:bold;cursor:pointer;font-size:1rem;width:100%;margin-bottom:0.75rem;">Açıklamayı Gönder</button>' +
+    '<div id="ihlal-bekleme-mesaji" style="display:none;color:#fbd38d;font-size:0.9rem;margin-top:0.5rem;"></div>' +
+    '</div>';
+
+  // Polling başlat
+  _ihlalPollingBaslat();
+}
+
+async function _ihlalAciklamaGonder() {
+  var textarea = document.getElementById('ihlal-aciklama');
+  var aciklama = textarea ? textarea.value.trim() : '';
+
+  try {
+    await fetch('/api/sinav/ihlal_bildir', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ sinav_id: mevcutSinavId, aciklama: aciklama })
+    });
+  } catch(e) {}
+
+  var mesaj = document.getElementById('ihlal-bekleme-mesaji');
+  if (mesaj) {
+    mesaj.style.display = 'block';
+    mesaj.textContent = '⏳ Öğretmeniniz bilgilendirildi. Onay bekleniyor...';
+  }
+  if (textarea) textarea.disabled = true;
+}
+
+function _ihlalPollingBaslat() {
+  if (_ihlalPollingInterval) clearInterval(_ihlalPollingInterval);
+  _ihlalPollingInterval = setInterval(async function() {
+    try {
+      var yanit = await fetch('/api/sinav/ihlal_durum?sinav_id=' + mevcutSinavId);
+      var veri = await yanit.json();
+
+      if (veri.durum === 'onaylandi') {
+        clearInterval(_ihlalPollingInterval);
+        _ihlalPollingInterval = null;
+        // Öğrenci sınava geri dönüyor
+        var ihlalEkrani = document.getElementById('sinav-ihlal-ekrani');
+        if (ihlalEkrani) ihlalEkrani.style.display = 'none';
+        // Tam ekrana geri dön ve sınavı yeniden yükle
+        document.documentElement.requestFullscreen().then(function() {
+          modalGoster('sinav', suAnkiDurum);
+        }).catch(function() {
+          modalGoster('sinav', suAnkiDurum);
+        });
+      } else if (veri.durum === 'reddedildi') {
+        clearInterval(_ihlalPollingInterval);
+        _ihlalPollingInterval = null;
+        // Sınav kesinleşti
+        var ihlalEkrani = document.getElementById('sinav-ihlal-ekrani');
+        if (ihlalEkrani) {
+          ihlalEkrani.innerHTML = '<div style="max-width:500px;">' +
+            '<div style="font-size:4rem;margin-bottom:1rem;">🚫</div>' +
+            '<h2 style="color:#fc8181;margin:0 0 0.5rem;">Sınavınız Sonlandırıldı</h2>' +
+            '<p style="color:#a0aec0;">O ana kadar verdiğiniz cevaplar kaydedildi. Öğretmeniniz sonucu açıklayacaktır.</p>' +
+            '</div>';
+        }
+        try { localStorage.removeItem('sinav_cevap_' + mevcutSinavId); } catch(e) {}
+      }
+    } catch(e) {}
+  }, 2000);
+}
 
 // ── Devam Bilgisi ──────────────────────────────────────────────
 async function devamBilgisiCek() {
@@ -543,19 +759,30 @@ function _sinavSplitRender(container, veri) {
   }
 
   sinav.sorular.forEach(function(soru, i) {
-    html += `<div class="sinav-soru" data-soru-id="${soru.id}" style="background:#2d3748;padding:1rem;border-radius:8px;margin-bottom:1rem;border:1px solid #4a5568;">
+    var tip = soru.tip || 'cok_secmeli';
+    html += `<div class="sinav-soru" data-soru-id="${soru.id}" data-tip="${tip}" style="background:#2d3748;padding:1rem;border-radius:8px;margin-bottom:1rem;border:1px solid #4a5568;">
       <h3 style="margin:0 0 0.75rem;color:#e2e8f0;font-size:1rem;">${i+1}. ${soru.metin}</h3>
       <div style="display:flex;flex-direction:column;gap:0.5rem;">`;
-    soru.secenekler.forEach(function(s) {
-      html += `<label style="display:flex;align-items:center;gap:0.5rem;cursor:pointer;background:#1a202c;padding:0.6rem;border-radius:6px;border:1px solid #4a5568;font-size:0.9rem;">
-        <input type="radio" name="soru_${soru.id}" value="${s.id}" style="width:16px;height:16px;"> ${s.metin}
-      </label>`;
-    });
+    if (tip === 'cok_secmeli' || tip === 'dogru_yanlis') {
+      soru.secenekler.forEach(function(s) {
+        html += `<label style="display:flex;align-items:center;gap:0.5rem;cursor:pointer;background:#1a202c;padding:0.6rem;border-radius:6px;border:1px solid #4a5568;font-size:0.9rem;">
+          <input type="radio" name="soru_${soru.id}" value="${s.id}" style="width:16px;height:16px;"> ${s.metin}
+        </label>`;
+      });
+    } else if (tip === 'bosluk_doldurma') {
+      html += `<input type="text" name="soru_metin_${soru.id}" placeholder="Cevabınızı yazın..." style="width:100%;padding:0.6rem;border-radius:6px;border:1px solid #4a5568;background:#1a202c;color:#fff;font-size:0.9rem;">`;
+    } else if (tip === 'acik_uclu') {
+      html += `<textarea name="soru_metin_${soru.id}" rows="3" placeholder="Cevabınızı yazın..." style="width:100%;padding:0.6rem;border-radius:6px;border:1px solid #4a5568;background:#1a202c;color:#fff;font-size:0.9rem;resize:vertical;"></textarea>`;
+    }
     html += `</div></div>`;
   });
 
   html += `<button onclick="sinavCevaplariniGonder()" style="width:100%;background:#2b6cb0;color:white;border:none;padding:12px;border-radius:8px;font-weight:bold;cursor:pointer;font-size:1rem;margin-top:0.5rem;">Cevapları Gönder</button>`;
   container.innerHTML = html;
+
+  // Split modda da localStorage desteği
+  _sinavCevaplariYukle(mevcutSinavId);
+  _sinavCevapDinleyicileriKur(mevcutSinavId);
 }
 
 // ── Sınav Sonrası SEB Çıkışı (cikis_izni'nden bağımsız) ────

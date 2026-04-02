@@ -89,6 +89,23 @@ class DBWrapper:
             self.conn.commit()
         self.conn.close()
 
+def _kolon_ekle(cursor, db_type, tablo, kolon, tip_default):
+    """Kolon yoksa ekle — PostgreSQL ve SQLite uyumlu."""
+    if db_type == 'postgres':
+        cursor.execute(
+            "SELECT 1 FROM information_schema.columns WHERE table_name=%s AND column_name=%s",
+            (tablo, kolon)
+        )
+        if not cursor.fetchone():
+            cursor.execute(f"ALTER TABLE {tablo} ADD COLUMN {kolon} {tip_default}")
+    else:
+        # SQLite: PRAGMA ile kontrol
+        cursor.execute(f"PRAGMA table_info({tablo})")
+        kolonlar = [row[1] for row in cursor.fetchall()]
+        if kolon not in kolonlar:
+            cursor.execute(f"ALTER TABLE {tablo} ADD COLUMN {kolon} {tip_default}")
+
+
 def db_olustur():
     db_type = os.environ.get('DB_TYPE', 'sqlite').lower()
     
@@ -205,6 +222,40 @@ def db_olustur():
                 cevap_zamani TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         """)
+
+        cursor.execute(f"""
+            CREATE TABLE IF NOT EXISTS ogrenme_ciktilari (
+                id {id_type},
+                sinav_id INTEGER NOT NULL,
+                numara INTEGER NOT NULL,
+                metin TEXT NOT NULL
+            )
+        """)
+
+        cursor.execute(f"""
+            CREATE TABLE IF NOT EXISTS soru_cikti_iliskisi (
+                id {id_type},
+                soru_id INTEGER NOT NULL,
+                cikti_id INTEGER NOT NULL
+            )
+        """)
+
+        cursor.execute(f"""
+            CREATE TABLE IF NOT EXISTS sinav_ihlaller (
+                id {id_type},
+                sinav_id INTEGER NOT NULL,
+                ogrenci_numara TEXT NOT NULL,
+                sebep TEXT NOT NULL DEFAULT 'fullscreen_exit',
+                aciklama TEXT DEFAULT '',
+                zaman TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                durum TEXT NOT NULL DEFAULT 'beklemede'
+            )
+        """)
+
+        # Mevcut tablolara yeni kolonlar (ALTER — yoksa ekle, varsa atla)
+        _kolon_ekle(cursor, db_type, 'sorular', 'bloom_seviyesi', "TEXT DEFAULT ''")
+        _kolon_ekle(cursor, db_type, 'sorular', 'zorluk', "TEXT DEFAULT ''")
+        _kolon_ekle(cursor, db_type, 'ogrenci_cevaplari', 'taslak', "INTEGER DEFAULT 0")
 
         cursor.execute(f"""
             CREATE TABLE IF NOT EXISTS seb_cikis_log (
@@ -337,52 +388,93 @@ def test_verilerini_yukle(count=30):
         _log.info(f"📊 {count} test öğrencisi başarıyla yüklendi.")
 
         # 4. Test Sınavı Oluştur
-        cursor.execute("INSERT INTO sinavlar (baslik, aktif, olusturma_tarihi) VALUES (?, ?, ?)", 
-                       ("Python Temelleri Test Sınavı", 1, tarih))
+        cursor.execute("INSERT INTO sinavlar (baslik, aktif, olusturma_tarihi) VALUES (?, ?, ?)",
+                       ("İşletim Sistemleri Quiz", 1, tarih))
         sinav_id = cursor.lastrowid
 
-        # 5. 5 Tane Soru Ekle
-        sorular = [
-            ("Python'da ekrana yazı yazdırmak için hangi fonksiyon kullanılır?", 20),
-            ("Hangi veri tipi tam sayıları ifade eder?", 20),
-            ("Listeye eleman eklemek için hangi metod kullanılır?", 20),
-            ("Python dosya uzantısı nedir?", 20),
-            ("Hangisi bir döngü tipidir?", 20)
+        # 5. Öğrenme Çıktıları
+        ciktilar = [
+            "Dosya yönetim komutlarını bilir ve uygular",
+            "Dizin oluşturma ve yönetmeyi bilir",
+            "Arşivleme araçlarını (tar, zip, gzip) bilir ve uygular",
         ]
-        
-        secenek_kumeleri = [
-            [("print()", 1), ("output()", 0), ("echo", 0), ("write()", 0)],
-            [("int", 1), ("str", 0), ("float", 0), ("bool", 0)],
-            [("append()", 1), ("add()", 0), ("insert_last()", 0), ("push()", 0)],
-            [(".py", 1), (".python", 0), (".txt", 0), (".exe", 0)],
-            [("for", 1), ("if", 0), ("def", 0), ("class", 0)]
-        ]
+        cikti_idler = []
+        for i, metin in enumerate(ciktilar, 1):
+            cursor.execute("INSERT INTO ogrenme_ciktilari (sinav_id, numara, metin) VALUES (?, ?, ?)",
+                           (sinav_id, i, metin))
+            cikti_idler.append(cursor.lastrowid)
 
+        # 6. Farklı tipte sorular (bloom + zorluk + çıktı ilişkisi)
         import random
-        for i, (soru_metni, puan) in enumerate(sorular):
-            cursor.execute("INSERT INTO sorular (sinav_id, metin, puan) VALUES (?, ?, ?)", 
-                           (sinav_id, soru_metni, puan))
-            soru_id = cursor.lastrowid
-            
-            eklenen_secenekler = []
-            for sec_metin, dogru_mu in secenek_kumeleri[i]:
-                cursor.execute("INSERT INTO secenekler (soru_id, metin, dogru_mu) VALUES (?, ?, ?)", 
-                               (soru_id, sec_metin, dogru_mu))
-                eklenen_secenekler.append((cursor.lastrowid, dogru_mu))
 
-            # 6. Öğrenci Cevaplarını Simüle Et
-            for j in range(1, count + 1):
-                numara = f"test{j}"
-                # Rastgele bir seçenek seç (öğrencilerin bir kısmı doğru bilsin)
-                secilen_id, dogru_mu = random.choice(eklenen_secenekler)
-                ogr_puan = puan if dogru_mu else 0
-                
-                cursor.execute("""
-                    INSERT INTO ogrenci_cevaplari (sinav_id, ogrenci_numara, soru_id, verilen_cevap, puan)
-                    VALUES (?, ?, ?, ?, ?)
-                """, (sinav_id, numara, soru_id, str(secilen_id), ogr_puan))
-        
+        # Soru 1: Çoktan seçmeli
+        cursor.execute("INSERT INTO sorular (sinav_id, metin, tip, puan, bloom_seviyesi, zorluk) VALUES (?, ?, ?, ?, ?, ?)",
+                       (sinav_id, "cp komutu ne işe yarar?", "cok_secmeli", 20, "bilgi", "kolay"))
+        s1 = cursor.lastrowid
+        s1_secenekler = []
+        for metin, dogru in [("Dosya kopyalar", 1), ("Dosya siler", 0), ("Dosya taşır", 0), ("Klasör listeler", 0)]:
+            cursor.execute("INSERT INTO secenekler (soru_id, metin, dogru_mu) VALUES (?, ?, ?)", (s1, metin, dogru))
+            s1_secenekler.append((cursor.lastrowid, dogru))
+        cursor.execute("INSERT INTO soru_cikti_iliskisi (soru_id, cikti_id) VALUES (?, ?)", (s1, cikti_idler[0]))
+
+        # Soru 2: Çoktan seçmeli
+        cursor.execute("INSERT INTO sorular (sinav_id, metin, tip, puan, bloom_seviyesi, zorluk) VALUES (?, ?, ?, ?, ?, ?)",
+                       (sinav_id, "Hangi komut dizin oluşturur?", "cok_secmeli", 20, "kavrama", "kolay"))
+        s2 = cursor.lastrowid
+        s2_secenekler = []
+        for metin, dogru in [("mkdir", 1), ("touch", 0), ("rmdir", 0), ("ls", 0)]:
+            cursor.execute("INSERT INTO secenekler (soru_id, metin, dogru_mu) VALUES (?, ?, ?)", (s2, metin, dogru))
+            s2_secenekler.append((cursor.lastrowid, dogru))
+        cursor.execute("INSERT INTO soru_cikti_iliskisi (soru_id, cikti_id) VALUES (?, ?)", (s2, cikti_idler[1]))
+
+        # Soru 3: Doğru/Yanlış
+        cursor.execute("INSERT INTO sorular (sinav_id, metin, tip, puan, bloom_seviyesi, zorluk) VALUES (?, ?, ?, ?, ?, ?)",
+                       (sinav_id, "tar komutu dosyaları arşivlemek için kullanılır", "dogru_yanlis", 10, "bilgi", "cok_kolay"))
+        s3 = cursor.lastrowid
+        cursor.execute("INSERT INTO secenekler (soru_id, metin, dogru_mu) VALUES (?, 'Doğru', 1)", (s3,))
+        s3_dogru_id = cursor.lastrowid
+        cursor.execute("INSERT INTO secenekler (soru_id, metin, dogru_mu) VALUES (?, 'Yanlış', 0)", (s3,))
+        s3_yanlis_id = cursor.lastrowid
+        cursor.execute("INSERT INTO soru_cikti_iliskisi (soru_id, cikti_id) VALUES (?, ?)", (s3, cikti_idler[2]))
+
+        # Soru 4: Boşluk doldurma
+        cursor.execute("INSERT INTO sorular (sinav_id, metin, tip, puan, bloom_seviyesi, zorluk) VALUES (?, ?, ?, ?, ?, ?)",
+                       (sinav_id, "Dosya silmek için kullanılan komut: ___", "bosluk_doldurma", 25, "uygulama", "orta"))
+        s4 = cursor.lastrowid
+        cursor.execute("INSERT INTO secenekler (soru_id, metin, dogru_mu) VALUES (?, 'rm', 1)", (s4,))
+        for cid in [cikti_idler[0], cikti_idler[1]]:
+            cursor.execute("INSERT INTO soru_cikti_iliskisi (soru_id, cikti_id) VALUES (?, ?)", (s4, cid))
+
+        # Soru 5: Açık uçlu
+        cursor.execute("INSERT INTO sorular (sinav_id, metin, tip, puan, bloom_seviyesi, zorluk) VALUES (?, ?, ?, ?, ?, ?)",
+                       (sinav_id, "Linux dosya sistemi hiyerarşisini kısaca açıklayın", "acik_uclu", 25, "analiz", "zor"))
+        s5 = cursor.lastrowid
+        cursor.execute("INSERT INTO soru_cikti_iliskisi (soru_id, cikti_id) VALUES (?, ?)", (s5, cikti_idler[0]))
+
+        # 7. Öğrenci Cevaplarını Simüle Et (sadece çoktan seçmeli + D/Y için)
+        for j in range(1, count + 1):
+            numara = f"test{j}"
+            # S1: çoktan seçmeli
+            sec_id, dogru = random.choice(s1_secenekler)
+            cursor.execute("INSERT INTO ogrenci_cevaplari (sinav_id, ogrenci_numara, soru_id, verilen_cevap, puan) VALUES (?, ?, ?, ?, ?)",
+                           (sinav_id, numara, s1, str(sec_id), 20 if dogru else 0))
+            # S2: çoktan seçmeli
+            sec_id, dogru = random.choice(s2_secenekler)
+            cursor.execute("INSERT INTO ogrenci_cevaplari (sinav_id, ogrenci_numara, soru_id, verilen_cevap, puan) VALUES (?, ?, ?, ?, ?)",
+                           (sinav_id, numara, s2, str(sec_id), 20 if dogru else 0))
+            # S3: doğru/yanlış
+            sec_id = random.choice([s3_dogru_id, s3_yanlis_id])
+            cursor.execute("INSERT INTO ogrenci_cevaplari (sinav_id, ogrenci_numara, soru_id, verilen_cevap, puan) VALUES (?, ?, ?, ?, ?)",
+                           (sinav_id, numara, s3, str(sec_id), 10 if sec_id == s3_dogru_id else 0))
+            # S4: boşluk doldurma
+            cevap = random.choice(["rm", "rm", "rm", "delete", "del"])
+            cursor.execute("INSERT INTO ogrenci_cevaplari (sinav_id, ogrenci_numara, soru_id, verilen_cevap, puan) VALUES (?, ?, ?, ?, ?)",
+                           (sinav_id, numara, s4, cevap, 25 if cevap.lower() == "rm" else 0))
+            # S5: açık uçlu (puan=0, öğretmen değerlendirecek)
+            cursor.execute("INSERT INTO ogrenci_cevaplari (sinav_id, ogrenci_numara, soru_id, verilen_cevap, puan) VALUES (?, ?, ?, ?, ?)",
+                           (sinav_id, numara, s5, "/ kök dizin, /home kullanıcılar, /etc ayarlar...", 0))
+
         conn.commit()
-        _log.info("📝 Test sınavı ve 30 öğrencinin cevapları simüle edildi.")
+        _log.info("📝 Test sınavı (5 tip soru + rubrik) ve öğrenci cevapları simüle edildi.")
 
 

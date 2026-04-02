@@ -1502,6 +1502,7 @@ document.addEventListener('DOMContentLoaded', () => {
   setInterval(yoklamaCek, YOKLAMA_ARALIK);
   setInterval(sahteCek, 30_000);   // 30 saniyede bir kontrol
   setInterval(yardimTalepleriCek, 5000); // 5 saniyede bir kontrol
+  setInterval(sinavIhlalKontrol, 3000); // 3 saniyede bir ihlal kontrol
 });
 
 // ── Sınav / Quiz Yönetimi ──
@@ -1535,6 +1536,7 @@ async function sinavListesiniGuncelle() {
           <td style="padding:0.5rem;">${durumBadge}</td>
           <td style="padding:0.5rem;text-align:right;">
              <button class="btn-kucuk" style="background:#3182ce;" onclick="soruYonetiminiAc(${s.id}, '${s.baslik}')">📝 Sorular</button>
+             <button class="btn-kucuk" style="background:#d69e2e;" onclick="rubrikFormuAc(${s.id}, '${s.baslik}')">📋 Rubrik</button>
              <button class="btn-kucuk yeşil" onclick="sinavSonuclariniAc(${s.id}, '${s.baslik}')">📊 Sonuçlar</button>
              <button class="btn-kucuk" style="background:${s.aktif ? '#e53e3e' : '#48bb78'};" onclick="sinavDurumDegistir(${s.id}, ${!s.aktif})">
                 ${s.aktif ? '⏹ Yayını Durdur' : '▶ Sınavı Başlat'}
@@ -1626,15 +1628,27 @@ async function sinavDurumDegistir(id, aktifYap) {
 async function soruYonetiminiAc(sinavId, baslik) {
   document.getElementById('soru-yonetimi-alani').style.display = 'block';
   document.getElementById('sinav-sonuclari-alani').style.display = 'none';
+  document.getElementById('rubrik-formu-alani').style.display = 'none';
   document.getElementById('aktif-sinav-baslik').innerText = `Soru Yönetimi: ${baslik}`;
   document.getElementById('soru-sinav-id').value = sinavId;
-
-  // Mevcut soruları çek
+  document.getElementById('soru-tipi').value = 'cok_secmeli';
+  document.getElementById('soru-bloom').value = '';
+  document.getElementById('soru-zorluk').value = '';
+  soruTipiDegistir();
   mevcutSorulariGetir(sinavId);
+  ciktiListesiniGuncelle(sinavId);
 }
 
 function soruEklemeKapat() {
   document.getElementById('soru-yonetimi-alani').style.display = 'none';
+}
+
+function soruTipiDegistir() {
+  const tip = document.getElementById('soru-tipi').value;
+  document.getElementById('secenekler-alani').style.display = tip === 'cok_secmeli' ? 'block' : 'none';
+  document.getElementById('dogru-yanlis-alani').style.display = tip === 'dogru_yanlis' ? 'block' : 'none';
+  document.getElementById('bosluk-doldurma-alani').style.display = tip === 'bosluk_doldurma' ? 'block' : 'none';
+  document.getElementById('acik-uclu-alani').style.display = tip === 'acik_uclu' ? 'block' : 'none';
 }
 
 async function mevcutSorulariGetir(sinavId) {
@@ -1649,16 +1663,36 @@ async function mevcutSorulariGetir(sinavId) {
     return;
   }
 
+  const tipEtiket = { cok_secmeli: '📋 Çoktan Seçmeli', dogru_yanlis: '✔️ Doğru/Yanlış', bosluk_doldurma: '✏️ Boşluk Doldurma', acik_uclu: '📝 Açık Uçlu' };
+  const tipRenk = { cok_secmeli: '#90cdf4', dogru_yanlis: '#fbd38d', bosluk_doldurma: '#9ae6b4', acik_uclu: '#d6bcfa' };
+
   let html = '';
   veri.sorular.forEach((s, idx) => {
+    const badge = `<span style="background:${tipRenk[s.tip] || '#718096'};color:#1a202c;padding:1px 8px;border-radius:10px;font-size:0.7rem;font-weight:bold;margin-left:0.5rem;">${tipEtiket[s.tip] || s.tip}</span>`;
     html += `<div style="background:#1a202c; padding:1rem; border-radius:6px; margin-bottom:1rem; border:1px solid #4a5568;">
-          <div style="font-weight:bold; color:#e2e8f0; margin-bottom:0.5rem;">Soru ${idx + 1}: ${s.metin} <span style="color:#a0aec0;font-size:0.8rem;font-weight:normal;">(${s.puan} Puan)</span></div>`;
+          <div style="font-weight:bold; color:#e2e8f0; margin-bottom:0.5rem;">Soru ${idx + 1}: ${s.metin} ${badge} <span style="color:#a0aec0;font-size:0.8rem;font-weight:normal;">(${s.puan} Puan)</span></div>`;
 
-    s.secenekler.forEach((sec, sIdx) => {
-      const isCorrect = sec.dogru_mu ? '✅' : '❌';
-      const color = sec.dogru_mu ? '#48bb78' : '#a0aec0';
-      html += `<div style="color:${color}; font-size:0.9rem; margin-left:1rem; margin-bottom:0.25rem;">${String.fromCharCode(65 + sIdx)}) ${sec.metin} ${sec.dogru_mu ? '(Doğru Cevap)' : ''}</div>`;
-    });
+    if (s.tip === 'cok_secmeli' || s.tip === 'dogru_yanlis') {
+      s.secenekler.forEach((sec, sIdx) => {
+        const color = sec.dogru_mu ? '#48bb78' : '#a0aec0';
+        html += `<div style="color:${color}; font-size:0.9rem; margin-left:1rem; margin-bottom:0.25rem;">${String.fromCharCode(65 + sIdx)}) ${sec.metin} ${sec.dogru_mu ? '(Doğru Cevap)' : ''}</div>`;
+      });
+    } else if (s.tip === 'bosluk_doldurma') {
+      const dogru = s.secenekler.find(x => x.dogru_mu);
+      html += `<div style="color:#9ae6b4; font-size:0.9rem; margin-left:1rem;">Doğru cevap: <strong>${dogru ? dogru.metin : '?'}</strong></div>`;
+    } else if (s.tip === 'acik_uclu') {
+      html += `<div style="color:#d6bcfa; font-size:0.9rem; margin-left:1rem;">Öğrenci serbest metin yazacak (manuel puanlama)</div>`;
+    }
+    // Rubrik bilgileri
+    const bloomEtiket = {bilgi:'Bilgi',kavrama:'Kavrama',uygulama:'Uygulama',analiz:'Analiz',degerlendirme:'Değerlendirme',yaratma:'Yaratma'};
+    const zorlukEtiket = {cok_kolay:'Çok Kolay',kolay:'Kolay',orta:'Orta',zor:'Zor',cok_zor:'Çok Zor'};
+    let rubrikInfo = [];
+    if (s.bloom_seviyesi) rubrikInfo.push(`Bloom: ${bloomEtiket[s.bloom_seviyesi] || s.bloom_seviyesi}`);
+    if (s.zorluk) rubrikInfo.push(`Zorluk: ${zorlukEtiket[s.zorluk] || s.zorluk}`);
+    if (s.ciktilar && s.ciktilar.length > 0) rubrikInfo.push(`Çıktılar: ${s.ciktilar.map(c => c.numara).join(', ')}`);
+    if (rubrikInfo.length > 0) {
+      html += `<div style="color:#fbd38d;font-size:0.8rem;margin-left:1rem;margin-top:0.3rem;opacity:0.8;">${rubrikInfo.join(' | ')}</div>`;
+    }
     html += `</div>`;
   });
   kutu.innerHTML = html;
@@ -1667,33 +1701,47 @@ async function mevcutSorulariGetir(sinavId) {
 async function soruKaydet() {
   const sinavId = document.getElementById('soru-sinav-id').value;
   const metin = document.getElementById('soru-metni').value;
+  const tip = document.getElementById('soru-tipi').value;
 
-  let secenekler = [];
-  let secilenDogruIndex = parseInt(document.querySelector('input[name="dogru_secenek"]:checked').value);
-
-  for (let i = 0; i < 4; i++) {
-    let optText = document.getElementById(`secenek-${i}`).value.trim();
-    if (optText !== '') {
-      secenekler.push({
-        metin: optText,
-        dogru_mu: (secilenDogruIndex === i)
-      });
-    }
-  }
-
-  if (secenekler.length < 2) {
-    alert("En az 2 seçenek girmelisiniz!");
-    return;
-  }
   if (!metin.trim()) {
     alert("Soru metni boş olamaz!");
     return;
   }
 
+  // Rubrik bilgileri
+  const bloom = document.getElementById('soru-bloom').value;
+  const zorluk = document.getElementById('soru-zorluk').value;
+  const ciktiCheckboxes = document.querySelectorAll('#cikti-secim-listesi input[type="checkbox"]:checked');
+  const ciktiIdler = Array.from(ciktiCheckboxes).map(cb => parseInt(cb.value));
+
+  const payload = { sinav_id: sinavId, metin: metin, tip: tip, puan: 10, bloom_seviyesi: bloom, zorluk: zorluk, cikti_idler: ciktiIdler };
+
+  if (tip === 'cok_secmeli') {
+    let secenekler = [];
+    let secilenDogruIndex = parseInt(document.querySelector('input[name="dogru_secenek"]:checked').value);
+    for (let i = 0; i < 4; i++) {
+      let optText = document.getElementById(`secenek-${i}`).value.trim();
+      if (optText !== '') {
+        secenekler.push({ metin: optText, dogru_mu: (secilenDogruIndex === i) });
+      }
+    }
+    if (secenekler.length < 2) { alert("En az 2 seçenek girmelisiniz!"); return; }
+    payload.secenekler = secenekler;
+
+  } else if (tip === 'dogru_yanlis') {
+    payload.dogru_cevap = document.querySelector('input[name="dy_cevap"]:checked').value;
+
+  } else if (tip === 'bosluk_doldurma') {
+    const cevap = document.getElementById('dogru-cevap-metin').value.trim();
+    if (!cevap) { alert("Doğru cevap girilmeli!"); return; }
+    payload.dogru_cevap = cevap;
+  }
+  // acik_uclu: ek veri gerekmez
+
   const yanit = await safeFetch('/api/sinav/soru_ekle', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ sinav_id: sinavId, metin: metin, secenekler: secenekler, puan: 10 })
+    body: JSON.stringify(payload)
   });
 
   if (yanit.ok) {
@@ -1701,9 +1749,13 @@ async function soruKaydet() {
     document.getElementById('soru-metni').value = '';
     for (let i = 0; i < 4; i++) document.getElementById(`secenek-${i}`).value = '';
     document.querySelectorAll('input[name="dogru_secenek"]')[0].checked = true;
+    document.getElementById('dogru-cevap-metin').value = '';
+    document.getElementById('soru-bloom').value = '';
+    document.getElementById('soru-zorluk').value = '';
+    document.querySelectorAll('#cikti-secim-listesi input[type="checkbox"]').forEach(cb => cb.checked = false);
 
     mevcutSorulariGetir(sinavId);
-    sinavListesiniGuncelle(); // Listede soru sayısını güncelle
+    sinavListesiniGuncelle();
   } else {
     const v = await yanit.json();
     alert("Hata: " + (v.mesaj || 'Bilinmeyen hata'));
@@ -1919,6 +1971,327 @@ async function sinifSil(sinifId, sinifAdi) {
       alert('Hata: ' + veri.mesaj);
     }
   } catch (e) { alert('Bağlantı hatası: ' + e.message); }
+}
+
+// ── Öğrenme Çıktıları CRUD ──────────────────────────────────────────
+
+let _mevcutCiktilar = [];
+
+async function ciktiListesiniGuncelle(sinavId) {
+  if (!sinavId) sinavId = document.getElementById('soru-sinav-id').value;
+  const yanit = await safeFetch(`/api/sinav/ciktilar/${sinavId}`);
+  const veri = await yanit.json();
+  _mevcutCiktilar = veri.ciktilar || [];
+
+  // Çıktı listesi (yönetim)
+  const kutu = document.getElementById('cikti-listesi-kutu');
+  if (_mevcutCiktilar.length === 0) {
+    kutu.innerHTML = '<div style="color:#718096;">Henüz öğrenme çıktısı eklenmemiş.</div>';
+  } else {
+    let html = '';
+    _mevcutCiktilar.forEach(c => {
+      html += `<div style="display:flex;align-items:center;gap:0.5rem;margin-bottom:0.4rem;background:#1a202c;padding:0.4rem 0.6rem;border-radius:6px;border:1px solid #4a5568;">
+        <span style="color:#fbd38d;font-weight:bold;min-width:24px;">${c.numara}.</span>
+        <span style="flex:1;color:#e2e8f0;">${c.metin}</span>
+        <button class="btn-kucuk" style="background:#742a2a;font-size:0.7rem;padding:2px 6px;" onclick="ciktiSil(${c.id})">x</button>
+      </div>`;
+    });
+    kutu.innerHTML = html;
+  }
+
+  // Soru formundaki checkbox listesi
+  const secimKutu = document.getElementById('cikti-secim-listesi');
+  if (_mevcutCiktilar.length === 0) {
+    secimKutu.innerHTML = '<span style="color:#718096;font-size:0.8rem;">Önce öğrenme çıktısı ekleyin</span>';
+  } else {
+    let html = '';
+    _mevcutCiktilar.forEach(c => {
+      html += `<label style="display:flex;align-items:center;gap:4px;background:#1a202c;padding:3px 8px;border-radius:6px;border:1px solid #4a5568;cursor:pointer;font-size:0.8rem;color:#e2e8f0;">
+        <input type="checkbox" value="${c.id}" style="width:14px;height:14px;">
+        <span style="color:#fbd38d;font-weight:bold;">${c.numara}</span>- ${c.metin.substring(0, 40)}${c.metin.length > 40 ? '...' : ''}
+      </label>`;
+    });
+    secimKutu.innerHTML = html;
+  }
+}
+
+async function ciktiEkle() {
+  const sinavId = document.getElementById('soru-sinav-id').value;
+  const metin = document.getElementById('yeni-cikti-metin').value.trim();
+  if (!metin) { alert('Çıktı metni boş olamaz!'); return; }
+
+  const yanit = await safeFetch('/api/sinav/cikti_ekle', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ sinav_id: sinavId, metin: metin })
+  });
+  if (yanit.ok) {
+    document.getElementById('yeni-cikti-metin').value = '';
+    ciktiListesiniGuncelle(sinavId);
+  }
+}
+
+async function ciktiSil(ciktiId) {
+  if (!confirm('Bu öğrenme çıktısını silmek istediğinize emin misiniz?')) return;
+  const yanit = await safeFetch('/api/sinav/cikti_sil', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ cikti_id: ciktiId })
+  });
+  if (yanit.ok) ciktiListesiniGuncelle();
+}
+
+// ── Rubrik Formu ──────────────────────────────────────────────
+
+async function rubrikFormuAc(sinavId, baslik) {
+  document.getElementById('rubrik-formu-alani').style.display = 'block';
+  document.getElementById('soru-yonetimi-alani').style.display = 'none';
+  document.getElementById('sinav-sonuclari-alani').style.display = 'none';
+  document.getElementById('rubrik-sinav-baslik').innerText = `Rubrik Formu: ${baslik}`;
+
+  const icerik = document.getElementById('rubrik-formu-icerik');
+  icerik.innerHTML = '<div style="color:#718096;text-align:center;">Yükleniyor...</div>';
+
+  const yanit = await safeFetch(`/api/sinav/rubrik/${sinavId}`);
+  const veri = await yanit.json();
+
+  if (!veri.sorular || veri.sorular.length === 0) {
+    icerik.innerHTML = '<div style="color:#718096;text-align:center;">Bu sınavda henüz soru yok.</div>';
+    return;
+  }
+
+  const bloomEtiket = {bilgi:'Bilgi',kavrama:'Kavrama',uygulama:'Uygulama',analiz:'Analiz',degerlendirme:'Değerlendirme',yaratma:'Yaratma'};
+  const zorlukEtiket = {cok_kolay:'Çok Kolay',kolay:'Kolay',orta:'Orta',zor:'Zor',cok_zor:'Çok Zor'};
+  const tipEtiket = {cok_secmeli:'Çoktan Seçmeli',dogru_yanlis:'D/Y',bosluk_doldurma:'Boşluk Dold.',acik_uclu:'Açık Uçlu'};
+
+  let html = '<div id="rubrik-yazdir-alani">';
+
+  // Başlık
+  html += `<div style="text-align:center;margin-bottom:1.5rem;">
+    <div style="font-size:0.75rem;color:#a0aec0;">DKM.FR.033 SINAV RUBRİK FORMU</div>
+    <h3 style="color:#e2e8f0;margin:0.25rem 0;">${veri.sinav.baslik}</h3>
+  </div>`;
+
+  // Öğrenme Çıktıları
+  if (veri.ciktilar.length > 0) {
+    html += `<div style="margin-bottom:1.5rem;background:#1a202c;padding:1rem;border-radius:8px;border:1px solid #4a5568;">
+      <h4 style="color:#fbd38d;margin:0 0 0.5rem;">Dersin Öğrenme Çıktıları</h4>`;
+    veri.ciktilar.forEach(c => {
+      html += `<div style="color:#e2e8f0;font-size:0.85rem;margin-bottom:0.3rem;"><strong style="color:#fbd38d;">${c.numara}.</strong> ${c.metin}</div>`;
+    });
+    html += '</div>';
+  }
+
+  // Tablo-1: Soru-Çıktı İlişki Matrisi
+  html += `<h4 style="color:#90cdf4;margin:0 0 0.5rem;">Tablo-1: Dereceli Puanlama Anahtarı</h4>`;
+  html += `<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:0.8rem;color:#e2e8f0;border:1px solid #4a5568;">
+    <thead><tr style="background:#2b6cb0;color:#fff;">
+      <th style="padding:8px;border:1px solid #4a5568;width:40px;">Soru</th>
+      <th style="padding:8px;border:1px solid #4a5568;">Tip</th>
+      <th style="padding:8px;border:1px solid #4a5568;">Puan</th>
+      <th style="padding:8px;border:1px solid #4a5568;">Kazanım No</th>
+      <th style="padding:8px;border:1px solid #4a5568;">İlişkili Öğrenme Çıktısı</th>
+    </tr></thead><tbody>`;
+
+  let toplamPuan = 0;
+  veri.sorular.forEach((s, idx) => {
+    toplamPuan += s.puan;
+    const kazanimNo = s.ciktilar.length > 0 ? s.ciktilar.map(c => c.numara).join(', ') : '-';
+    const ciktiMetinleri = s.ciktilar.length > 0 ? s.ciktilar.map(c => c.metin).join('; ') : '-';
+    html += `<tr style="border:1px solid #4a5568;">
+      <td style="padding:6px;border:1px solid #4a5568;text-align:center;font-weight:bold;">${idx + 1}</td>
+      <td style="padding:6px;border:1px solid #4a5568;text-align:center;">${tipEtiket[s.tip] || s.tip}</td>
+      <td style="padding:6px;border:1px solid #4a5568;text-align:center;">${s.puan}</td>
+      <td style="padding:6px;border:1px solid #4a5568;text-align:center;color:#fbd38d;">${kazanimNo}</td>
+      <td style="padding:6px;border:1px solid #4a5568;font-size:0.75rem;">${ciktiMetinleri}</td>
+    </tr>`;
+  });
+  html += `<tr style="background:#2d3748;font-weight:bold;">
+    <td colspan="2" style="padding:6px;border:1px solid #4a5568;text-align:right;">TOPLAM</td>
+    <td style="padding:6px;border:1px solid #4a5568;text-align:center;">${toplamPuan}</td>
+    <td colspan="2" style="padding:6px;border:1px solid #4a5568;"></td>
+  </tr></tbody></table></div>`;
+
+  // Tablo-2: Zorluk Düzeyi Dağılımı
+  html += `<h4 style="color:#90cdf4;margin:1.5rem 0 0.5rem;">Tablo-2: Soru Zorluk Düzeyi Dağılımı</h4>`;
+  html += `<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:0.8rem;color:#e2e8f0;border:1px solid #4a5568;">
+    <thead><tr style="background:#2b6cb0;color:#fff;">
+      <th style="padding:8px;border:1px solid #4a5568;">Soru</th>
+      <th style="padding:8px;border:1px solid #4a5568;">Çok Kolay (1)</th>
+      <th style="padding:8px;border:1px solid #4a5568;">Kolay (2)</th>
+      <th style="padding:8px;border:1px solid #4a5568;">Orta (3)</th>
+      <th style="padding:8px;border:1px solid #4a5568;">Zor (4)</th>
+      <th style="padding:8px;border:1px solid #4a5568;">Çok Zor (5)</th>
+    </tr></thead><tbody>`;
+  veri.sorular.forEach((s, idx) => {
+    const z = s.zorluk;
+    html += `<tr style="border:1px solid #4a5568;">
+      <td style="padding:6px;border:1px solid #4a5568;text-align:center;font-weight:bold;">${idx + 1}</td>
+      <td style="padding:6px;border:1px solid #4a5568;text-align:center;">${z === 'cok_kolay' ? '●' : ''}</td>
+      <td style="padding:6px;border:1px solid #4a5568;text-align:center;">${z === 'kolay' ? '●' : ''}</td>
+      <td style="padding:6px;border:1px solid #4a5568;text-align:center;">${z === 'orta' ? '●' : ''}</td>
+      <td style="padding:6px;border:1px solid #4a5568;text-align:center;">${z === 'zor' ? '●' : ''}</td>
+      <td style="padding:6px;border:1px solid #4a5568;text-align:center;">${z === 'cok_zor' ? '●' : ''}</td>
+    </tr>`;
+  });
+  html += '</tbody></table></div>';
+
+  // Tablo-3: Bloom Taksonomisi Dağılımı
+  html += `<h4 style="color:#90cdf4;margin:1.5rem 0 0.5rem;">Tablo-3: Bloom Taksonomisi Dağılımı</h4>`;
+  html += `<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:0.8rem;color:#e2e8f0;border:1px solid #4a5568;">
+    <thead><tr style="background:#2b6cb0;color:#fff;">
+      <th style="padding:8px;border:1px solid #4a5568;">Soru</th>
+      <th style="padding:8px;border:1px solid #4a5568;">Bilgi (1)</th>
+      <th style="padding:8px;border:1px solid #4a5568;">Kavrama (2)</th>
+      <th style="padding:8px;border:1px solid #4a5568;">Uygulama (3)</th>
+      <th style="padding:8px;border:1px solid #4a5568;">Analiz (4)</th>
+      <th style="padding:8px;border:1px solid #4a5568;">Değerlendirme (5)</th>
+      <th style="padding:8px;border:1px solid #4a5568;">Yaratma (6)</th>
+    </tr></thead><tbody>`;
+  veri.sorular.forEach((s, idx) => {
+    const b = s.bloom_seviyesi;
+    html += `<tr style="border:1px solid #4a5568;">
+      <td style="padding:6px;border:1px solid #4a5568;text-align:center;font-weight:bold;">${idx + 1}</td>
+      <td style="padding:6px;border:1px solid #4a5568;text-align:center;">${b === 'bilgi' ? '●' : ''}</td>
+      <td style="padding:6px;border:1px solid #4a5568;text-align:center;">${b === 'kavrama' ? '●' : ''}</td>
+      <td style="padding:6px;border:1px solid #4a5568;text-align:center;">${b === 'uygulama' ? '●' : ''}</td>
+      <td style="padding:6px;border:1px solid #4a5568;text-align:center;">${b === 'analiz' ? '●' : ''}</td>
+      <td style="padding:6px;border:1px solid #4a5568;text-align:center;">${b === 'degerlendirme' ? '●' : ''}</td>
+      <td style="padding:6px;border:1px solid #4a5568;text-align:center;">${b === 'yaratma' ? '●' : ''}</td>
+    </tr>`;
+  });
+  html += '</tbody></table></div>';
+
+  // Özet İstatistikler
+  const bloomDagilim = {};
+  const zorlukDagilim = {};
+  veri.sorular.forEach(s => {
+    if (s.bloom_seviyesi) bloomDagilim[s.bloom_seviyesi] = (bloomDagilim[s.bloom_seviyesi] || 0) + 1;
+    if (s.zorluk) zorlukDagilim[s.zorluk] = (zorlukDagilim[s.zorluk] || 0) + 1;
+  });
+
+  html += `<div style="display:flex;gap:1rem;margin-top:1.5rem;">`;
+  html += `<div style="flex:1;background:#1a202c;padding:0.75rem;border-radius:8px;border:1px solid #4a5568;">
+    <h5 style="color:#90cdf4;margin:0 0 0.5rem;">Bloom Dağılımı</h5>`;
+  Object.entries(bloomEtiket).forEach(([key, label]) => {
+    const sayi = bloomDagilim[key] || 0;
+    if (sayi > 0) html += `<div style="font-size:0.8rem;margin-bottom:2px;"><span style="color:#fbd38d;">${label}:</span> ${sayi} soru</div>`;
+  });
+  if (Object.keys(bloomDagilim).length === 0) html += '<div style="color:#718096;font-size:0.8rem;">Belirtilmemiş</div>';
+  html += '</div>';
+
+  html += `<div style="flex:1;background:#1a202c;padding:0.75rem;border-radius:8px;border:1px solid #4a5568;">
+    <h5 style="color:#90cdf4;margin:0 0 0.5rem;">Zorluk Dağılımı</h5>`;
+  Object.entries(zorlukEtiket).forEach(([key, label]) => {
+    const sayi = zorlukDagilim[key] || 0;
+    if (sayi > 0) html += `<div style="font-size:0.8rem;margin-bottom:2px;"><span style="color:#fbd38d;">${label}:</span> ${sayi} soru</div>`;
+  });
+  if (Object.keys(zorlukDagilim).length === 0) html += '<div style="color:#718096;font-size:0.8rem;">Belirtilmemiş</div>';
+  html += '</div></div>';
+
+  html += '</div>';
+  icerik.innerHTML = html;
+}
+
+function rubrikYazdir() {
+  const icerik = document.getElementById('rubrik-yazdir-alani');
+  if (!icerik) return;
+  const win = window.open('', '_blank');
+  const doc = win.document;
+  doc.open();
+  doc.write('<!DOCTYPE html><html><head><meta charset="utf-8"><title>Rubrik Formu</title>');
+  doc.write('<style>body{font-family:Arial,sans-serif;color:#1a202c;padding:2rem}table{width:100%;border-collapse:collapse;margin-bottom:1rem}th,td{border:1px solid #333;padding:6px 8px;font-size:0.8rem}th{background:#2b6cb0;color:#fff}h3,h4{margin:0.5rem 0}@media print{body{padding:0.5cm}}</style>');
+  doc.write('</head><body>');
+  doc.write(icerik.innerHTML);
+  doc.write('</body></html>');
+  doc.close();
+  win.onload = function() { win.print(); };
+}
+
+// ── Sınav İhlal Kontrol (Öğretmen) ──────────────────────────────
+
+let _gosterilmisIhlaller = new Set();
+
+async function sinavIhlalKontrol() {
+  // Aktif sınavı bul
+  try {
+    const yanit = await safeFetch('/api/sinav/liste');
+    const veri = await yanit.json();
+    const aktifSinav = (veri.sinavlar || []).find(s => s.aktif);
+    if (!aktifSinav) return;
+
+    const ihlalYanit = await safeFetch(`/api/sinav/ihlaller/${aktifSinav.id}`);
+    const ihlalVeri = await ihlalYanit.json();
+
+    (ihlalVeri.ihlaller || []).forEach(ihlal => {
+      if (ihlal.durum === 'beklemede' && !_gosterilmisIhlaller.has(ihlal.id)) {
+        _gosterilmisIhlaller.add(ihlal.id);
+        _ihlalPopupGoster(ihlal);
+      }
+    });
+  } catch(e) {}
+}
+
+function _ihlalPopupGoster(ihlal) {
+  const adSoyad = (ihlal.ad && ihlal.soyad) ? (ihlal.ad + ' ' + ihlal.soyad) : ihlal.ogrenci_numara;
+  const zaman = ihlal.zaman || '';
+
+  const overlay = document.createElement('div');
+  overlay.id = 'ihlal-popup-' + ihlal.id;
+  overlay.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.7);z-index:10002;display:flex;align-items:center;justify-content:center;';
+
+  const popup = document.createElement('div');
+  popup.style.cssText = 'background:#2d3748;border-radius:12px;padding:2rem;max-width:450px;width:90%;box-shadow:0 8px 32px rgba(0,0,0,0.5);border:2px solid #fc8181;';
+
+  const baslik = document.createElement('div');
+  baslik.style.cssText = 'display:flex;align-items:center;gap:0.5rem;margin-bottom:1rem;';
+  baslik.innerHTML = '<span style="font-size:2rem;">⚠️</span><div><h3 style="color:#fc8181;margin:0;">Tam Ekran İhlali</h3><span style="color:#a0aec0;font-size:0.8rem;">' + zaman + '</span></div>';
+  popup.appendChild(baslik);
+
+  const bilgi = document.createElement('div');
+  bilgi.style.cssText = 'background:#1a202c;padding:0.75rem;border-radius:8px;margin-bottom:1rem;';
+  bilgi.innerHTML = '<div style="color:#e2e8f0;font-size:0.95rem;margin-bottom:0.3rem;"><strong>' + adSoyad + '</strong> <span style="color:#a0aec0;">(' + ihlal.ogrenci_numara + ')</span></div>';
+  if (ihlal.aciklama) {
+    bilgi.innerHTML += '<div style="color:#fbd38d;font-size:0.85rem;margin-top:0.5rem;"><strong>Sebep:</strong> ' + ihlal.aciklama + '</div>';
+  } else {
+    bilgi.innerHTML += '<div style="color:#718096;font-size:0.85rem;margin-top:0.5rem;">Henüz açıklama gönderilmedi</div>';
+  }
+  popup.appendChild(bilgi);
+
+  const butonlar = document.createElement('div');
+  butonlar.style.cssText = 'display:flex;gap:10px;';
+
+  const devamBtn = document.createElement('button');
+  devamBtn.style.cssText = 'flex:1;background:#48bb78;color:white;border:none;padding:10px;border-radius:8px;font-weight:bold;cursor:pointer;font-size:0.95rem;';
+  devamBtn.textContent = 'Sınava Devam Ettir';
+  devamBtn.addEventListener('click', function() { _ihlalKarariVer(ihlal.id, 'onayla', overlay); });
+
+  const sonlandirBtn = document.createElement('button');
+  sonlandirBtn.style.cssText = 'flex:1;background:#e53e3e;color:white;border:none;padding:10px;border-radius:8px;font-weight:bold;cursor:pointer;font-size:0.95rem;';
+  sonlandirBtn.textContent = 'Sınavı Sonlandır';
+  sonlandirBtn.addEventListener('click', function() { _ihlalKarariVer(ihlal.id, 'reddet', overlay); });
+
+  butonlar.appendChild(devamBtn);
+  butonlar.appendChild(sonlandirBtn);
+  popup.appendChild(butonlar);
+
+  overlay.appendChild(popup);
+  document.body.appendChild(overlay);
+
+  // Ses ile uyar
+  try { new Audio('data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1fdJivrJBhNjVgodDbq2EcBj+a2telebn/telebn/telebn/telebn').play(); } catch(e) {}
+}
+
+async function _ihlalKarariVer(ihlalId, karar, overlay) {
+  try {
+    await safeFetch('/api/sinav/ihlal_' + karar, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ihlal_id: ihlalId })
+    });
+  } catch(e) {}
+  if (overlay && overlay.parentNode) overlay.parentNode.removeChild(overlay);
+  _gosterilmisIhlaller.delete(ihlalId);
 }
 
 async function sinavSonuclariniAc(sinavId, baslik) {
