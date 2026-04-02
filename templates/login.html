@@ -46,7 +46,7 @@
       <p class="alt-baslik">Derse katılmak için bilgilerini gir</p>
 
       {% if hata %}
-      <div style="background:#742a2a; border:1px solid #c53030; border-radius:8px; padding:0.75rem 1rem; margin-bottom:1rem; font-size:0.9rem; color:#fed7d7;">
+      <div style="background:var(--accent-red-glow); border:1px solid var(--accent-red); border-radius:var(--radius-md); padding:0.75rem 1rem; margin-bottom:1rem; font-size:0.88rem; color:#fca5a5;">
         ⚠️ {{ hata }}
       </div>
       {% endif %}
@@ -56,7 +56,7 @@
           <label>Sınıf</label>
           <select name="sinif_id" id="sinif-sec" required
                   onchange="ogrenciListesiYukle(this.value)"
-                  style="width:100%; padding:0.75rem 1rem; background:#2d3748; color:#e2e8f0; border:1px solid #4a5568; border-radius:8px; font-size:1rem; outline:none;">
+                  style="width:100%; padding:0.7rem 0.9rem; background:var(--bg-input); color:var(--text-primary); border:1px solid var(--border); border-radius:var(--radius-md); font-size:0.92rem; font-family:var(--font-body); outline:none; transition:border-color 0.2s;">
             <option value="" disabled selected>— Sınıfınızı seçin —</option>
             {% for sinif in siniflar %}
             <option value="{{ sinif.id }}">{{ sinif.ad }}</option>
@@ -66,7 +66,7 @@
         <div class="form-grup">
           <label>Ad Soyad</label>
           <select name="ad_soyad" id="ogrenci-sec" required disabled
-                  style="width:100%; padding:0.75rem 1rem; background:#2d3748; color:#718096; border:1px solid #4a5568; border-radius:8px; font-size:1rem; outline:none; cursor:not-allowed;">
+                  style="width:100%; padding:0.7rem 0.9rem; background:var(--bg-input); color:var(--text-muted); border:1px solid var(--border); border-radius:var(--radius-md); font-size:0.92rem; font-family:var(--font-body); outline:none; cursor:not-allowed;">
             <option value="">— Önce sınıf seçin —</option>
           </select>
         </div>
@@ -76,7 +76,7 @@
         </div>
         <div class="form-grup">
           <label>Ders Paketi</label>
-          <select name="ders_paketi" required style="width:100%; padding:0.75rem 1rem; background:#2d3748; color:#e2e8f0; border:1px solid #4a5568; border-radius:8px; font-size:1rem; outline:none;">
+          <select name="ders_paketi" required style="width:100%; padding:0.7rem 0.9rem; background:var(--bg-input); color:var(--text-primary); border:1px solid var(--border); border-radius:var(--radius-md); font-size:0.92rem; font-family:var(--font-body); outline:none; transition:border-color 0.2s;">
             <option value="1">Paket 1</option>
             <option value="2">Paket 2</option>
             <option value="3">Paket 3</option>
@@ -87,7 +87,7 @@
         </button>
       </form>
       {% if giris_kapali %}
-      <div style="background:#2d3748; border:1px solid #4a5568; border-radius:8px; padding:0.75rem 1rem; margin-top:1rem; text-align:center; font-size:0.9rem; color:#fbd38d;">
+      <div style="background:var(--accent-amber-glow); border:1px solid rgba(245,158,11,0.2); border-radius:var(--radius-md); padding:0.75rem 1rem; margin-top:1rem; text-align:center; font-size:0.85rem; color:var(--accent-amber);">
         🔒 Öğretmen dersi henüz başlatmadı. Lütfen bekleyin...
       </div>
       <script>

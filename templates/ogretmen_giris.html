@@ -8,12 +8,12 @@
 </head>
 <body>
   <div class="giris-kapsayici">
-    <div class="giris-kutu">
+    <div class="giris-kutu ogretmen-giris-kutu">
       <h1>🔐 Öğretmen Girişi</h1>
       <p class="alt-baslik">Panele erişmek için şifreyi girin</p>
 
       {% if hata %}
-      <div style="background:#742a2a; border:1px solid #c53030; border-radius:8px; padding:0.75rem 1rem; margin-bottom:1rem; font-size:0.9rem; color:#fed7d7;">
+      <div style="background:var(--accent-red-glow); border:1px solid var(--accent-red); border-radius:var(--radius-md); padding:0.75rem 1rem; margin-bottom:1rem; font-size:0.88rem; color:#fca5a5;">
         ⚠️ {{ hata }}
       </div>
       {% endif %}
