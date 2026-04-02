@@ -235,17 +235,39 @@ deb http://security.debian.org/debian-security bookworm-security main contrib no
     # İzinler
     _run(["chmod", "1777", str(STUDENT_TEMPLATE / "tmp")])
 
-    # su binary fix: /bin/su → /usr/bin/su symlink (GLIBC uyumsuzluğu önlemi)
-    su_bin = STUDENT_TEMPLATE / "bin" / "su"
+    # su binary fix: Host'un su'su GLIBC uyumsuz — Debian 12'nin kendi su'sunu indir
+    # Debian 12 bookworm'da /bin → /usr/bin symlink, dolayısıyla sadece /usr/bin/su'ya koy
+    log.info("🔧 su binary kontrolü (GLIBC uyumluluk)...")
     su_usr = STUDENT_TEMPLATE / "usr" / "bin" / "su"
-    if su_bin.exists() and not su_usr.exists():
-        subprocess.run(["ln", "-sf", "/bin/su", str(su_usr)], check=False)
-        log.info("🔗 /usr/bin/su → /bin/su symlink oluşturuldu")
-    elif su_usr.exists():
-        # Host'un su'su kopyalanmışsa Debian'ınkiyle değiştir
-        subprocess.run(["ln", "-sf", "/bin/su", str(su_usr)], check=False)
-        log.info("🔗 /usr/bin/su → /bin/su symlink güncellendi")
-    _run(["chmod", "4755", str(su_bin)], check=False)
+    su_ok = False
+    if su_usr.exists():
+        # Mevcut su'nun GLIBC uyumluluğunu test et
+        result = subprocess.run(["chroot", str(STUDENT_TEMPLATE), "/usr/bin/su", "--version"],
+                                capture_output=True, text=True)
+        if result.returncode == 0:
+            su_ok = True
+            log.info("✅ su binary uyumlu")
+    if not su_ok:
+        log.info("⬇️  Debian 12 util-linux'tan su binary indiriliyor...")
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmpdir:
+            deb_path = Path(tmpdir) / "util-linux.deb"
+            extract_path = Path(tmpdir) / "extract"
+            arch = "arm64" if platform.machine() == "aarch64" else "amd64"
+            subprocess.run(["wget", "-q", "-O", str(deb_path),
+                f"http://deb.debian.org/debian/pool/main/u/util-linux/util-linux_2.38.1-5+deb12u3_{arch}.deb"],
+                check=False)
+            if deb_path.exists():
+                subprocess.run(["dpkg", "-x", str(deb_path), str(extract_path)], check=False)
+                src_su = extract_path / "bin" / "su"
+                if src_su.exists():
+                    # Eski su'ları temizle ve gerçek binary kopyala (symlink değil!)
+                    su_usr.unlink(missing_ok=True)
+                    shutil.copy2(str(src_su), str(su_usr))
+                    os.chmod(str(su_usr), 0o4755)
+                    log.info(f"✅ Debian 12 su binary kopyalandı → {su_usr}")
+                else:
+                    log.error("❌ su binary indirilemedi")
 
     # Temizlik
     _run(["chroot", str(STUDENT_TEMPLATE), "apt-get", "clean"])
@@ -487,16 +509,14 @@ def create_ssh_entry(username):
             f.write(sudoers_line)
         subprocess.run(["chmod", "0440", str(sudoers_file)], check=False)
 
-    # SSH config'e ForceCommand ekle (V10 - Sticky Shell)
+    # SSH config'e Match Group ekle (tek blok, $USER ile — per-user Match gerekmez)
     ssh_config = Path("/etc/ssh/sshd_config")
-    # Önemli: Chroot dizini ve su komutunu bir döngüye al
-    force_command = f"Match User {username}\n    ForceCommand /bin/bash -c \"while true; do sudo /usr/sbin/chroot {student_path} /bin/su - {username}; echo 'Oturum kapatılamaz, yeniden başlatılıyor...'; sleep 1; done\"\n"
-
-    # SSH config'e ekle
+    group_match = 'Match Group ogrenciler'
     ssh_config_text = ssh_config.read_text()
-    if force_command not in ssh_config_text:
+    if group_match not in ssh_config_text:
         with open(ssh_config, 'a') as f:
-            f.write(force_command)
+            f.write(f"\n{group_match}\n")
+            f.write('    ForceCommand /bin/bash -c "while true; do sudo /usr/sbin/chroot /home/chroot/$USER /bin/su - $USER; echo \'Oturum kapatilamaz, yeniden baslatiliyor...\'; sleep 1; done"\n')
 
     # Chroot login script'ini kopyala
     chrootlogin_src = Path("/usr/sbin/chrootlogin")
