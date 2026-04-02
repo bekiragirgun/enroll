@@ -1,22 +1,22 @@
 [Unit]
-Description=Chroot Terminal Network Fallback (raw ip + dhclient)
-After=network-pre.target systemd-udevd.service
+Description=Chroot Terminal Network Fallback (raw ip)
+After=network-pre.target
 Before=network.target network-online.target ssh.service sshd.service
 Wants=network-pre.target
 
-# Sadece networkd VE NM ikisi de başarısız olursa çalış
+# Sadece NM başarısız olursa çalış
 ConditionPathExists=!/run/NetworkManager/NetworkManager.pid
 
 [Service]
 Type=oneshot
 RemainAfterExit=yes
-# Tüm ethernet arayüzlerini bul ve DHCP ile kaldır
+# Statik IP ile arayüzü kaldır (dhclient gerektirmez)
 ExecStart=/bin/bash -c '\
   for iface in $(ls /sys/class/net/ | grep -E "^(en|eth)"); do \
     ip link set "$iface" up 2>/dev/null; \
-    dhclient -1 -timeout 15 "$iface" 2>/dev/null || true; \
+    ip addr add 10.211.55.28/24 dev "$iface" 2>/dev/null || true; \
+    ip route add default via 10.211.55.1 dev "$iface" 2>/dev/null || true; \
   done'
-# Başarısız olsa da boot'u engelleme
 SuccessExitStatus=0 1
 
 [Install]

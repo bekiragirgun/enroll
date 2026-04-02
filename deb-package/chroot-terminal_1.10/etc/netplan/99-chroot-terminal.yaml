@@ -1,16 +1,14 @@
-# Chroot Terminal — NetworkManager renderer
-# systemd-networkd yerine NM kullan (Parallels/VM uyumluluğu)
+# Chroot Terminal — Statik IP (NetworkManager renderer)
 network:
   version: 2
   renderer: NetworkManager
   ethernets:
-    all-en:
-      match:
-        name: "en*"
-      dhcp4: true
-      dhcp6: false
-    all-eth:
-      match:
-        name: "eth*"
-      dhcp4: true
-      dhcp6: false
+    enp0s5:
+      addresses:
+        - 10.211.55.28/24
+      routes:
+        - to: default
+          via: 10.211.55.1
+      nameservers:
+        addresses: [8.8.8.8, 1.1.1.1]
+      dhcp4: false
