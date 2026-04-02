@@ -663,7 +663,8 @@ def api_ogrenci_cikis():
     paket = kayit['paket']
 
     # Test modunda paket saati kontrolü atlanır
-    if not ders_durumu.get('test_modu'):
+    import os
+    if os.environ.get('TEST_MODE') != '1':
         bas, bit, gecerli = paket_zaman_kontrolu(paket)
         if not gecerli:
             return jsonify({
