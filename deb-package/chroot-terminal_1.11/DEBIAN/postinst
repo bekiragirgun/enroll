@@ -126,6 +126,7 @@ else
 fi
 
 # Statik DNS — resolved olmayınca resolv.conf boş kalabilir
+chattr -i /etc/resolv.conf 2>/dev/null || true
 rm -f /etc/resolv.conf 2>/dev/null || true
 cat > /etc/resolv.conf << 'DNSEOF'
 nameserver 8.8.8.8
