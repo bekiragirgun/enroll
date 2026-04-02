@@ -257,11 +257,11 @@ def api_siniflar():
     return jsonify({'siniflar': sonuc})
 
 @api_bp.route('/ogrenci_listesi/<int:sinif_id>')
-@ogretmen_giris_gerekli
 def api_ogrenci_listesi(sinif_id):
+    """Öğrenci login sayfasından çağrılır — numara gizli, sadece ad_soyad döner."""
     with db_baglantisi() as db:
-        ogrenciler = db.execute('SELECT numara, ad, soyad FROM ogrenciler WHERE sinif_id=? ORDER BY soyad, ad', (sinif_id,)).fetchall()
-    return jsonify({'ogrenciler': [{'numara': o['numara'], 'ad_soyad': (o['ad'] + ' ' + o['soyad']).upper()} for o in ogrenciler]})
+        ogrenciler = db.execute('SELECT ad, soyad FROM ogrenciler WHERE sinif_id=? ORDER BY soyad, ad', (sinif_id,)).fetchall()
+    return jsonify({'ogrenciler': [{'ad_soyad': (o['ad'] + ' ' + o['soyad']).upper()} for o in ogrenciler]})
 
 @api_bp.route('/ogrenci/devam')
 def api_ogrenci_devam():
