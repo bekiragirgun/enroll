@@ -1,0 +1,16 @@
+# Chroot Terminal — NetworkManager renderer
+# systemd-networkd yerine NM kullan (Parallels/VM uyumluluğu)
+network:
+  version: 2
+  renderer: NetworkManager
+  ethernets:
+    all-en:
+      match:
+        name: "en*"
+      dhcp4: true
+      dhcp6: false
+    all-eth:
+      match:
+        name: "eth*"
+      dhcp4: true
+      dhcp6: false

@@ -29,7 +29,7 @@ _is_container() {
 }
 
 if _is_container; then
-    echo "[1/8] LXC/konteyner tespit edildi — gereksiz servisler devre dışı bırakılıyor..."
+    echo "[1/9] LXC/konteyner tespit edildi — gereksiz servisler devre dışı bırakılıyor..."
     for svc in systemd-udevd.service multipathd.service open-vm-tools.service tmp.mount; do
         systemctl disable "$svc" 2>/dev/null || true
         systemctl mask "$svc" 2>/dev/null || true
@@ -51,38 +51,105 @@ DefaultTimeoutStopSec=10s
 DefaultDeviceTimeoutSec=10s
 TIMEOUTEOF
 else
-    echo "[1/8] Bare-metal/VM tespit edildi — sistem servisleri korunuyor."
+    echo "[1/9] Bare-metal/VM tespit edildi — sistem servisleri korunuyor."
 fi
 
 # ── Kernel Optimizasyonu ─────────────────────
-echo "[2/8] Kernel parametreleri uygulanıyor..."
+echo "[2/9] Kernel parametreleri uygulanıyor..."
 sysctl -p /etc/sysctl.d/99-pty-limits.conf 2>/dev/null || true
 
 # ── Ulimit Ayarlari ──────────────────────────
-echo "[3/8] Ulimit ayarları uygulandı (limits.d)"
+echo "[3/9] Ulimit ayarları uygulandı (limits.d)"
 
 # ── Grup ve Kullanici ────────────────────────
-echo "[4/8] Sistem grubu oluşturuluyor..."
+echo "[4/9] Sistem grubu oluşturuluyor..."
 groupadd -f ogrenciler
 
+# ── Network: systemd-networkd → NetworkManager ──
+echo "[5/9] Network katmanı yapılandırılıyor (NetworkManager)..."
+
+# systemd-networkd'yi tamamen devre dışı bırak (crash ediyor)
+systemctl disable systemd-networkd.service 2>/dev/null || true
+systemctl disable systemd-networkd.socket 2>/dev/null || true
+systemctl disable systemd-networkd-wait-online.service 2>/dev/null || true
+systemctl mask systemd-networkd.service 2>/dev/null || true
+
+# Eski cloud-init netplan config'ini kaldır (networkd renderer kullanıyor)
+rm -f /etc/netplan/50-cloud-init.yaml 2>/dev/null || true
+
+# Mevcut DHCP IP'yi oku ve statik netplan config oluştur
+_IFACE=""
+_IP=""
+_GW=""
+_DNS="8.8.8.8,1.1.1.1"
+
+# Aktif ethernet arayüzünü bul
+for iface in $(ls /sys/class/net/ | grep -E "^(en|eth)"); do
+    _addr=$(ip -4 addr show "$iface" 2>/dev/null | grep -oP 'inet \K[0-9./]+' || true)
+    if [ -n "$_addr" ]; then
+        _IFACE="$iface"
+        _IP="$_addr"
+        _GW=$(ip route show default dev "$iface" 2>/dev/null | grep -oP 'via \K[0-9.]+' || true)
+        break
+    fi
+done
+
+if [ -n "$_IFACE" ] && [ -n "$_IP" ] && [ -n "$_GW" ]; then
+    echo "    Mevcut IP tespit edildi: $_IFACE → $_IP (gw: $_GW)"
+    cat > /etc/netplan/99-chroot-terminal.yaml << NETEOF
+# Chroot Terminal — Statik IP (DHCP'den alınan değerlerle)
+network:
+  version: 2
+  renderer: NetworkManager
+  ethernets:
+    ${_IFACE}:
+      addresses:
+        - ${_IP}
+      routes:
+        - to: default
+          via: ${_GW}
+      nameservers:
+        addresses: [8.8.8.8, 1.1.1.1]
+      dhcp4: false
+NETEOF
+    echo "    Netplan: statik IP olarak yazıldı"
+else
+    echo "    DHCP IP tespit edilemedi — DHCP modunda kalınıyor"
+    # Paket içindeki DHCP config kullanılacak (99-chroot-terminal.yaml)
+fi
+
+# NetworkManager'ı etkinleştir
+systemctl unmask NetworkManager.service 2>/dev/null || true
+systemctl enable NetworkManager.service 2>/dev/null || true
+
+# Netplan'ı NM renderer ile uygula
+netplan generate 2>/dev/null || true
+
+# Fallback network service
+systemctl enable chroot-network-fallback.service 2>/dev/null || true
+
+echo "    systemd-networkd → devre dışı (mask)"
+echo "    NetworkManager   → aktif"
+echo "    Fallback service → aktif"
+
 # ── Systemd Servisleri ───────────────────────
-echo "[5/8] Servisler aktifleştiriliyor..."
+echo "[6/9] Servisler aktifleştiriliyor..."
 systemctl daemon-reload
 systemctl enable --now chroot-pty-fix.service
 systemctl enable --now chroot-cleanup.timer
 
 # ── SSH Reload ───────────────────────────────
-echo "[6/8] SSH servisi yeniden yükleniyor..."
+echo "[7/9] SSH servisi yeniden yükleniyor..."
 systemctl reload sshd 2>/dev/null || systemctl reload ssh 2>/dev/null || true
 
 # ── NTP Senkronizasyonu ──────────────────────
-echo "[7/8] NTP zaman senkronizasyonu ayarlanıyor..."
+echo "[8/9] NTP zaman senkronizasyonu ayarlanıyor..."
 timedatectl set-ntp true 2>/dev/null || true
 systemctl restart systemd-timesyncd 2>/dev/null || true
 timedatectl set-timezone Europe/Istanbul 2>/dev/null || true
 
 # ── Systemd Pin (Reboot Koruması) ────────────
-echo "[8/8] Kritik paketler pinleniyor (otomatik güncelleme koruması)..."
+echo "[9/9] Kritik paketler pinleniyor (otomatik güncelleme koruması)..."
 apt-mark hold systemd systemd-sysv systemd-timesyncd systemd-resolved \
     libnss-systemd libpam-systemd libsystemd0 libsystemd-shared udev \
     2>/dev/null || true
@@ -129,6 +196,11 @@ echo ""
 echo "  Servisler:"
 echo "    chroot-pty-fix: boot'ta PTY onarımı"
 echo "    chroot-cleanup: her 10dk temizlik"
+echo ""
+echo "  Network:"
+echo "    Backend:        NetworkManager (systemd-networkd devre dışı)"
+echo "    IP:             Statik (kurulum anındaki DHCP IP'den)"
+echo "    Fallback:       raw ip + dhclient (NM de başarısız olursa)"
 echo ""
 echo "  Reboot Koruması:"
 echo "    systemd paketleri pinlendi (apt-mark hold)"

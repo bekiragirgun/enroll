@@ -23,6 +23,7 @@ chmod 644 ${PKG}/etc/security/limits.d/99-chroot-terminal.conf
 chmod 644 ${PKG}/etc/systemd/timesyncd.conf.d/chroot-terminal.conf
 chmod 644 ${PKG}/etc/systemd/system/*.service
 chmod 644 ${PKG}/etc/systemd/system/*.timer
+chmod 644 ${PKG}/etc/netplan/*.yaml 2>/dev/null || true
 
 # DEB oluştur
 dpkg-deb --build ${PKG}
