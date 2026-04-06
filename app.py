@@ -485,6 +485,9 @@ if __name__ == '__main__':
     # CLI Argümanlarını Environment Variable olarak ata (config.py tarafından okunması için)
     if args.host:
         os.environ['CHROOT_HOST'] = args.host
+        if not args.user or not args.password:
+            print("  ⚠️ UYARI: --host verildi ama --user ve/veya --pass eksik!")
+            print("  ⚠️ Chroot terminal çalışmayacak. Örnek: --host 10.211.55.28 --user bekir --pass 123123")
     if args.user:
         os.environ['CHROOT_USER'] = args.user
     if args.password:
