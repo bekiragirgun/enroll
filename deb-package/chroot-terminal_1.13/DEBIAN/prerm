@@ -1,0 +1,9 @@
+#!/bin/bash
+set -e
+
+# Servisleri durdur
+systemctl stop chroot-cleanup.timer 2>/dev/null || true
+systemctl disable chroot-cleanup.timer 2>/dev/null || true
+systemctl stop chroot-pty-fix.service 2>/dev/null || true
+systemctl disable chroot-pty-fix.service 2>/dev/null || true
+systemctl daemon-reload

@@ -1,0 +1,232 @@
+#!/bin/bash
+set -e
+
+echo "=== Chroot Terminal System v1.13 kurulumu ==="
+
+# ── LXC/Konteyner Tespiti ve Optimizasyonu ─────────────────
+_is_container() {
+    # Sadece gerçek konteyner ortamlarını tespit et (VM'ler hariç)
+    # LXC, Docker, systemd-nspawn gibi ortamları yakalar
+    # Parallels, VMware, VirtualBox gibi VM'leri YAKALAMASIN
+
+    # 1. /proc/1/environ'da container= varsa (LXC, systemd-nspawn)
+    grep -qi 'container=lxc\|container=docker\|container=systemd-nspawn' /proc/1/environ 2>/dev/null && return 0
+
+    # 2. Docker ortamı
+    [ -f /.dockerenv ] && return 0
+
+    # 3. systemd-detect-virt --container: SADECE "lxc", "docker", "systemd-nspawn" dönerse
+    if command -v systemd-detect-virt >/dev/null 2>&1; then
+        local ctype
+        ctype=$(systemd-detect-virt --container 2>/dev/null || echo "none")
+        case "$ctype" in
+            lxc|lxc-libvirt|docker|podman|systemd-nspawn|openvz)
+                return 0 ;;
+        esac
+    fi
+
+    return 1
+}
+
+if _is_container; then
+    echo "[1/9] LXC/konteyner tespit edildi — gereksiz servisler devre dışı bırakılıyor..."
+    for svc in systemd-udevd.service multipathd.service open-vm-tools.service tmp.mount; do
+        systemctl disable "$svc" 2>/dev/null || true
+        systemctl mask "$svc" 2>/dev/null || true
+    done
+    for sock in systemd-udevd-kernel.socket systemd-udevd-control.socket; do
+        systemctl disable "$sock" 2>/dev/null || true
+        systemctl mask "$sock" 2>/dev/null || true
+    done
+    if systemctl is-active systemd-resolved >/dev/null 2>&1 || systemctl is-enabled systemd-resolved >/dev/null 2>&1; then
+        systemctl disable --now systemd-resolved.service 2>/dev/null || true
+        systemctl mask systemd-resolved.service 2>/dev/null || true
+        echo "nameserver 8.8.8.8" > /etc/resolv.conf 2>/dev/null || true
+    fi
+    mkdir -p /etc/systemd/system.conf.d
+    cat > /etc/systemd/system.conf.d/lxc-timeout.conf << 'TIMEOUTEOF'
+[Manager]
+DefaultTimeoutStartSec=10s
+DefaultTimeoutStopSec=10s
+DefaultDeviceTimeoutSec=10s
+TIMEOUTEOF
+else
+    echo "[1/9] Bare-metal/VM tespit edildi — sistem servisleri korunuyor."
+fi
+
+# ── Kernel Optimizasyonu ─────────────────────
+echo "[2/9] Kernel parametreleri uygulanıyor..."
+sysctl -p /etc/sysctl.d/99-pty-limits.conf 2>/dev/null || true
+
+# ── Ulimit Ayarlari ──────────────────────────
+echo "[3/9] Ulimit ayarları uygulandı (limits.d)"
+
+# ── Grup ve Kullanici ────────────────────────
+echo "[4/9] Sistem grubu oluşturuluyor..."
+groupadd -f ogrenciler
+
+# ── Network: systemd-networkd → NetworkManager ──
+echo "[5/9] Network katmanı yapılandırılıyor (NetworkManager)..."
+
+# Crash eden systemd servislerini doğrudan symlink ile mask'la
+# (systemctl mask apt install sırasında güvenilmez, ln -sf her zaman çalışır)
+for svc in multipathd.service \
+           systemd-networkd.service \
+           systemd-networkd.socket \
+           systemd-networkd-wait-online.service \
+           systemd-resolved.service \
+           systemd-timesyncd.service; do
+    systemctl disable "$svc" 2>/dev/null || true
+    systemctl stop "$svc" 2>/dev/null || true
+    ln -sf /dev/null /etc/systemd/system/"$svc"
+done
+
+# Eski cloud-init netplan config'ini kaldır (networkd renderer kullanıyor)
+rm -f /etc/netplan/50-cloud-init.yaml 2>/dev/null || true
+
+# Mevcut DHCP IP'yi oku ve statik netplan config oluştur
+_IFACE=""
+_IP=""
+_GW=""
+_DNS="8.8.8.8,1.1.1.1"
+
+# Aktif ethernet arayüzünü bul
+for iface in $(ls /sys/class/net/ | grep -E "^(en|eth)"); do
+    _addr=$(ip -4 addr show "$iface" 2>/dev/null | grep -oP 'inet \K[0-9./]+' || true)
+    if [ -n "$_addr" ]; then
+        _IFACE="$iface"
+        _IP="$_addr"
+        _GW=$(ip route show default dev "$iface" 2>/dev/null | grep -oP 'via \K[0-9.]+' || true)
+        break
+    fi
+done
+
+if [ -n "$_IFACE" ] && [ -n "$_IP" ] && [ -n "$_GW" ]; then
+    echo "    Mevcut IP tespit edildi: $_IFACE → $_IP (gw: $_GW)"
+    cat > /etc/netplan/99-chroot-terminal.yaml << NETEOF
+# Chroot Terminal — Statik IP (DHCP'den alınan değerlerle)
+network:
+  version: 2
+  renderer: NetworkManager
+  ethernets:
+    ${_IFACE}:
+      addresses:
+        - ${_IP}
+      routes:
+        - to: default
+          via: ${_GW}
+      nameservers:
+        addresses: [8.8.8.8, 1.1.1.1]
+      dhcp4: false
+NETEOF
+    echo "    Netplan: statik IP olarak yazıldı"
+else
+    echo "    DHCP IP tespit edilemedi — DHCP modunda kalınıyor"
+    # Paket içindeki DHCP config kullanılacak (99-chroot-terminal.yaml)
+fi
+
+# Statik DNS — resolved olmayınca resolv.conf boş kalabilir
+chattr -i /etc/resolv.conf 2>/dev/null || true
+rm -f /etc/resolv.conf 2>/dev/null || true
+cat > /etc/resolv.conf << 'DNSEOF'
+nameserver 8.8.8.8
+nameserver 1.1.1.1
+DNSEOF
+# resolv.conf'un üzerine yazılmasını engelle
+chattr +i /etc/resolv.conf 2>/dev/null || true
+
+# NetworkManager'ı etkinleştir
+systemctl unmask NetworkManager.service 2>/dev/null || true
+systemctl enable NetworkManager.service 2>/dev/null || true
+
+# Netplan'ı NM renderer ile uygula
+netplan generate 2>/dev/null || true
+
+# Fallback network service
+systemctl enable chroot-network-fallback.service 2>/dev/null || true
+
+echo "    multipathd         → devre dışı (mask)"
+echo "    systemd-networkd  → devre dışı (mask)"
+echo "    systemd-resolved  → devre dışı (mask, statik DNS)"
+echo "    systemd-timesyncd → devre dışı (mask)"
+echo "    NetworkManager    → aktif"
+echo "    DNS:              → 8.8.8.8, 1.1.1.1 (statik, immutable)"
+echo "    Fallback service  → aktif"
+
+# ── Systemd Servisleri ───────────────────────
+echo "[6/9] Servisler aktifleştiriliyor..."
+systemctl daemon-reload
+systemctl enable --now chroot-pty-fix.service
+systemctl enable --now chroot-cleanup.timer
+
+# ── SSH Reload ───────────────────────────────
+echo "[7/9] SSH servisi yeniden yükleniyor..."
+systemctl reload sshd 2>/dev/null || systemctl reload ssh 2>/dev/null || true
+
+# ── NTP Senkronizasyonu ──────────────────────
+echo "[8/9] NTP zaman senkronizasyonu ayarlanıyor..."
+timedatectl set-timezone Europe/Istanbul 2>/dev/null || true
+# systemd-timesyncd mask'lı — chrony veya NM üzerinden NTP
+if command -v chronyd >/dev/null 2>&1; then
+    systemctl enable --now chrony.service 2>/dev/null || true
+fi
+
+# ── Systemd Pin (Reboot Koruması) ────────────
+echo "[9/9] Kritik paketler pinleniyor (otomatik güncelleme koruması)..."
+apt-mark hold systemd systemd-sysv systemd-timesyncd systemd-resolved \
+    libnss-systemd libpam-systemd libsystemd0 libsystemd-shared udev \
+    2>/dev/null || true
+
+# unattended-upgrades'ı da devre dışı bırak (çift koruma)
+systemctl disable --now unattended-upgrades.service 2>/dev/null || true
+
+echo ""
+echo "=== Kurulum tamamlandı ==="
+echo ""
+echo "  Kernel Optimizasyonu:"
+echo "    PTY max:        16384"
+echo "    File descriptors: 262144"
+echo "    TCP backlog:    4096"
+echo "    Swappiness:     10"
+echo ""
+echo "  Ulimit (genel/root):"
+echo "    nofile:         65536 / 131072"
+echo "    nproc:          32768 / 65536"
+echo ""
+echo "  Ulimit (ogrenci):"
+echo "    nproc:          256 (fork bomb koruması)"
+echo "    nofile:         4096"
+echo ""
+echo "  SSH:"
+echo "    MaxSessions:    80"
+echo "    MaxStartups:    50:60:100"
+echo "    Compression:    off (LAN performans)"
+echo "    UseDNS:         off (hızlı bağlantı)"
+echo ""
+echo "  NTP:"
+echo "    Timezone:       Europe/Istanbul"
+echo "    NTP Servers:    ntp.ubuntu.com, time.google.com, time.cloudflare.com"
+echo ""
+if _is_container; then
+echo "  LXC Boot Optimizasyonu:"
+echo "    udevd, multipathd, open-vm-tools, tmp.mount: devre dışı"
+echo "    systemd-resolved: statik DNS (8.8.8.8)"
+echo "    Timeout: 10s (start/stop/device)"
+else
+echo "  Ortam: Bare-metal/VM (sistem servisleri korundu)"
+fi
+echo ""
+echo "  Servisler:"
+echo "    chroot-pty-fix: boot'ta PTY onarımı"
+echo "    chroot-cleanup: her 10dk temizlik"
+echo ""
+echo "  Network:"
+echo "    Backend:        NetworkManager (systemd-networkd devre dışı)"
+echo "    IP:             Statik (kurulum anındaki DHCP IP'den)"
+echo "    Fallback:       raw ip + dhclient (NM de başarısız olursa)"
+echo ""
+echo "  Reboot Koruması:"
+echo "    systemd paketleri pinlendi (apt-mark hold)"
+echo "    unattended-upgrades devre dışı"
+echo ""
+echo "  Kullanım: chroot-yonetici init|create|list|mount|cleanup|health"
