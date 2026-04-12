@@ -33,21 +33,18 @@ ders_durumu = {
 }
 
 def ayar_kaydet(anahtar, deger):
-    from core.db import DBWrapper
-    with db_baglantisi() as conn:
-        db = DBWrapper(conn)
-        db.execute("INSERT INTO ayarlar (anahtar, deger) VALUES (?, ?) ON CONFLICT (anahtar) DO UPDATE SET deger = EXCLUDED.deger" if db.db_type == 'postgres' else "INSERT OR REPLACE INTO ayarlar (anahtar, deger) VALUES (?, ?)", (anahtar, str(deger)))
-        conn.commit()
+    with db_baglantisi() as db:
+        db.execute(
+            "INSERT OR REPLACE INTO ayarlar (anahtar, deger) VALUES (?, ?)",
+            (anahtar, str(deger)),
+        )
 
 def ayar_getir(anahtar, varsayilan=None):
-    from core.db import DBWrapper
     try:
-        with db_baglantisi() as conn:
-            db = DBWrapper(conn)
+        with db_baglantisi() as db:
             satir = db.execute("SELECT deger FROM ayarlar WHERE anahtar=?", (anahtar,)).fetchone()
-            # Psycopg2 vs SQLite row handling
             if satir:
-                return satir[0] if isinstance(satir, tuple) else satir['deger']
+                return satir['deger']
             return varsayilan
     except Exception as e:
         log.error(f"Ayar getirme hatası ({anahtar}): {e}")

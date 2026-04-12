@@ -89,7 +89,7 @@ def giris():
 
     with db_baglantisi() as db:
         ogrenci = db.execute(
-            'SELECT ad, soyad, numara FROM ogrenciler WHERE UPPER(ad || " " || soyad)=? AND sinif_id=?',
+            "SELECT ad, soyad, numara FROM ogrenciler WHERE UPPER(ad || ' ' || soyad)=? AND sinif_id=?",
             (ad_soyad, sinif_id)
         ).fetchone()
 

@@ -177,12 +177,11 @@ def handle_heartbeat(data):
     numara = data.get('numara')
     if not numara: return
     
-    from core.db import db_baglantisi, DBWrapper
+    from core.db import db_baglantisi
     from core.utils import bugun, simdi
-    
+
     try:
-        with db_baglantisi() as conn:
-            db = DBWrapper(conn)
+        with db_baglantisi() as db:
             db.execute("""
                 INSERT INTO ogrenci_aktivite_log (numara, ip, aktivite_tipi, detay, tarih, saat)
                 VALUES (?, ?, ?, ?, ?, ?)
@@ -194,7 +193,6 @@ def handle_heartbeat(data):
                 bugun(),
                 simdi()
             ))
-            db.commit()
     except Exception as e:
         app.logger.error(f"Heartbeat log hatası: {e}")
 

@@ -1,4 +1,5 @@
 import os
+import re
 import sqlite3
 import logging
 try:
@@ -6,6 +7,7 @@ try:
     from psycopg2.extras import RealDictCursor
 except ImportError:
     psycopg2 = None
+    RealDictCursor = None
 
 from core.paths import DB_YOLU
 
@@ -13,6 +15,167 @@ _log = logging.getLogger('app')
 
 # Global DB sağlık durumu — False ise öğrenci girişi engellenir
 db_saglikli = True
+
+# id sütunu olmayan tablolar (INSERT ... RETURNING id buralarda patlar)
+_TABLOLAR_ID_SIZ = {'ayarlar'}
+
+_INSERT_TABLO_RE = re.compile(r'INSERT\s+(?:OR\s+\w+\s+)?INTO\s+["`]?(\w+)', re.IGNORECASE)
+
+
+class _CursorWrapper:
+    """sqlite3.Cursor ve psycopg2.cursor için tek tip fetch/lastrowid arayüzü.
+
+    PostgreSQL'de INSERT'ler RETURNING id ile çalıştırıldığında lastrowid cache'lenir
+    (cursor üzerinde başka bir fetch yapılmasın diye hemen tüketilir).
+    """
+    def __init__(self, cursor, db_type, insert_returning=False):
+        self._cursor = cursor
+        self._db_type = db_type
+        self._pg_lastrowid = None
+        if insert_returning:
+            try:
+                row = cursor.fetchone()
+                if row is not None:
+                    if isinstance(row, dict):
+                        self._pg_lastrowid = next(iter(row.values()), None)
+                    else:
+                        self._pg_lastrowid = row[0]
+            except Exception:
+                pass
+
+    def fetchall(self):
+        return self._cursor.fetchall()
+
+    def fetchone(self):
+        return self._cursor.fetchone()
+
+    def fetchmany(self, size=None):
+        if size is None:
+            return self._cursor.fetchmany()
+        return self._cursor.fetchmany(size)
+
+    @property
+    def lastrowid(self):
+        if self._db_type == 'sqlite':
+            return self._cursor.lastrowid
+        return self._pg_lastrowid
+
+    @property
+    def rowcount(self):
+        return self._cursor.rowcount
+
+    def __iter__(self):
+        return iter(self._cursor)
+
+    def close(self):
+        try:
+            self._cursor.close()
+        except Exception:
+            pass
+
+
+class DBWrapper:
+    """SQLite ve PostgreSQL için tek tip connection arayüzü.
+
+    - `?` → `%s` parametre placeholder dönüşümü
+    - `INSERT OR IGNORE` → `INSERT ... ON CONFLICT DO NOTHING`
+    - `INSERT OR REPLACE INTO ayarlar` → `ON CONFLICT (anahtar) DO UPDATE SET deger=EXCLUDED.deger`
+    - `lastrowid` için otomatik `RETURNING id` (ayarlar gibi id'siz tablolar hariç)
+    - Row erişimi: `row['key']` her iki DB'de de çalışır (SQLite `Row`, PG `RealDictCursor`)
+    """
+    def __init__(self, conn, db_type):
+        self._conn = conn
+        self.db_type = db_type
+
+    def _postgres_query_fix(self, query):
+        query = query.replace('?', '%s')
+
+        if re.search(r'INSERT\s+OR\s+IGNORE\s+INTO', query, re.IGNORECASE):
+            query = re.sub(r'INSERT\s+OR\s+IGNORE\s+INTO', 'INSERT INTO', query, flags=re.IGNORECASE)
+            if 'ON CONFLICT' not in query.upper():
+                query = query.rstrip().rstrip(';') + ' ON CONFLICT DO NOTHING'
+
+        m = re.search(r'INSERT\s+OR\s+REPLACE\s+INTO\s+["`]?(\w+)', query, re.IGNORECASE)
+        if m:
+            tablo = m.group(1).lower()
+            query = re.sub(r'INSERT\s+OR\s+REPLACE\s+INTO', 'INSERT INTO', query, flags=re.IGNORECASE)
+            if 'ON CONFLICT' not in query.upper():
+                if tablo == 'ayarlar':
+                    query = query.rstrip().rstrip(';') + \
+                        ' ON CONFLICT (anahtar) DO UPDATE SET deger=EXCLUDED.deger'
+                # başka tablo için generic çözüm yok — kullanan kod manuel ON CONFLICT eklemeli
+
+        return query
+
+    def execute(self, query, params=None):
+        if self.db_type == 'postgres':
+            stripped = query.strip().upper()
+            is_insert = stripped.startswith('INSERT')
+
+            query = self._postgres_query_fix(query)
+
+            insert_returning = False
+            if is_insert and 'RETURNING' not in query.upper():
+                m = _INSERT_TABLO_RE.search(query)
+                if m and m.group(1).lower() not in _TABLOLAR_ID_SIZ:
+                    # ON CONFLICT DO NOTHING ile çakışırsa PG 0 satır döndürür — lastrowid None olur, tolere edilir
+                    query = query.rstrip().rstrip(';') + ' RETURNING id'
+                    insert_returning = True
+
+            cursor = self._conn.cursor(cursor_factory=RealDictCursor)
+            cursor.execute(query, params or ())
+            return _CursorWrapper(cursor, 'postgres', insert_returning=insert_returning)
+        else:
+            cursor = self._conn.cursor()
+            cursor.execute(query, params or ())
+            return _CursorWrapper(cursor, 'sqlite')
+
+    def executemany(self, query, seq_of_params):
+        if self.db_type == 'postgres':
+            query = query.replace('?', '%s')
+        cursor = self._conn.cursor()
+        cursor.executemany(query, seq_of_params)
+        return _CursorWrapper(cursor, self.db_type)
+
+    def cursor(self):
+        """Ham cursor — `db_olustur()` gibi advanced kullanım için.
+
+        Dikkat: Bu cursor üzerinden doğrudan SQL çalıştırılırsa `?` / `%s` dönüşümü
+        yapılmaz. `db_olustur()` zaten `CREATE TABLE IF NOT EXISTS ...` ile çalışıyor
+        ve `_kolon_ekle()` db_type bilerek manuel düzenleniyor.
+        """
+        if self.db_type == 'postgres':
+            return self._conn.cursor()
+        return self._conn.cursor()
+
+    def commit(self):
+        self._conn.commit()
+
+    def rollback(self):
+        self._conn.rollback()
+
+    def close(self):
+        try:
+            self._conn.close()
+        except Exception:
+            pass
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        if exc_type:
+            try:
+                self._conn.rollback()
+            except Exception:
+                pass
+        else:
+            try:
+                self._conn.commit()
+            except Exception:
+                pass
+        self.close()
+
 
 def db_baglantisi():
     global db_saglikli
@@ -22,72 +185,36 @@ def db_baglantisi():
         if not psycopg2:
             _log.error("❌ psycopg2 kütüphanesi yüklü değil! 'pip install psycopg2-binary' komutunu çalıştırın.")
             raise ImportError("psycopg2 not installed")
-        
+
         try:
-            baglanti = psycopg2.connect(
+            conn = psycopg2.connect(
                 host=os.environ.get('DB_HOST', 'localhost'),
                 port=os.environ.get('DB_PORT', '5432'),
                 user=os.environ.get('DB_USER', 'postgres'),
                 password=os.environ.get('DB_PASS', 'postgres_pass'),
                 dbname=os.environ.get('DB_NAME', 'ders_takip')
             )
-            # SQLite 'Row' benzeri davranış için RealDictCursor kullanıyoruz
-            # Ancak biz genel bir wrapper yazacağımız için standardı koruyalım veya cursor factory ayarlı kalsın
             if not db_saglikli:
                 _log.info("✅ PostgreSQL bağlantısı kuruldu")
                 db_saglikli = True
-            return baglanti
+            return DBWrapper(conn, 'postgres')
         except Exception as e:
             db_saglikli = False
             _log.error(f"❌ PostgreSQL bağlantı hatası: {e}")
             raise
     else:
-        # Varsayılan SQLite
         DB_YOLU.parent.mkdir(exist_ok=True)
         try:
-            baglanti = sqlite3.connect(DB_YOLU, timeout=5)
-            baglanti.row_factory = sqlite3.Row
+            conn = sqlite3.connect(DB_YOLU, timeout=5)
+            conn.row_factory = sqlite3.Row
             if not db_saglikli:
                 _log.info("✅ SQLite bağlantısı kuruldu")
                 db_saglikli = True
-            return baglanti
+            return DBWrapper(conn, 'sqlite')
         except sqlite3.OperationalError as e:
             db_saglikli = False
             _log.error(f"❌ SQLite açılamıyor: {e}")
             raise
-
-class DBWrapper:
-    """SQLite (?) ve PostgreSQL (%s) parametre uyumsuzluğunu çözen wrapper"""
-    def __init__(self, conn):
-        self.conn = conn
-        self.db_type = 'postgres' if hasattr(conn, 'cursor_factory') or 'psycopg2' in str(type(conn)) else 'sqlite'
-
-    def execute(self, query, params=None):
-        cursor = self.conn.cursor()
-        if self.db_type == 'postgres':
-            # ? -> %s dönüşümü
-            query = query.replace('?', '%s')
-            # AUTOINCREMENT -> SERIAL (Sadece tablo oluştururken lazım, ama genel execute için de ufak dokunuşlar gerekebilir)
-            # Create table sorgularında manuel kontrol daha güvenli
-        
-        if params:
-            cursor.execute(query, params)
-        else:
-            cursor.execute(query)
-        return cursor
-
-    def commit(self):
-        self.conn.commit()
-
-    def __enter__(self):
-        return self
-
-    def __exit__(self, exc_type, exc_val, exc_tb):
-        if exc_type:
-            self.conn.rollback()
-        else:
-            self.conn.commit()
-        self.conn.close()
 
 def _kolon_ekle(cursor, db_type, tablo, kolon, tip_default):
     """Kolon yoksa ekle — PostgreSQL ve SQLite uyumlu."""

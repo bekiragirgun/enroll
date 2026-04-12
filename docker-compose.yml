@@ -25,6 +25,13 @@ services:
       - DB_PASS=${DB_PASSWORD:-postgres_pass}
       - DB_NAME=${DB_NAME:-ders_takip}
       - SECRET_KEY=${SECRET_KEY}
+      # Chroot SSH — .env'den okunur. app.py --host/--user/--pass verildiğinde
+      # os.environ override edildiği için CLI argümanı her zaman bu env'leri ezer.
+      - CHROOT_HOST=${CHROOT_HOST:-}
+      - CHROOT_SSH_PORT=${CHROOT_SSH_PORT:-22}
+      - CHROOT_REAL_SSH_PORT=${CHROOT_REAL_SSH_PORT:-22}
+      - CHROOT_USER=${CHROOT_USER:-root}
+      - CHROOT_PASS=${CHROOT_PASS:-}
     ports:
       - "3333:3333"
     volumes:
