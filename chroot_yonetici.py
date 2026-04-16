@@ -319,6 +319,7 @@ def setup_template():
         ])
 
     # Dağıtıma uygun sources.list içeriği
+    sources_list = STUDENT_TEMPLATE / "etc" / "apt" / "sources.list"
     if HOST_OS == "debian":
         repo_content = f"""
 deb http://deb.debian.org/debian bookworm main contrib non-free non-free-firmware
