@@ -12,6 +12,166 @@ from docker_terminal import image_var_mi, container_durum
 log = logging.getLogger('app')
 api_bp = Blueprint('api_bp', __name__, url_prefix='/api')
 
+def _docker_icinde_mi():
+    """Container içinde miyiz? /.dockerenv dosyası Docker tarafından oluşturulur."""
+    import os
+    return os.path.exists('/.dockerenv')
+
+
+def _slayt_klasoru_kontrol(klasor):
+    """Slayt klasörü container'dan erişilebilir mi? Docker uyarısıyla net mesaj döner.
+
+    Returns: {'ok': bool, 'mesaj': str, 'dosya_sayisi': int}
+    """
+    import os
+    from pathlib import Path
+
+    if not klasor:
+        return {'ok': True, 'mesaj': 'Klasör boş bırakıldı (slayt yok)', 'dosya_sayisi': 0}
+
+    yol = Path(klasor)
+    if yol.exists() and yol.is_dir():
+        try:
+            sayi = sum(
+                1 for f in yol.iterdir()
+                if f.suffix.lower() in ('.html', '.pdf') and not f.name.startswith('.')
+            )
+        except PermissionError:
+            return {'ok': False, 'mesaj': f'Klasör okunamıyor (izin hatası): {klasor}', 'dosya_sayisi': 0}
+        return {'ok': True, 'mesaj': f'{sayi} slayt bulundu', 'dosya_sayisi': sayi}
+
+    # Klasör yok — Docker mu kontrol et
+    if _docker_icinde_mi():
+        slide_base = os.environ.get('SLIDE_HOST_BASE', '')
+        bas_uyari = ''
+        if slide_base and not klasor.startswith(slide_base):
+            bas_uyari = (
+                f"\n⚠️ Bu yol .env'deki SLIDE_HOST_BASE ({slide_base}) altında değil. "
+                f"Mount edilmiş kök altındaki bir alt klasör seçmelisin, "
+                f"veya .env'de SLIDE_HOST_BASE'i değiştirip "
+                f"`docker compose up -d --force-recreate app` çalıştırmalısın."
+            )
+        return {
+            'ok': False,
+            'mesaj': (
+                f"Container içinde klasör bulunamadı: {klasor}\n"
+                f"Docker'da çalışıyorsun — bu yol container'a mount edilmemiş.{bas_uyari}"
+            ),
+            'dosya_sayisi': 0,
+        }
+
+    return {'ok': False, 'mesaj': f'Klasör bulunamadı: {klasor}', 'dosya_sayisi': 0}
+
+
+@api_bp.route('/slayt_klasoru/test', methods=['POST'])
+@ogretmen_giris_gerekli
+def api_slayt_klasoru_test():
+    veri = request.get_json() or {}
+    klasor = str(veri.get('klasor', '')).strip()
+    sonuc = _slayt_klasoru_kontrol(klasor)
+    return jsonify({
+        'durum': 'ok' if sonuc['ok'] else 'hata',
+        'mesaj': sonuc['mesaj'],
+        'dosya_sayisi': sonuc['dosya_sayisi'],
+        'docker': _docker_icinde_mi(),
+    })
+
+
+@api_bp.route('/klasor/gozat')
+@ogretmen_giris_gerekli
+def api_klasor_gozat():
+    """Slayt kök altındaki bir klasörün alt klasörlerini ve slayt sayılarını listeler.
+
+    Güvenlik: Verilen yol SLIDE_HOST_BASE altında olmak zorunda. Sembolik
+    link veya '..' ile dışarı çıkmaya izin verilmez.
+    """
+    import os
+    from pathlib import Path
+
+    base_str = os.environ.get('SLIDE_HOST_BASE', '').strip()
+    if not base_str:
+        return jsonify({
+            'durum': 'hata',
+            'mesaj': 'SLIDE_HOST_BASE .env\'de tanımlı değil. Klasör tarayıcı kullanılamaz.',
+        }), 400
+
+    base = Path(base_str).resolve()
+    if not base.exists() or not base.is_dir():
+        return jsonify({
+            'durum': 'hata',
+            'mesaj': f'Kök klasör bulunamadı: {base_str} (Docker mount kontrol et).',
+        }), 400
+
+    istenen = request.args.get('yol', '').strip() or str(base)
+    try:
+        hedef = Path(istenen).resolve()
+    except Exception as e:
+        return jsonify({'durum': 'hata', 'mesaj': f'Geçersiz yol: {e}'}), 400
+
+    # Kök dışı isteği reddet (relative_to ValueError atar)
+    try:
+        hedef.relative_to(base)
+    except ValueError:
+        return jsonify({
+            'durum': 'hata',
+            'mesaj': f'Bu yol kök dışında: {hedef}\nKök: {base}',
+        }), 400
+
+    if not hedef.exists() or not hedef.is_dir():
+        return jsonify({
+            'durum': 'hata',
+            'mesaj': f'Klasör bulunamadı: {hedef}',
+        }), 404
+
+    alt_klasorler = []
+    try:
+        for f in sorted(hedef.iterdir(), key=lambda p: p.name.lower()):
+            if not f.is_dir() or f.name.startswith('.'):
+                continue
+            try:
+                slayt_sayisi = sum(
+                    1 for x in f.iterdir()
+                    if x.is_file() and x.suffix.lower() in ('.html', '.pdf') and not x.name.startswith('.')
+                )
+            except (PermissionError, OSError):
+                slayt_sayisi = -1  # erişim yok
+            alt_klasorler.append({
+                'ad': f.name,
+                'yol': str(f),
+                'slayt_sayisi': slayt_sayisi,
+            })
+    except PermissionError:
+        return jsonify({'durum': 'hata', 'mesaj': f'Klasör okuma izni yok: {hedef}'}), 403
+
+    # Mevcut klasördeki slayt sayısı (seçim tetikleyicisi için)
+    mevcut_slayt = sum(
+        1 for x in hedef.iterdir()
+        if x.is_file() and x.suffix.lower() in ('.html', '.pdf') and not x.name.startswith('.')
+    )
+
+    # Breadcrumb — kök ile mevcut yol arası
+    rel = hedef.relative_to(base)
+    breadcrumb = [{'ad': base.name or '/', 'yol': str(base)}]
+    yol_kismi = base
+    for parca in rel.parts:
+        yol_kismi = yol_kismi / parca
+        breadcrumb.append({'ad': parca, 'yol': str(yol_kismi)})
+
+    ust_yol = None
+    if hedef != base:
+        ust_yol = str(hedef.parent)
+
+    return jsonify({
+        'durum': 'ok',
+        'kok': str(base),
+        'mevcut': str(hedef),
+        'mevcut_slayt_sayisi': mevcut_slayt,
+        'breadcrumb': breadcrumb,
+        'ust_yol': ust_yol,
+        'alt_klasorler': alt_klasorler,
+    })
+
+
 @api_bp.route('/durum')
 def api_durum():
     cikis_onaylandi = False
@@ -119,12 +279,15 @@ def api_config():
 
     if 'chroot_pass' in veri:
         pw = veri['chroot_pass']
-        ders_durumu['chroot_pass'] = pw
-        ayar_kaydet('chroot_pass', pw)
-        try:
-            import chroot_terminal
-            chroot_terminal.CHROOT_PASS = pw
-        except: pass
+        # Boş gönderilirse mevcut şifreyi koru (UI artık şifreleri HTML'e yazmıyor;
+        # placeholder "değiştirmemek için boş bırak" uyarısı verir)
+        if pw:
+            ders_durumu['chroot_pass'] = pw
+            ayar_kaydet('chroot_pass', pw)
+            try:
+                import chroot_terminal
+                chroot_terminal.CHROOT_PASS = pw
+            except: pass
 
     if 'system_host' in veri:
         host = veri['system_host']
@@ -155,16 +318,26 @@ def api_config():
         ayar_kaydet('ders_gunleri', str(veri['ders_gunleri']))
 
     if 'slayt_klasoru' in veri:
-        klasor = str(veri['slayt_klasoru'])
+        klasor = str(veri['slayt_klasoru']).strip()
+        kontrol = _slayt_klasoru_kontrol(klasor)
+        if not kontrol['ok']:
+            return jsonify({
+                'durum': 'hata',
+                'alan': 'slayt_klasoru',
+                'mesaj': kontrol['mesaj'],
+            }), 400
         ders_durumu['slayt_klasoru'] = klasor
         ayar_kaydet('slayt_klasoru', klasor)
 
-    # Veritabanı Ayarları
+    # Veritabanı Ayarları — db_pass boş ise mevcut şifre korunur (HTML şifre ifşası fix'i)
     db_keys = ['db_type', 'db_host', 'db_port', 'db_user', 'db_pass', 'db_name']
     for key in db_keys:
-        if key in veri:
-            ayar_kaydet(key, str(veri[key]))
-            # ders_durumu güncellemesi (isteğe bağlı, db_baglantisi os.environ veya ayar_getir kullanmalı)
+        if key not in veri:
+            continue
+        deger = str(veri[key])
+        if key == 'db_pass' and not deger:
+            continue  # boş şifre = "değiştirme"
+        ayar_kaydet(key, deger)
 
     return jsonify({'durum': 'ok'})
 
@@ -189,6 +362,14 @@ def api_healthcheck():
     port = veri.get('chroot_port', 22)
     user = veri.get('chroot_user', 'root')
     password = veri.get('chroot_pass', '')
+
+    import re
+    # Hostname/IP validation: Alfanumerik, nokta ve tire
+    if not re.match(r'^[a-zA-Z0-9\.-]+$', host):
+        return jsonify({'durum': 'hata', 'mesaj': 'Geçersiz Host formatı!'}), 400
+    # User validation: Sadece alfanumerik ve alt çizgi
+    if not re.match(r'^[a-zA-Z0-9_]+$', user):
+        return jsonify({'durum': 'hata', 'mesaj': 'Geçersiz Kullanıcı formatı!'}), 400
 
     try:
         from chroot_terminal import _is_local
@@ -456,6 +637,337 @@ def api_terminal_guvenlik_log():
     with db_baglantisi() as db:
         loglar = db.execute("SELECT * FROM terminal_guvenlik_log ORDER BY id DESC LIMIT 50").fetchall()
     return jsonify({'loglar': [dict(l) for l in loglar]})
+
+
+@api_bp.route('/loglar')
+@ogretmen_giris_gerekli
+def api_loglar():
+    """Sistem logları — app_log tablosundan okur.
+
+    Query params:
+      limit  — kaç satır (default 200, max 2000)
+      since  — sadece bu id'den büyük olanlar (incremental polling için)
+      level  — tek seviye filtre (INFO, WARNING, ERROR)
+      q      — mesajda full-text ara
+    """
+    try:
+        limit = min(int(request.args.get('limit', 200)), 2000)
+    except (TypeError, ValueError):
+        limit = 200
+    try:
+        since = int(request.args.get('since', 0))
+    except (TypeError, ValueError):
+        since = 0
+    level = (request.args.get('level') or '').strip().upper()
+    q = (request.args.get('q') or '').strip()
+
+    sorgu = "SELECT id, ts, level, logger, message, ip, kullanici FROM app_log WHERE 1=1"
+    params = []
+    if since > 0:
+        sorgu += " AND id > ?"
+        params.append(since)
+    if level in ('INFO', 'WARNING', 'ERROR', 'CRITICAL', 'DEBUG'):
+        sorgu += " AND level = ?"
+        params.append(level)
+    if q:
+        sorgu += " AND message LIKE ?"
+        params.append('%' + q + '%')
+    sorgu += " ORDER BY id DESC LIMIT ?"
+    params.append(limit)
+
+    with db_baglantisi() as db:
+        rows = db.execute(sorgu, tuple(params)).fetchall()
+
+    loglar = []
+    for r in rows:
+        d = dict(r)
+        # ts datetime objesi olabilir (PG) veya string (SQLite). Standardize et.
+        ts = d.get('ts')
+        if ts is not None and not isinstance(ts, str):
+            try:
+                d['ts'] = ts.strftime('%Y-%m-%d %H:%M:%S')
+            except Exception:
+                d['ts'] = str(ts)
+        loglar.append(d)
+
+    return jsonify({'loglar': loglar, 'sayi': len(loglar)})
+
+
+# ────────────────────────────────────────────────────────────────────
+# Haftalık Devamlılık (öğrenci × hafta matrisi, öğretmen override destekli)
+# ────────────────────────────────────────────────────────────────────
+
+def _donem_ve_hafta_sayisi(db):
+    """En eski yoklama tarihi = 1. hafta başı. O günden bugüne kaç hafta geçtiyse max_hafta."""
+    satir = db.execute("SELECT MIN(tarih) as t FROM yoklama").fetchone()
+    if not satir or not satir['t']:
+        return None, 0
+    try:
+        baslangic = datetime.strptime(satir['t'], '%Y-%m-%d').date()
+    except ValueError:
+        return None, 0
+    bugun_d = datetime.now().date()
+    gecen_gun = (bugun_d - baslangic).days
+    max_hafta = max(1, gecen_gun // 7 + 1)
+    return baslangic, max_hafta
+
+
+def _tarih_to_hafta(tarih_str, donem_baslangic):
+    try:
+        t = datetime.strptime(tarih_str, '%Y-%m-%d').date()
+    except (ValueError, TypeError):
+        return None
+    fark = (t - donem_baslangic).days
+    if fark < 0:
+        return None
+    return fark // 7 + 1
+
+
+def _devamlilik_hesapla(sinif_id=None):
+    """Haftalık devamlılık matrisini hesapla. Endpoint ve CSV tarafı kullanır.
+
+    sinif_id=None verilirse 'tümü (test hariç)' modu — adında 'test' geçen sınıflar
+    filtrelenir ve tüm öğrenciler tek matrise toplanır. Bu modda öğrenci satırına
+    `sinif_ad` alanı eklenir.
+
+    None (fonksiyonun kendisi) dönerse sınıf bulunamadı demektir (yalnızca tek sınıf
+    modunda olabilir).
+    """
+    tumu_modu = sinif_id is None
+
+    with db_baglantisi() as db:
+        if tumu_modu:
+            sinif_adi = 'Tümü (test hariç)'
+        else:
+            sinif = db.execute('SELECT ad FROM siniflar WHERE id=?', (sinif_id,)).fetchone()
+            if not sinif:
+                return None
+            sinif_adi = sinif['ad']
+
+        donem_baslangic, max_hafta = _donem_ve_hafta_sayisi(db)
+        if donem_baslangic is None:
+            return {
+                'sinif': sinif_adi,
+                'donem_baslangic': None,
+                'max_hafta': 0,
+                'ogrenciler': [],
+                'mesaj': 'Henüz yoklama kaydı yok.',
+            }
+
+        if tumu_modu:
+            # Tümü modu — test'li sınıfları hariç tut.
+            # SQL içine literal '%test%' yazmıyoruz: psycopg2 '%' karakterini
+            # parametre placeholder parser'ı olarak yorumlar ve IndexError atar.
+            # Parametre ile geçirince driver kendisi escape eder.
+            test_deseni = '%test%'
+
+            ogrenciler = db.execute(
+                """SELECT o.numara, o.ad, o.soyad, s.ad AS sinif_ad
+                   FROM ogrenciler o
+                   JOIN siniflar s ON s.id = o.sinif_id
+                   WHERE LOWER(s.ad) NOT LIKE ?
+                   ORDER BY s.ad, o.soyad, o.ad""",
+                (test_deseni,)
+            ).fetchall()
+
+            kayitlar = db.execute(
+                """SELECT y.numara, y.tarih
+                   FROM yoklama y
+                   JOIN ogrenciler o ON o.numara = y.numara
+                   JOIN siniflar s ON s.id = o.sinif_id
+                   WHERE LOWER(s.ad) NOT LIKE ?""",
+                (test_deseni,)
+            ).fetchall()
+
+            overrideler = db.execute(
+                """SELECT yo.numara, yo.hafta, yo.durum
+                   FROM yoklama_override yo
+                   JOIN ogrenciler o ON o.numara = yo.numara
+                   JOIN siniflar s ON s.id = o.sinif_id
+                   WHERE LOWER(s.ad) NOT LIKE ?""",
+                (test_deseni,)
+            ).fetchall()
+        else:
+            ogrenciler = db.execute(
+                'SELECT numara, ad, soyad FROM ogrenciler WHERE sinif_id=? ORDER BY soyad, ad',
+                (sinif_id,)
+            ).fetchall()
+
+            kayitlar = db.execute(
+                """SELECT y.numara, y.tarih
+                   FROM yoklama y
+                   JOIN ogrenciler o ON o.numara = y.numara
+                   WHERE o.sinif_id = ?""",
+                (sinif_id,)
+            ).fetchall()
+
+            overrideler = db.execute(
+                """SELECT yo.numara, yo.hafta, yo.durum
+                   FROM yoklama_override yo
+                   JOIN ogrenciler o ON o.numara = yo.numara
+                   WHERE o.sinif_id = ?""",
+                (sinif_id,)
+            ).fetchall()
+
+        yoklama_var = {}  # {numara: set(haftalar)}
+        for k in kayitlar:
+            h = _tarih_to_hafta(k['tarih'], donem_baslangic)
+            if h is None or h < 1:
+                continue
+            yoklama_var.setdefault(k['numara'], set()).add(h)
+
+        override_map = {(o['numara'], o['hafta']): o['durum'] for o in overrideler}
+
+        satirlar = []
+        for ogr in ogrenciler:
+            hucreler = []
+            katildi_sayisi = 0
+            for h in range(1, max_hafta + 1):
+                ov = override_map.get((ogr['numara'], h))
+                otomatik = 'katildi' if h in yoklama_var.get(ogr['numara'], set()) else 'katilmadi'
+                efektif = ov if ov is not None else otomatik
+                hucreler.append({
+                    'hafta': h,
+                    'durum': efektif,
+                    'otomatik': otomatik,
+                    'override': ov is not None,
+                })
+                if efektif == 'katildi':
+                    katildi_sayisi += 1
+            devamsizlik = max_hafta - katildi_sayisi
+            yuzde = round(katildi_sayisi * 100 / max_hafta) if max_hafta > 0 else 0
+            satir = {
+                'numara': ogr['numara'],
+                'ad': ogr['ad'],
+                'soyad': ogr['soyad'],
+                'hucreler': hucreler,
+                'katildi': katildi_sayisi,
+                'devamsizlik': devamsizlik,
+                'yuzde': yuzde,
+            }
+            if tumu_modu:
+                satir['sinif_ad'] = ogr['sinif_ad']
+            satirlar.append(satir)
+
+        return {
+            'sinif': sinif_adi,
+            'tumu_modu': tumu_modu,
+            'donem_baslangic': donem_baslangic.isoformat(),
+            'max_hafta': max_hafta,
+            'ogrenciler': satirlar,
+        }
+
+
+@api_bp.route('/devamlilik/tumu')
+@ogretmen_giris_gerekli
+def api_devamlilik_tumu():
+    data = _devamlilik_hesapla(sinif_id=None)
+    return jsonify(data)
+
+
+@api_bp.route('/devamlilik/<int:sinif_id>')
+@ogretmen_giris_gerekli
+def api_devamlilik(sinif_id):
+    data = _devamlilik_hesapla(sinif_id)
+    if data is None:
+        return jsonify({'durum': 'hata', 'mesaj': 'Sınıf bulunamadı'}), 404
+    return jsonify(data)
+
+
+@api_bp.route('/devamlilik/override', methods=['POST'])
+@ogretmen_giris_gerekli
+def api_devamlilik_override():
+    veri = request.get_json() or {}
+    numara = (veri.get('numara') or '').strip()
+    hafta = veri.get('hafta')
+    durum = (veri.get('durum') or '').strip()
+
+    if not numara or not isinstance(hafta, int) or hafta < 1:
+        return jsonify({'durum': 'hata', 'mesaj': 'numara ve hafta gerekli'}), 400
+    if durum not in ('katildi', 'katilmadi', 'sil'):
+        return jsonify({'durum': 'hata', 'mesaj': 'durum: katildi|katilmadi|sil'}), 400
+
+    with db_baglantisi() as db:
+        # Öğrenci var mı doğrula
+        ogr = db.execute('SELECT 1 FROM ogrenciler WHERE numara=?', (numara,)).fetchone()
+        if not ogr:
+            return jsonify({'durum': 'hata', 'mesaj': 'Öğrenci bulunamadı'}), 404
+
+        if durum == 'sil':
+            db.execute('DELETE FROM yoklama_override WHERE numara=? AND hafta=?', (numara, hafta))
+            return jsonify({'durum': 'ok', 'aksiyon': 'silindi'})
+
+        # Upsert (DBWrapper'ın INSERT OR REPLACE dönüşümü sadece ayarlar için — manuel yapıyoruz)
+        mevcut = db.execute(
+            'SELECT id FROM yoklama_override WHERE numara=? AND hafta=?',
+            (numara, hafta)
+        ).fetchone()
+        if mevcut:
+            db.execute(
+                'UPDATE yoklama_override SET durum=?, tarih=? WHERE numara=? AND hafta=?',
+                (durum, bugun(), numara, hafta)
+            )
+            aksiyon = 'guncellendi'
+        else:
+            db.execute(
+                'INSERT INTO yoklama_override (numara, hafta, durum, tarih) VALUES (?,?,?,?)',
+                (numara, hafta, durum, bugun())
+            )
+            aksiyon = 'eklendi'
+
+    return jsonify({'durum': 'ok', 'aksiyon': aksiyon})
+
+
+@api_bp.route('/devamlilik/<int:sinif_id>/csv')
+@ogretmen_giris_gerekli
+def api_devamlilik_csv(sinif_id):
+    return _devamlilik_csv_render(sinif_id=sinif_id)
+
+
+@api_bp.route('/devamlilik/tumu/csv')
+@ogretmen_giris_gerekli
+def api_devamlilik_tumu_csv():
+    return _devamlilik_csv_render(sinif_id=None)
+
+
+def _devamlilik_csv_render(sinif_id):
+    data = _devamlilik_hesapla(sinif_id)
+    if data is None:
+        return jsonify({'durum': 'hata', 'mesaj': 'Sınıf bulunamadı'}), 404
+
+    tumu = data.get('tumu_modu', False)
+    cikti = io.StringIO()
+    yazici = csv.writer(cikti)
+
+    basliklar = ['Numara']
+    if tumu:
+        basliklar.append('Sınıf')
+    basliklar += ['Ad Soyad', 'Katıldı', 'Devamsızlık', 'Yüzde']
+    for h in range(1, data['max_hafta'] + 1):
+        basliklar.append(f'H{h}')
+    yazici.writerow(basliklar)
+
+    for o in data['ogrenciler']:
+        satir = [o['numara']]
+        if tumu:
+            satir.append(o.get('sinif_ad', ''))
+        satir += [
+            f"{o['ad']} {o['soyad']}",
+            o['katildi'],
+            o['devamsizlik'],
+            f"%{o['yuzde']}",
+        ]
+        for h in o['hucreler']:
+            satir.append('V' if h['durum'] == 'katildi' else 'X')
+        yazici.writerow(satir)
+
+    dosya_adi = f"devamlilik_{data['sinif'].replace(' ', '_').replace('(', '').replace(')', '')}.csv"
+    return send_file(
+        io.BytesIO(cikti.getvalue().encode('utf-8-sig')),
+        mimetype='text/csv',
+        as_attachment=True,
+        download_name=dosya_adi,
+    )
 
 @api_bp.route('/terminal/aktif_oturumlar')
 @ogretmen_giris_gerekli
@@ -753,7 +1265,8 @@ def api_yardim_talep():
             'INSERT INTO yardim_talepleri (tarih, saat, numara, ad_soyad, durum, kategori) VALUES (?, ?, ?, ?, ?, ?)',
             (bugun(), simdi(), numara, ad_soyad, 'bekliyor', kategori)
         )
-        db.commit()
+
+    log.info(f"📞 Yardım talebi: {ad_soyad} ({numara}) — kategori: {kategori or 'belirsiz'}")
     return jsonify({'durum': 'ok'})
 
 @api_bp.route('/yardim_talepler', methods=['GET'])
@@ -1127,13 +1640,6 @@ def api_chroot_sil_secili():
         return jsonify({'hata': str(e)}), 500
 
 
-@api_bp.route('/loglar')
-@ogretmen_giris_gerekli
-def api_loglar():
-    """Son N uygulama logu döndür (in-memory buffer)."""
-    from core.state import log_buffer
-    limit = min(int(request.args.get('limit', 200)), 500)
-    since_ts = int(request.args.get('since', 0))
-    kayitlar = [e for e in log_buffer if e['ts'] > since_ts]
-    return jsonify({'loglar': list(kayitlar)[-limit:]})
+# Eski /api/loglar endpoint'i kaldırıldı — in-memory buffer kalıcı değildi ve filtre yoktu.
+# Yenisi yukarıda (~satır 467) — PG `app_log` tablosundan okur.
 

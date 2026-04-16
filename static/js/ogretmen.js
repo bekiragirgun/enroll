@@ -1,11 +1,29 @@
 // XSS koruması — kullanıcı verisini HTML'e güvenli şekilde ekle
 function esc(s) { var d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
 
+// JS string literal'i HTML attribute içinde güvenli — inline onclick="fn(${escJsAttr(x)})" için.
+// JSON.stringify hem escape hem quote sağlar; sonra HTML attribute için &quot; ile çift kapsama.
+function escJsAttr(s) {
+  return JSON.stringify(String(s == null ? '' : s))
+    .replace(/&/g, '&amp;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+}
+
 const YOKLAMA_ARALIK = 5000;
 
 // Centralized Fetch for Cloudflare Access Session Handling
 async function safeFetch(url, options = {}) {
   try {
+    // CSRF Token ekle
+    const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content;
+    if (csrfToken) {
+      if (!options.headers) options.headers = {};
+      options.headers['X-CSRFToken'] = csrfToken;
+    }
+
     const res = await fetch(url, options);
     // Cloudflare Access check: If redirected to login page or 401/403
     if (res.url && res.url.includes('cloudflareaccess.com')) {
@@ -135,6 +153,192 @@ async function ayarlariKaydet() {
     alert('Ayarlar başarıyla kaydedildi!');
   } else {
     alert('Ayarlar kaydedilirken hata oluştu!');
+  }
+}
+
+// ─── Ayarlar kart toggle (collapsible cards + localStorage) ───
+function ayarKartToggle(kartAd) {
+  var el = document.querySelector('.ayar-kart[data-kart="' + kartAd + '"]');
+  if (!el) return;
+  el.classList.toggle('kapali');
+  ayarKartDurumKaydet();
+}
+function ayarKartlarHepsiAc() {
+  document.querySelectorAll('.ayar-kart').forEach(function(k) { k.classList.remove('kapali'); });
+  ayarKartDurumKaydet();
+}
+function ayarKartlarHepsiKapat() {
+  document.querySelectorAll('.ayar-kart').forEach(function(k) { k.classList.add('kapali'); });
+  ayarKartDurumKaydet();
+}
+function ayarKartDurumKaydet() {
+  var durumlar = {};
+  document.querySelectorAll('.ayar-kart').forEach(function(k) {
+    durumlar[k.dataset.kart] = !k.classList.contains('kapali');
+  });
+  try { localStorage.setItem('ayar-kart-durum', JSON.stringify(durumlar)); } catch (e) {}
+}
+function ayarKartDurumYukle() {
+  try {
+    var durumlar = JSON.parse(localStorage.getItem('ayar-kart-durum') || '{}');
+    document.querySelectorAll('.ayar-kart').forEach(function(k) {
+      if (durumlar[k.dataset.kart] === false) k.classList.add('kapali');
+    });
+  } catch (e) {}
+}
+document.addEventListener('DOMContentLoaded', ayarKartDurumYukle);
+
+// ─── Slayt klasör tarayıcı (inline gözat panel) ───
+var _slaytGozatMevcutYol = null;
+
+function slaytKlasorGozatAc() {
+  var panel = document.getElementById('slayt-gozat-panel');
+  if (!panel) return;
+  panel.style.display = 'block';
+  // İlk açılışta mevcut input'taki yoldan başla, yoksa kök
+  var input = document.getElementById('config-slayt-klasoru');
+  var baslangic = (input && input.value.trim()) || '';
+  slaytKlasorTara(baslangic);
+}
+
+function slaytKlasorGozatKapat() {
+  var panel = document.getElementById('slayt-gozat-panel');
+  if (panel) panel.style.display = 'none';
+}
+
+async function slaytKlasorTara(yol) {
+  var icerik = document.getElementById('slayt-gozat-icerik');
+  var bc = document.getElementById('slayt-gozat-breadcrumb');
+  var info = document.getElementById('slayt-gozat-info');
+  if (!icerik) return;
+
+  icerik.textContent = '';
+  bc.textContent = 'Yükleniyor…';
+  if (info) info.textContent = '';
+
+  try {
+    var url = '/api/klasor/gozat' + (yol ? '?yol=' + encodeURIComponent(yol) : '');
+    var r = await safeFetch(url);
+    var res = await r.json();
+    if (res.durum !== 'ok') {
+      bc.textContent = '';
+      var err = document.createElement('div');
+      err.style.cssText = 'color:#fc8181;font-size:0.8rem;padding:0.5rem;';
+      err.textContent = '❌ ' + (res.mesaj || 'Hata');
+      icerik.appendChild(err);
+      return;
+    }
+
+    _slaytGozatMevcutYol = res.mevcut;
+    if (info) info.textContent = res.mevcut_slayt_sayisi + ' slayt bu klasörde';
+
+    // Breadcrumb
+    bc.textContent = '';
+    res.breadcrumb.forEach(function(b, i) {
+      if (i > 0) {
+        var sep = document.createElement('span');
+        sep.textContent = ' › ';
+        sep.style.color = '#4a5568';
+        bc.appendChild(sep);
+      }
+      var link = document.createElement('a');
+      link.href = '#';
+      link.textContent = b.ad;
+      link.style.cssText = 'color:#90cdf4;text-decoration:none;cursor:pointer;';
+      link.onclick = function(e) { e.preventDefault(); slaytKlasorTara(b.yol); };
+      bc.appendChild(link);
+    });
+
+    // Üst klasör
+    if (res.ust_yol) {
+      var ust = document.createElement('div');
+      ust.style.cssText = 'padding:6px 10px;background:#2d3748;border-radius:4px;cursor:pointer;color:#a0aec0;font-size:0.82rem;';
+      ust.textContent = '⬆️  .. (üst klasör)';
+      ust.onclick = function() { slaytKlasorTara(res.ust_yol); };
+      icerik.appendChild(ust);
+    }
+
+    // Alt klasörler
+    if (res.alt_klasorler.length === 0) {
+      var bos = document.createElement('div');
+      bos.style.cssText = 'color:#718096;font-size:0.78rem;padding:0.5rem;text-align:center;';
+      bos.textContent = '— Alt klasör yok —';
+      icerik.appendChild(bos);
+    } else {
+      res.alt_klasorler.forEach(function(k) {
+        var row = document.createElement('div');
+        row.style.cssText = 'display:flex;justify-content:space-between;align-items:center;padding:6px 10px;background:#2d3748;border-radius:4px;cursor:pointer;font-size:0.82rem;';
+        row.onmouseenter = function() { row.style.background = '#374151'; };
+        row.onmouseleave = function() { row.style.background = '#2d3748'; };
+        row.onclick = function() { slaytKlasorTara(k.yol); };
+
+        var sol = document.createElement('span');
+        sol.style.color = '#e2e8f0';
+        sol.textContent = '📁 ' + k.ad;
+
+        var sag = document.createElement('span');
+        var sayi = k.slayt_sayisi;
+        if (sayi < 0) {
+          sag.textContent = '🔒 izin yok';
+          sag.style.color = '#fc8181';
+        } else if (sayi === 0) {
+          sag.textContent = '— boş';
+          sag.style.color = '#4a5568';
+        } else {
+          sag.textContent = sayi + ' slayt';
+          sag.style.color = '#48bb78';
+        }
+        sag.style.fontSize = '0.74rem';
+
+        row.appendChild(sol);
+        row.appendChild(sag);
+        icerik.appendChild(row);
+      });
+    }
+  } catch (e) {
+    bc.textContent = '';
+    var err = document.createElement('div');
+    err.style.color = '#fc8181';
+    err.textContent = '❌ İstek başarısız: ' + (e.message || e);
+    icerik.appendChild(err);
+  }
+}
+
+function slaytKlasorMevcutSec() {
+  if (!_slaytGozatMevcutYol) return;
+  var input = document.getElementById('config-slayt-klasoru');
+  if (input) {
+    input.value = _slaytGozatMevcutYol;
+    // Otomatik test
+    slaytKlasoruTest();
+  }
+  slaytKlasorGozatKapat();
+}
+
+async function slaytKlasoruTest() {
+  var input = document.getElementById('config-slayt-klasoru');
+  var sonuc = document.getElementById('slayt-klasoru-sonuc');
+  if (!input || !sonuc) return;
+  var klasor = input.value.trim();
+  sonuc.style.color = '#a0aec0';
+  sonuc.textContent = 'Test ediliyor… ⏳';
+  try {
+    var r = await safeFetch('/api/slayt_klasoru/test', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ klasor: klasor })
+    });
+    var res = await r.json();
+    if (res.durum === 'ok') {
+      sonuc.style.color = '#48bb78';
+      sonuc.textContent = '✅ ' + res.mesaj + (res.docker ? ' (Docker mount görünür)' : '');
+    } else {
+      sonuc.style.color = '#fc8181';
+      sonuc.textContent = '❌ ' + res.mesaj;
+    }
+  } catch (e) {
+    sonuc.style.color = '#fc8181';
+    sonuc.textContent = '❌ İstek başarısız: ' + (e.message || e);
   }
 }
 
@@ -341,7 +545,7 @@ async function yoklamaCek() {
         ${o.kaynak === 'manuel' ? `<span title="Manuel giriş" style="font-size:0.7rem;color:#f6c90e;background:#2d2a00;border:1px solid #6b5900;border-radius:4px;padding:0.1rem 0.4rem;margin-left:0.4rem;">👨‍🏫 M</span>` : ''}
         <div class="saat">${esc(o.saat)}</div>
         <button
-          onclick="tekSil('${esc(o.numara)}', '${esc(o.ad_soyad).replace(/'/g, "\\'")}')"
+          onclick="tekSil(${escJsAttr(o.numara)}, ${escJsAttr(o.ad_soyad)})"
           style="margin-left:0.5rem;padding:0.15rem 0.5rem;font-size:0.7rem;background:#742a2a;border:1px solid #9b2c2c;border-radius:4px;color:#feb2b2;cursor:pointer;"
           title="Kaydı sil">
           🗑️
@@ -365,41 +569,84 @@ async function sinifDurumCek() {
 
     // Her sınıf için detay çek
     let html = '';
+    let toplamGelen = 0;
     for (const sinif of siniflar.siniflar) {
       const detayYanit = await safeFetch(`/api/sinif_ogrencileri/${sinif.id}`);
       const veri = await detayYanit.json();
 
       const geldi = veri.ogrenciler.filter(o => o.geldi);
-      const gelmedi = veri.ogrenciler.filter(o => !o.geldi);
       const tamKatilim = geldi.length === sinif.kayitli && sinif.kayitli > 0;
+      toplamGelen += sinif.bugun;
 
       html += `
-        <div class="sinif-kart">
-          <h4>
-            ${esc(sinif.ad)}
-            <span class="sinif-badge ${tamKatilim ? 'tam' : ''}">${sinif.bugun}/${sinif.kayitli}</span>
-          </h4>
-          <div class="sinif-ozet">Bugün ${sinif.bugun} katıldı · ${sinif.kayitli - sinif.bugun} eksik</div>
-          ${veri.ogrenciler.map(o => `
-            <div class="ogrenci-mini ${o.geldi ? '' : 'devamsiz'}" id="ogrenci-${esc(o.numara)}">
-              <div class="${o.geldi ? 'dot-geldi' : 'dot-gelmedi'}"></div>
-              <span>${esc(o.ad_soyad)}</span>
-              ${o.geldi && o.paket && o.paket !== '—' ? `<span style="font-size:0.65rem;color:#68d391;background:#1a3a2a;border-radius:3px;padding:0 0.3rem;margin-left:0.3rem;">${esc(o.paket.split(' ')[0] + ' ' + o.paket.split(' ')[1])}</span>` : ''}
-              ${o.geldi && o.paket === 'manuel' ? `<span style="font-size:0.65rem;color:#f6c90e;margin-left:0.2rem;" title="Manuel giriş">👨‍🏫</span>` : ''}
-              <span style="margin-left:auto;color:#718096;font-size:0.75rem;">${esc(o.numara)}</span>
-              ${!o.geldi ? `<button
-                onclick="manuelGiris(${sinif.id}, '${esc(o.numara)}', '${esc(o.ad_soyad).replace(/'/g, '\\\'')}')"
-                style="margin-left:0.5rem;padding:0.15rem 0.5rem;font-size:0.7rem;background:#2d3a1a;border:1px solid #4a6a2a;border-radius:4px;color:#a0d070;cursor:pointer;"
-                title="Manuel giriş ekle">
-                + Giriş
-              </button>` : ''}
-            </div>
-          `).join('')}
+        <div class="sinif-kart" data-sinif-id="${sinif.id}">
+          <div class="sinif-kart-baslik" onclick="sinifKartToggle(${sinif.id})">
+            <h4>
+              ${esc(sinif.ad)}
+              <span class="sinif-badge ${tamKatilim ? 'tam' : ''}">${sinif.bugun}/${sinif.kayitli}</span>
+            </h4>
+            <span class="kart-ok">▼</span>
+          </div>
+          <div class="sinif-kart-icerik">
+            <div class="sinif-ozet">Bugün ${sinif.bugun} katıldı · ${sinif.kayitli - sinif.bugun} eksik</div>
+            ${veri.ogrenciler.map(o => `
+              <div class="ogrenci-mini ${o.geldi ? '' : 'devamsiz'}" id="ogrenci-${esc(o.numara)}">
+                <div class="${o.geldi ? 'dot-geldi' : 'dot-gelmedi'}"></div>
+                <span>${esc(o.ad_soyad)}</span>
+                ${o.geldi && o.paket && o.paket !== '—' ? `<span style="font-size:0.65rem;color:#68d391;background:#1a3a2a;border-radius:3px;padding:0 0.3rem;margin-left:0.3rem;">${esc(o.paket.split(' ')[0] + ' ' + o.paket.split(' ')[1])}</span>` : ''}
+                ${o.geldi && o.paket === 'manuel' ? `<span style="font-size:0.65rem;color:#f6c90e;margin-left:0.2rem;" title="Manuel giriş">👨‍🏫</span>` : ''}
+                <span style="margin-left:auto;color:#718096;font-size:0.75rem;">${esc(o.numara)}</span>
+                ${!o.geldi ? `<button
+                  onclick="event.stopPropagation();manuelGiris(${sinif.id}, ${escJsAttr(o.numara)}, ${escJsAttr(o.ad_soyad)})"
+                  style="margin-left:0.5rem;padding:0.15rem 0.5rem;font-size:0.7rem;background:#2d3a1a;border:1px solid #4a6a2a;border-radius:4px;color:#a0d070;cursor:pointer;"
+                  title="Manuel giriş ekle">
+                  + Giriş
+                </button>` : ''}
+              </div>
+            `).join('')}
+          </div>
         </div>
       `;
     }
     grid.innerHTML = html;
+    sinifKartDurumYukle();
+
+    var bilgi = document.getElementById('sinif-durum-bilgi');
+    if (bilgi) bilgi.textContent = siniflar.siniflar.length + ' sınıf · toplam ' + toplamGelen + '/' + toplamKayitli + ' öğrenci geldi';
   } catch (e) { console.error(e); }
+}
+
+// ─── Sınıf kart toggle (collapsible + localStorage) ───
+function sinifKartToggle(sinifId) {
+  var el = document.querySelector('.sinif-kart[data-sinif-id="' + sinifId + '"]');
+  if (!el) return;
+  el.classList.toggle('kapali');
+  sinifKartDurumKaydet();
+}
+function sinifKartlarHepsiAc() {
+  document.querySelectorAll('.sinif-kart').forEach(function(k) { k.classList.remove('kapali'); });
+  sinifKartDurumKaydet();
+}
+function sinifKartlarHepsiKapat() {
+  document.querySelectorAll('.sinif-kart').forEach(function(k) { k.classList.add('kapali'); });
+  sinifKartDurumKaydet();
+}
+function sinifKartDurumKaydet() {
+  var durumlar = {};
+  document.querySelectorAll('.sinif-kart').forEach(function(k) {
+    var id = k.dataset.sinifId;
+    if (id) durumlar[id] = !k.classList.contains('kapali');
+  });
+  try { localStorage.setItem('sinif-kart-durum', JSON.stringify(durumlar)); } catch (e) {}
+}
+function sinifKartDurumYukle() {
+  try {
+    var durumlar = JSON.parse(localStorage.getItem('sinif-kart-durum') || '{}');
+    document.querySelectorAll('.sinif-kart').forEach(function(k) {
+      var id = k.dataset.sinifId;
+      if (id && durumlar[id] === false) k.classList.add('kapali');
+    });
+  } catch (e) {}
 }
 
 async function manuelGiris(sinifId, numara, adSoyad) {
@@ -1418,6 +1665,215 @@ async function devamRaporuCek() {
   }
 }
 
+// ─────────────────────────────────────────────────────────
+// Haftalık Devamlılık (öğrenci × hafta matrisi + override)
+// ─────────────────────────────────────────────────────────
+
+var _devamlilikVeri = null;
+
+async function devamlilikCek() {
+  try {
+    var sinifSelect = document.getElementById('devamlilik-sinif');
+    if (!sinifSelect) return;
+
+    // Sınıf dropdown'ını doldur (ilk açılışta)
+    if (sinifSelect.options.length <= 1) {
+      // Özel "Tümü" seçeneği en başta
+      var optTumu = document.createElement('option');
+      optTumu.value = 'tumu';
+      optTumu.textContent = '📋 Tümü (test hariç)';
+      sinifSelect.appendChild(optTumu);
+
+      var sRes = await safeFetch('/api/siniflar');
+      var sVeri = await sRes.json();
+      (sVeri.siniflar || []).forEach(function(s) {
+        var opt = document.createElement('option');
+        opt.value = s.id;
+        opt.textContent = s.ad;
+        sinifSelect.appendChild(opt);
+      });
+    }
+
+    var sinifId = sinifSelect.value;
+    var div = document.getElementById('devamlilik-icerik');
+    var bilgi = document.getElementById('devamlilik-bilgi');
+
+    if (!sinifId) {
+      div.innerHTML = '<div style="color:#718096; text-align:center; padding:2rem;">Bir sınıf seçin.</div>';
+      if (bilgi) bilgi.textContent = '';
+      return;
+    }
+
+    var url = (sinifId === 'tumu')
+      ? '/api/devamlilik/tumu'
+      : '/api/devamlilik/' + encodeURIComponent(sinifId);
+    var r = await safeFetch(url);
+    var veri = await r.json();
+    _devamlilikVeri = veri;
+
+    if (veri.durum === 'hata') {
+      div.innerHTML = '<div style="color:#fc8181; padding:1rem;">' + (veri.mesaj || 'Hata') + '</div>';
+      return;
+    }
+
+    if (!veri.ogrenciler || veri.ogrenciler.length === 0) {
+      div.innerHTML = '<div style="color:#718096; text-align:center; padding:2rem;">' + (veri.mesaj || 'Kayıt yok.') + '</div>';
+      if (bilgi) bilgi.textContent = '';
+      return;
+    }
+
+    if (bilgi) {
+      bilgi.textContent = veri.sinif + ' · dönem başı: ' + veri.donem_baslangic + ' · ' + veri.max_hafta + ' hafta';
+    }
+
+    devamlilikRender(veri);
+  } catch (e) {
+    console.error('Devamlılık hatası:', e);
+  }
+}
+
+function devamlilikRender(veri) {
+  var div = document.getElementById('devamlilik-icerik');
+  if (!div) return;
+
+  var tumu = !!veri.tumu_modu;
+
+  var tablo = document.createElement('table');
+  tablo.style.cssText = 'width:100%;border-collapse:collapse;font-size:0.78rem;';
+
+  // Header
+  var thead = document.createElement('tr');
+  thead.style.borderBottom = '2px solid #4a5568';
+  var basliklar = ['Öğrenci'];
+  if (tumu) basliklar.push('Sınıf');
+  basliklar.push('Katıldı', 'Devamsız', '%');
+  for (var i = 1; i <= veri.max_hafta; i++) basliklar.push('H' + i);
+  basliklar.forEach(function(h) {
+    var th = document.createElement('th');
+    th.style.cssText = 'padding:6px 6px;text-align:center;color:#a0aec0;white-space:nowrap;';
+    th.textContent = h;
+    thead.appendChild(th);
+  });
+  tablo.appendChild(thead);
+
+  // Satırlar
+  veri.ogrenciler.forEach(function(o) {
+    var tr = document.createElement('tr');
+    tr.style.borderBottom = '1px solid #2d3748';
+
+    var tdAd = document.createElement('td');
+    tdAd.style.cssText = 'padding:4px 8px;white-space:nowrap;color:#e2e8f0;';
+    tdAd.textContent = (o.ad + ' ' + o.soyad).trim() + '  (' + o.numara + ')';
+    tr.appendChild(tdAd);
+
+    if (tumu) {
+      var tdSinif = document.createElement('td');
+      tdSinif.style.cssText = 'padding:4px 8px;white-space:nowrap;color:#90cdf4;font-size:0.72rem;';
+      tdSinif.textContent = o.sinif_ad || '';
+      tr.appendChild(tdSinif);
+    }
+
+    var tdK = document.createElement('td');
+    tdK.style.cssText = 'padding:4px 6px;text-align:center;color:#48bb78;font-weight:bold;';
+    tdK.textContent = o.katildi;
+    tr.appendChild(tdK);
+
+    var tdD = document.createElement('td');
+    tdD.style.cssText = 'padding:4px 6px;text-align:center;color:#fc8181;font-weight:bold;';
+    tdD.textContent = o.devamsizlik;
+    tr.appendChild(tdD);
+
+    var tdP = document.createElement('td');
+    tdP.style.cssText = 'padding:4px 6px;text-align:center;font-weight:bold;';
+    tdP.textContent = '%' + o.yuzde;
+    if (o.yuzde >= 70) tdP.style.color = '#48bb78';
+    else if (o.yuzde >= 50) tdP.style.color = '#ed8936';
+    else tdP.style.color = '#e53e3e';
+    tr.appendChild(tdP);
+
+    o.hucreler.forEach(function(h) {
+      var td = document.createElement('td');
+      td.style.cssText = 'padding:2px;text-align:center;';
+      var hucre = document.createElement('div');
+      hucre.style.cssText = 'width:22px;height:22px;margin:auto;border-radius:4px;cursor:pointer;display:flex;align-items:center;justify-content:center;color:#fff;font-size:0.7rem;font-weight:bold;user-select:none;';
+      hucre.style.background = h.durum === 'katildi' ? '#48bb78' : '#e53e3e';
+      if (h.override) {
+        hucre.style.border = '2px solid #f6e05e';
+      }
+      hucre.textContent = h.durum === 'katildi' ? '✓' : '✗';
+      hucre.title = 'Hafta ' + h.hafta + (h.override ? ' (öğretmen override)' : '');
+      hucre.dataset.numara = o.numara;
+      hucre.dataset.hafta = h.hafta;
+      hucre.dataset.durum = h.durum;
+      hucre.dataset.override = h.override ? '1' : '0';
+      hucre.dataset.otomatik = h.otomatik;
+      hucre.addEventListener('click', devamlilikHucreClick);
+      td.appendChild(hucre);
+      tr.appendChild(td);
+    });
+
+    tablo.appendChild(tr);
+  });
+
+  div.textContent = '';
+  div.appendChild(tablo);
+}
+
+async function devamlilikHucreClick(ev) {
+  var el = ev.currentTarget;
+  var numara = el.dataset.numara;
+  var hafta = parseInt(el.dataset.hafta, 10);
+  var mevcutDurum = el.dataset.durum;
+  var isOverride = el.dataset.override === '1';
+  var otomatik = el.dataset.otomatik;
+
+  // 3-durumlu toggle:
+  //   otomatik == 'katilmadi' (DB'de kayıt yok) →
+  //     click 1: override 'katildi' (öğretmen ekler, yeşil + sarı çerçeve)
+  //     click 2: sil (geri kırmızı otomatik)
+  //   otomatik == 'katildi' (DB'de kayıt var) →
+  //     click 1: override 'katilmadi' (öğretmen siler, kırmızı + sarı çerçeve)
+  //     click 2: sil (geri yeşil otomatik)
+  var yeniDurum;
+  if (!isOverride) {
+    // Override yok — otomatik durumun TERSİNE çevir
+    yeniDurum = (otomatik === 'katildi') ? 'katilmadi' : 'katildi';
+  } else {
+    // Override var — sil (otomatik'e dön)
+    yeniDurum = 'sil';
+  }
+
+  try {
+    var r = await safeFetch('/api/devamlilik/override', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ numara: numara, hafta: hafta, durum: yeniDurum })
+    });
+    var res = await r.json();
+    if (res.durum !== 'ok') {
+      alert('Override hatası: ' + (res.mesaj || ''));
+      return;
+    }
+    // Tabloyu tazele
+    devamlilikCek();
+  } catch (e) {
+    console.error('Override hatası:', e);
+    alert('Override başarısız.');
+  }
+}
+
+function devamlilikCSV() {
+  var sinifId = document.getElementById('devamlilik-sinif').value;
+  if (!sinifId) {
+    alert('Önce bir sınıf seçin.');
+    return;
+  }
+  var url = (sinifId === 'tumu')
+    ? '/api/devamlilik/tumu/csv'
+    : '/api/devamlilik/' + encodeURIComponent(sinifId) + '/csv';
+  window.location.href = url;
+}
+
 async function devamRaporuCSV() {
   try {
     var sinifId = document.getElementById('rapor-sinif') ? document.getElementById('rapor-sinif').value : '';
@@ -1538,9 +1994,9 @@ async function sinavListesiniGuncelle() {
           <td style="padding:0.5rem;">${s.soru_sayisi} Soru</td>
           <td style="padding:0.5rem;">${durumBadge}</td>
           <td style="padding:0.5rem;text-align:right;">
-             <button class="btn-kucuk" style="background:#3182ce;" onclick="soruYonetiminiAc(${s.id}, '${esc(s.baslik).replace(/'/g, "\\'")}')">📝 Sorular</button>
-             <button class="btn-kucuk" style="background:#d69e2e;" onclick="rubrikFormuAc(${s.id}, '${esc(s.baslik).replace(/'/g, "\\'")}')">📋 Rubrik</button>
-             <button class="btn-kucuk yeşil" onclick="sinavSonuclariniAc(${s.id}, '${esc(s.baslik).replace(/'/g, "\\'")}')">📊 Sonuçlar</button>
+             <button class="btn-kucuk" style="background:#3182ce;" onclick="soruYonetiminiAc(${s.id}, ${escJsAttr(s.baslik)})">📝 Sorular</button>
+             <button class="btn-kucuk" style="background:#d69e2e;" onclick="rubrikFormuAc(${s.id}, ${escJsAttr(s.baslik)})">📋 Rubrik</button>
+             <button class="btn-kucuk yeşil" onclick="sinavSonuclariniAc(${s.id}, ${escJsAttr(s.baslik)})">📊 Sonuçlar</button>
              <button class="btn-kucuk" style="background:${s.aktif ? '#e53e3e' : '#48bb78'};" onclick="sinavDurumDegistir(${s.id}, ${!s.aktif})">
                 ${s.aktif ? '⏹ Yayını Durdur' : '▶ Sınavı Başlat'}
              </button>
@@ -2331,53 +2787,71 @@ async function sinavSonuclariniAc(sinavId, baslik) {
   tablo.innerHTML = html;
 }
 
-// ── Sistem Logları ────────────────────────────────────────────
+// ── Sistem Logları (PG app_log tablosundan) ────────────────────
 let _logVerisi = [];
-let _logSonTs = 0;
+let _logSonId = 0;
 let _logOtomatikInterval = null;
 
 const _seviyeRenk = {
-  DEBUG:   '#718096',
-  INFO:    '#68d391',
-  WARNING: '#f6ad55',
-  ERROR:   '#fc8181',
-  CRITICAL:'#fc8181',
+  DEBUG:    '#718096',
+  INFO:     '#68d391',
+  WARNING:  '#f6ad55',
+  ERROR:    '#fc8181',
+  CRITICAL: '#fc8181',
 };
 
 function loglarRenderEt() {
   const kutu = document.getElementById('log-kutu');
   if (!kutu) return;
-  const filtre = document.getElementById('log-seviye-filtre')?.value || '';
-  const gorunen = filtre ? _logVerisi.filter(e => e.seviye === filtre) : _logVerisi;
 
-  if (gorunen.length === 0) {
+  if (_logVerisi.length === 0) {
     kutu.innerHTML = '<div style="color:#4a5568;text-align:center;padding:2rem;">Log bulunamadı.</div>';
-    document.getElementById('log-sayac').textContent = '';
+    const s = document.getElementById('log-sayac');
+    if (s) s.textContent = '';
     return;
   }
 
   const frag = document.createDocumentFragment();
-  gorunen.forEach(e => {
-    const renk = _seviyeRenk[e.seviye] || '#a0aec0';
-    const zaman = new Date(e.ts).toLocaleTimeString('tr-TR', { hour12: false });
+  // Reverse — yenisi altta görünsün (DESC sorgu → ASC render)
+  _logVerisi.slice().reverse().forEach(e => {
+    const renk = _seviyeRenk[e.level] || '#a0aec0';
     const satir = document.createElement('div');
-    satir.style.cssText = `padding:2px 4px;border-bottom:1px solid #1a202c;white-space:pre-wrap;word-break:break-all;`;
+    satir.style.cssText = 'padding:3px 4px;border-bottom:1px solid #1a202c;white-space:pre-wrap;word-break:break-all;';
 
     const ts = document.createElement('span');
     ts.style.color = '#4a5568';
-    ts.textContent = zaman + ' ';
+    ts.textContent = (e.ts || '').substring(11, 19) + ' ';
 
     const sev = document.createElement('span');
-    sev.style.cssText = `color:${renk};font-weight:bold;min-width:4.5rem;display:inline-block;`;
-    sev.textContent = '[' + e.seviye + '] ';
+    sev.style.cssText = 'color:' + renk + ';font-weight:bold;min-width:5rem;display:inline-block;';
+    sev.textContent = '[' + (e.level || '?') + '] ';
+
+    const logger = document.createElement('span');
+    logger.style.cssText = 'color:#90cdf4;font-size:0.72rem;margin-right:0.4rem;';
+    logger.textContent = e.logger ? '(' + e.logger + ')' : '';
 
     const msg = document.createElement('span');
     msg.style.color = '#e2e8f0';
-    msg.textContent = e.mesaj;
+    msg.textContent = e.message;
 
     satir.appendChild(ts);
     satir.appendChild(sev);
+    satir.appendChild(logger);
     satir.appendChild(msg);
+
+    if (e.kullanici) {
+      const u = document.createElement('span');
+      u.style.cssText = 'color:#fbd38d;font-size:0.72rem;margin-left:0.5rem;';
+      u.textContent = '· ' + e.kullanici;
+      satir.appendChild(u);
+    }
+    if (e.ip) {
+      const ip = document.createElement('span');
+      ip.style.cssText = 'color:#4a5568;font-size:0.72rem;margin-left:0.4rem;';
+      ip.textContent = '· ' + e.ip;
+      satir.appendChild(ip);
+    }
+
     frag.appendChild(satir);
   });
 
@@ -2386,29 +2860,40 @@ function loglarRenderEt() {
   kutu.scrollTop = kutu.scrollHeight;
 
   const sayac = document.getElementById('log-sayac');
-  if (sayac) sayac.textContent = `${gorunen.length} kayıt gösteriliyor`;
+  if (sayac) sayac.textContent = _logVerisi.length + ' kayıt';
 }
 
 async function loglarCek(tumu = false) {
   try {
-    const since = tumu ? 0 : _logSonTs;
-    const res = await fetch(`/api/loglar?limit=200&since=${since}`);
+    const level = document.getElementById('log-seviye-filtre')?.value || '';
+    const q = document.getElementById('log-arama')?.value.trim() || '';
+    const limit = document.getElementById('log-limit')?.value || '200';
+    const since = (tumu || level || q) ? 0 : _logSonId;
+
+    let url = '/api/loglar?limit=' + encodeURIComponent(limit);
+    if (since > 0) url += '&since=' + since;
+    if (level) url += '&level=' + encodeURIComponent(level);
+    if (q) url += '&q=' + encodeURIComponent(q);
+
+    const res = await safeFetch(url);
     const veri = await res.json();
     if (!veri.loglar) return;
 
-    if (tumu) {
+    if (tumu || level || q) {
       _logVerisi = veri.loglar;
-      _logSonTs = 0;
+      _logSonId = veri.loglar.length > 0 ? veri.loglar[0].id : 0;
     } else {
-      _logVerisi = [..._logVerisi, ...veri.loglar];
-      // Son 200 girişi tut
-      if (_logVerisi.length > 200) _logVerisi = _logVerisi.slice(-200);
-    }
-    if (veri.loglar.length > 0) {
-      _logSonTs = veri.loglar[veri.loglar.length - 1].ts;
+      // Inkremental — yeni gelen log'ları başa ekle (DESC sıralama)
+      if (veri.loglar.length > 0) {
+        _logVerisi = veri.loglar.concat(_logVerisi);
+        if (_logVerisi.length > parseInt(limit, 10)) {
+          _logVerisi = _logVerisi.slice(0, parseInt(limit, 10));
+        }
+        _logSonId = veri.loglar[0].id;
+      }
     }
     loglarRenderEt();
-  } catch(e) {
+  } catch (e) {
     console.error('Log çekme hatası:', e);
   }
 }

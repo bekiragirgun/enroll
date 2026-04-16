@@ -368,6 +368,38 @@ def db_olustur():
         """)
 
         cursor.execute(f"""
+            CREATE TABLE IF NOT EXISTS yoklama_override (
+                id {id_type},
+                numara TEXT NOT NULL,
+                hafta INTEGER NOT NULL,
+                durum TEXT NOT NULL DEFAULT 'katildi',
+                tarih TEXT NOT NULL,
+                ogretmen TEXT DEFAULT '',
+                UNIQUE (numara, hafta)
+            )
+        """)
+
+        # Sistem log tablosu — Python logging kanalı bu tabloya yazar.
+        # Heartbeat ve gürültülü mesajlar log_handler tarafında filtrelenir.
+        cursor.execute(f"""
+            CREATE TABLE IF NOT EXISTS app_log (
+                id {id_type},
+                ts TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                level TEXT NOT NULL,
+                logger TEXT DEFAULT '',
+                message TEXT NOT NULL,
+                ip TEXT DEFAULT '',
+                kullanici TEXT DEFAULT ''
+            )
+        """)
+        # Hızlı tarama için index'ler — IF NOT EXISTS ile idempotent
+        try:
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_app_log_ts ON app_log(ts DESC)")
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_app_log_level ON app_log(level)")
+        except Exception:
+            pass
+
+        cursor.execute(f"""
             CREATE TABLE IF NOT EXISTS sinav_ihlaller (
                 id {id_type},
                 sinav_id INTEGER NOT NULL,

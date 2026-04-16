@@ -36,4 +36,8 @@ services:
       - "3333:3333"
     volumes:
       - ./data:/app/data
+      # Slayt kök klasörü — read-only mount, host path container içinde de aynı yere bağlanır.
+      # .env'deki SLIDE_HOST_BASE altındaki TÜM alt klasörler otomatik erişilebilir;
+      # böylece kullanıcı UI'dan farklı alt klasörler girse de docker recreate gerekmez.
+      - ${SLIDE_HOST_BASE:-/tmp/empty-slaytlar}:${SLIDE_HOST_BASE:-/tmp/empty-slaytlar}:ro
     restart: always

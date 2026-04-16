@@ -19,8 +19,9 @@ import subprocess
 import signal
 import shlex
 import threading
-from flask import Flask, session, request, Response
+from flask import Flask, session, request, Response, g
 from flask_socketio import SocketIO, emit
+from flask_wtf.csrf import CSRFProtect
 import sys
 import argparse
 
@@ -78,6 +79,7 @@ logging.getLogger().addHandler(_buf_handler)
 
 # eventlet ile daha performanslı ve stabil WebSocket desteği
 socketio = SocketIO(app, cors_allowed_origins=[], async_mode='eventlet')
+csrf = CSRFProtect(app)
 
 @app.after_request
 def security_headers(response):
@@ -90,16 +92,86 @@ def security_headers(response):
 def favicon():
     return Response(status=204)
 
+@app.route('/slayt-kaynak/<path:filename>')
+def serve_slayt_kaynak(filename):
+    """SLIDE_HOST_BASE altındaki herhangi bir dosyayı serve eder.
+
+    Slayt HTML'lerine `<base href="/slayt-kaynak/.../">` enjekte ettiğimizde,
+    tarayıcı tüm relative <img src="../../06_KAYNAKLAR/...">, <img src="../gorseller/...">
+    gibi URL'leri otomatik bu route'a yönlendirir.
+
+    send_from_directory `safe_join` ile path traversal koruması sağlar.
+    """
+    from flask import send_from_directory
+    base = os.environ.get('SLIDE_HOST_BASE', '').strip()
+    if not base or not os.path.exists(base):
+        return "Slayt kaynak kökü tanımsız (.env'de SLIDE_HOST_BASE eksik)", 404
+    return send_from_directory(base, filename)
+
+
 @app.route('/slayt/<path:filename>')
 def serve_slayt(filename):
-    from flask import send_from_directory
+    """Slayt dosyasını serve eder. HTML ise içeriğine `<base href>` enjekte ederek
+    relative görsel/CSS yollarının SLIDE_HOST_BASE'e göre çözülmesini sağlar.
+
+    Path traversal koruması: HTML olmayan dosyalar `send_from_directory` ile
+    güvenli serve edilir (Flask safe_join). HTML dosyaları için manuel okuma
+    yapılırken `Path.resolve().relative_to()` ile klasör içi olduğu doğrulanır;
+    `..` veya symlink ile dışarı çıkma denemeleri ValueError fırlatır.
+    """
+    from flask import send_from_directory, Response
     from core.config import ders_durumu
-    
+    from pathlib import Path
+
     klasor = ders_durumu.get('slayt_klasoru', '')
     if not klasor or not os.path.exists(klasor):
         return "Slayt klasörü bulunamadı", 404
-        
-    return send_from_directory(klasor, filename)
+
+    # HTML dışındaki dosyaları (PDF, vs.) doğrudan klasörden serve et
+    if not filename.lower().endswith('.html'):
+        return send_from_directory(klasor, filename)
+
+    # Path traversal güvenliği: resolve sonrası klasör altı olduğunu doğrula
+    klasor_resolved = Path(klasor).resolve()
+    try:
+        yol = (klasor_resolved / filename).resolve()
+        yol.relative_to(klasor_resolved)  # ValueError if outside
+    except (ValueError, OSError):
+        app.logger.warning(f"🛡️ Path traversal denemesi engellendi: filename={filename!r}")
+        return "Geçersiz yol", 403
+
+    if not yol.exists() or not yol.is_file():
+        return "Slayt bulunamadı", 404
+
+    base = os.environ.get('SLIDE_HOST_BASE', '').strip()
+    try:
+        icerik = yol.read_text(encoding='utf-8', errors='replace')
+    except Exception as e:
+        return f"Slayt okunamadı: {e}", 500
+
+    # Base href enjekte et — slayt klasörünün SLIDE_HOST_BASE'e göre relative path'i
+    if base:
+        try:
+            rel = Path(klasor).resolve().relative_to(Path(base).resolve())
+            base_href = f"/slayt-kaynak/{rel}/" if str(rel) != '.' else "/slayt-kaynak/"
+            base_tag = f'<base href="{base_href}">'
+            # Mevcut <base ...> varsa dokunma; yoksa <head>'in hemen başına ekle
+            lower = icerik.lower()
+            if '<base ' not in lower:
+                if '<head>' in lower:
+                    idx = lower.find('<head>') + len('<head>')
+                    icerik = icerik[:idx] + base_tag + icerik[idx:]
+                elif '<html' in lower:
+                    # <head> yok ama <html> var → <html ...> tag'inden sonra <head><base>
+                    idx = lower.find('>', lower.find('<html')) + 1
+                    icerik = icerik[:idx] + f'<head>{base_tag}</head>' + icerik[idx:]
+        except ValueError:
+            # Slayt klasörü base dışındaysa enjekte etme — relative yollar zaten çalışmayacak
+            pass
+        except Exception as e:
+            app.logger.warning(f"slayt base href enjeksiyonu başarısız: {e}")
+
+    return Response(icerik, mimetype='text/html; charset=utf-8')
 
 @app.route('/gorseller/<path:filename>')
 def serve_gorseller(filename):
@@ -174,27 +246,13 @@ def terminal_baglan():
 
 @socketio.on('ogrenci_heartbeat', namespace='/terminal')
 def handle_heartbeat(data):
-    numara = data.get('numara')
-    if not numara: return
-    
-    from core.db import db_baglantisi
-    from core.utils import bugun, simdi
+    """Heartbeat — sadece bellekte tutulur (online listesi için).
 
-    try:
-        with db_baglantisi() as db:
-            db.execute("""
-                INSERT INTO ogrenci_aktivite_log (numara, ip, aktivite_tipi, detay, tarih, saat)
-                VALUES (?, ?, ?, ?, ?, ?)
-            """, (
-                numara,
-                request.remote_addr,
-                'heartbeat',
-                f"Mod: {data.get('mod')}, Slayt: {data.get('slayt')}, Durum: {data.get('durum')}",
-                bugun(),
-                simdi()
-            ))
-    except Exception as e:
-        app.logger.error(f"Heartbeat log hatası: {e}")
+    Eskiden her tetiklenişte ogrenci_aktivite_log'a yazılıyordu — bu DB spam
+    yarattığı için kaldırıldı. Anlamlı semantik olaylar (giris/cikis/slayt_degis/
+    terminal_komut) Faz B/C içinde ayrı ayrı yazılıyor.
+    """
+    return
 
 @socketio.on('disconnect', namespace='/terminal')
 def terminal_kopma(*args):
@@ -391,7 +449,14 @@ def ogrenci_baglan_event(veri):
     ogrenci_sidleri[sid] = username
     try:
         from chroot_terminal import CHROOT_HOST, CHROOT_REAL_SSH_PORT, CHROOT_USER, CHROOT_PASS, CHROOT_BASE, _slugify, chroot_olustur
+        import re
         username = _slugify(username)
+        
+        # Strict Input Validation: Sadece alfanumerik ve alt çizgiye izin ver
+        if not re.match(r'^[a-z0-9_]+$', username):
+            log.warning(f"⚠️ Geçersiz kullanıcı adı denemesi engellendi: {username}")
+            emit('hata', 'Geçersiz kullanıcı adı formatı!')
+            return
         
         ad_soyad = "Ogrenci"
         from core.db import db_baglantisi
@@ -548,6 +613,14 @@ if __name__ == '__main__':
     
     from core.config import ayarlari_yukle
     ayarlari_yukle()
+
+    # PostgresLogHandler — sistem logları app_log tablosuna yazılır.
+    # db_olustur() üstte zaten çağrıldı, tablo hazır.
+    try:
+        from core.log_handler import kurulum_yap as log_handler_kur
+        log_handler_kur(app)
+    except Exception as e:
+        print(f"  ⚠️  Log handler kurulamadı: {e}")
 
     # IP Tespiti
     try:

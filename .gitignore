@@ -26,14 +26,44 @@ build/
 
 # Vagrant
 .vagrant/
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+env/
+ENV/
+*.egg-info/
+dist/
+build/
+
+# Database
+*.db
+*.sqlite
+*.sqlite3
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Vagrant
+.vagrant/
 sanalmakine/.vagrant/
 boxes/*.box
 
 # Lima
 .lima/
 
-# Docker
+# Logs
 *.log
+logs/
+
 
 # Git
 .git/
@@ -44,3 +74,6 @@ postgres_data/
 
 # MkDocs build output
 site/
+
+# DockSec scan output
+.wolf/scans/

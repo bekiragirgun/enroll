@@ -5,6 +5,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Öğretmen Paneli</title>
+  <meta name="csrf-token" content="{{ csrf_token() }}">
   <link rel="stylesheet" href="/static/css/stil.css">
   <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
   <style>
@@ -202,6 +203,7 @@
       <button class="tab-btn" onclick="tabGec('ogrenci_yonetim', this); ogrenciYonetimCek();">🎓 Öğrenci
         Yönetimi</button>
       <button class="tab-btn" onclick="tabGec('devam_raporu', this); devamRaporuCek();">📊 Devam Raporu</button>
+      <button class="tab-btn" onclick="tabGec('devamlilik', this); devamlilikCek();">📅 Haftalık Devamlılık</button>
       <button class="tab-btn" onclick="tabGec('loglar', this); loglarCek();">📋 Sistem Logları</button>
       <button class="tab-btn" onclick="tabGec('ayarlar', this)">⚙️ Ayarlar</button>
     </div>
@@ -212,7 +214,7 @@
         <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:0.5rem;">
           <h3>📋 Yoklama Listesi</h3>
           <div style="display:flex;gap:0.5rem;align-items:center;flex-wrap:wrap;">
-            <input type="date" id="yoklama-tarih" style="padding:0.3rem 0.5rem;background:#2d3748;color:#e2e8f0;border:1px solid #4a5568;border-radius:6px;font-size:0.8rem;"
+            <input type="date" id="yoklama-tarih" value="{{ tarih }}" style="padding:0.3rem 0.5rem;background:#2d3748;color:#e2e8f0;border:1px solid #4a5568;border-radius:6px;font-size:0.8rem;"
               onchange="yoklamaTarihDegisti()">
             <select id="yoklama-paket-filtre" style="padding:0.3rem 0.5rem;background:#2d3748;color:#e2e8f0;border:1px solid #4a5568;border-radius:6px;font-size:0.8rem;"
               onchange="yoklamaCek()">
@@ -230,8 +232,17 @@
     </div>
 
     <!-- Sınıf Durumu -->
-    <div id="tab-siniflar" class="panel-bolum kontrol-kutu">
-      <h3>👥 Sınıf Bazlı Durum</h3>
+    <div id="tab-siniflar" class="panel-bolum">
+      <div class="kutu-baslik">
+        <h3>👥 Sınıf Bazlı Durum</h3>
+        <span style="color:#718096;font-size:0.8rem;">Kartlara tıklayarak aç/kapat. Tercihin tarayıcıda hatırlanır.</span>
+      </div>
+      <div class="ayar-kaydet-bar">
+        <button class="btn-kucuk" style="background:#2b6cb0;" onclick="sinifDurumCek()">🔄 Yenile</button>
+        <button class="btn-kucuk" style="background:#4a5568;" onclick="sinifKartlarHepsiAc()">⊞ Hepsini Aç</button>
+        <button class="btn-kucuk" style="background:#4a5568;" onclick="sinifKartlarHepsiKapat()">⊟ Hepsini Kapat</button>
+        <span id="sinif-durum-bilgi" style="color:#718096;font-size:0.78rem;margin-left:auto;"></span>
+      </div>
       <div class="sinif-grid" id="sinif-grid">
         <div style="color:#718096; font-size:0.9rem;">Yükleniyor...</div>
       </div>
@@ -560,6 +571,31 @@
       </div>
     </div>
 
+    <!-- Haftalık Devamlılık -->
+    <div id="tab-devamlilik" class="panel-bolum" style="margin-top:1rem;">
+      <div class="kutu-baslik">
+        <h3>📅 Haftalık Devamlılık</h3>
+        <span style="color:#718096;font-size:0.8rem;">Hafta 1, ilk yoklama kaydının tarihinden itibaren hesaplanır. Hücreye tıklayarak durumu değiştirebilirsin.</span>
+      </div>
+      <div style="display:flex;gap:0.5rem;flex-wrap:wrap;margin:1rem 0;align-items:center;">
+        <select id="devamlilik-sinif" onchange="devamlilikCek()"
+          style="padding:0.4rem 0.6rem;background:#2d3748;color:#e2e8f0;border:1px solid #4a5568;border-radius:6px;font-size:0.85rem;min-width:240px;">
+          <option value="">Sınıf seçin…</option>
+        </select>
+        <button onclick="devamlilikCek()" class="btn-kucuk" style="background:#2b6cb0;">🔄 Yenile</button>
+        <button onclick="devamlilikCSV()" class="btn-kucuk" style="background:#38a169;">📥 CSV</button>
+        <span id="devamlilik-bilgi" style="color:#a0aec0;font-size:0.82rem;margin-left:auto;"></span>
+      </div>
+      <div style="display:flex;gap:1rem;font-size:0.75rem;color:#a0aec0;margin-bottom:0.75rem;">
+        <span><span style="display:inline-block;width:14px;height:14px;background:#48bb78;border-radius:3px;vertical-align:middle;"></span> Katıldı</span>
+        <span><span style="display:inline-block;width:14px;height:14px;background:#e53e3e;border-radius:3px;vertical-align:middle;"></span> Katılmadı</span>
+        <span><span style="display:inline-block;width:14px;height:14px;border:2px solid #f6e05e;border-radius:3px;vertical-align:middle;"></span> Öğretmen override</span>
+      </div>
+      <div id="devamlilik-icerik" style="overflow-x:auto;">
+        <div style="color:#718096; text-align:center; padding:2rem;">Bir sınıf seçin.</div>
+      </div>
+    </div>
+
     <!-- Devam Raporu -->
     <div id="tab-devam_raporu" class="panel-bolum" style="margin-top:1rem;">
       <div class="kutu-baslik">
@@ -581,234 +617,269 @@
 
     <!-- Sistem Logları -->
     <div id="tab-loglar" class="panel-bolum" style="margin-top:1rem;">
-      <div class="kutu-baslik" style="display:flex; justify-content:space-between; align-items:center;">
-        <div>
-          <h3>📋 Sistem Logları</h3>
-          <span style="color:#4a5568;font-size:0.8rem;">Uygulama logları (son 200 kayıt)</span>
-        </div>
-        <div style="display:flex;gap:0.5rem;align-items:center;">
-          <label style="color:#a0aec0;font-size:0.8rem;">
-            <input type="checkbox" id="log-otomatik" checked onchange="logOtomatikToggle()">
-            Otomatik Yenile
-          </label>
-          <select id="log-seviye-filtre" onchange="loglarRenderEt()"
-            style="background:#2d3748;color:#fff;border:1px solid #4a5568;border-radius:4px;padding:3px 6px;font-size:0.8rem;">
-            <option value="">Tümü</option>
-            <option value="INFO">INFO</option>
-            <option value="WARNING">WARNING</option>
-            <option value="ERROR">ERROR</option>
-          </select>
-          <button onclick="loglarCek(true)"
-            style="padding:4px 12px;background:#2b6cb0;color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:0.8rem;">
-            🔄 Yenile
-          </button>
-          <button onclick="logTemizleEkran()"
-            style="padding:4px 12px;background:#4a5568;color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:0.8rem;">
-            🗑️ Temizle
-          </button>
-        </div>
+      <div class="kutu-baslik">
+        <h3>📋 Sistem Logları</h3>
+        <span style="color:#718096;font-size:0.8rem;">PostgreSQL <code>app_log</code> tablosundan canlı — heartbeat ve gürültü filtreli</span>
+      </div>
+      <div class="ayar-kaydet-bar" style="flex-wrap:wrap;">
+        <input type="text" id="log-arama" placeholder="🔍 Mesaj içinde ara..." onkeydown="if(event.key==='Enter')loglarCek(true)"
+          style="flex:1;min-width:200px;padding:0.4rem 0.6rem;background:#2d3748;color:#e2e8f0;border:1px solid #4a5568;border-radius:6px;font-size:0.85rem;">
+        <select id="log-seviye-filtre" onchange="loglarCek(true)"
+          style="padding:0.4rem 0.6rem;background:#2d3748;color:#fff;border:1px solid #4a5568;border-radius:6px;font-size:0.85rem;">
+          <option value="">Tüm seviyeler</option>
+          <option value="INFO">INFO</option>
+          <option value="WARNING">WARNING</option>
+          <option value="ERROR">ERROR</option>
+          <option value="CRITICAL">CRITICAL</option>
+        </select>
+        <select id="log-limit" onchange="loglarCek(true)"
+          style="padding:0.4rem 0.6rem;background:#2d3748;color:#fff;border:1px solid #4a5568;border-radius:6px;font-size:0.85rem;">
+          <option value="200">Son 200</option>
+          <option value="500">Son 500</option>
+          <option value="1000">Son 1000</option>
+          <option value="2000">Son 2000</option>
+        </select>
+        <label style="color:#a0aec0;font-size:0.82rem;display:flex;align-items:center;gap:0.3rem;">
+          <input type="checkbox" id="log-otomatik" checked onchange="logOtomatikToggle()">
+          Otomatik (3sn)
+        </label>
+        <button class="btn-kucuk" style="background:#2b6cb0;" onclick="loglarCek(true)">🔄 Yenile</button>
+        <button class="btn-kucuk" style="background:#4a5568;" onclick="logTemizleEkran()">🗑️ Temizle</button>
+        <span id="log-sayac" style="color:#718096;font-size:0.78rem;margin-left:auto;"></span>
       </div>
       <div id="log-kutu"
-        style="margin-top:0.75rem;background:#0d1117;border:1px solid #2d3748;border-radius:6px;height:480px;overflow-y:auto;font-family:'Menlo','Courier New',monospace;font-size:0.78rem;padding:0.5rem;">
+        style="margin-top:0.5rem;background:#0d1117;border:1px solid #2d3748;border-radius:6px;height:520px;overflow-y:auto;font-family:'Menlo','Courier New',monospace;font-size:0.78rem;padding:0.5rem;">
         <div style="color:#4a5568;text-align:center;padding:2rem;">Loglar yükleniyor...</div>
       </div>
-      <div id="log-sayac" style="color:#718096;font-size:0.75rem;margin-top:0.3rem;text-align:right;"></div>
     </div>
 
     <!-- Ayarlar -->
     <div id="tab-ayarlar" class="panel-bolum" style="margin-top:1rem;">
       <div class="kutu-baslik">
         <h3>⚙️ Sistem Ayarları</h3>
-        <span style="color:#4a5568;font-size:0.8rem;">Sistem IP ve Terminal yapılandırması</span>
+        <span style="color:#718096;font-size:0.8rem;">Kart başlıklarına tıklayarak aç/kapat. Tercihin tarayıcıda hatırlanır.</span>
       </div>
-      <div class="kontrol-kutu" style="margin-top:1rem; background:#1a202c;">
-        <div style="display:grid; gap:1.5rem;">
-          <div>
-            <label style="display:block; color:#90cdf4; font-size:0.9rem; margin-bottom:0.5rem;">🖥️ Chroot Host IP (PCT
-              991)</label>
-            <input type="text" id="config-chroot-ip" value="{{ config.chroot_host }}"
-              style="width:100%; padding:0.6rem; background:#2d3748; border:1px solid #4a5568; border-radius:6px; color:#fff;">
-            <small style="color:#718096;">Öğrenci chroot ortamlarının oluşturulduğu sunucu.</small>
-          </div>
-          <div>
-            <label style="display:block; color:#90cdf4; font-size:0.9rem; margin-bottom:0.5rem;">🔌 Chroot SSH
-              Port</label>
-            <input type="number" id="config-chroot-port" value="{{ config.chroot_port }}"
-              style="width:100%; padding:0.6rem; background:#2d3748; border:1px solid #4a5568; border-radius:6px; color:#fff;">
-            <small style="color:#718096;">Ana makine SSH portu (Default: 22).</small>
-          </div>
-          <div style="display:grid; grid-template-columns: 1fr 1fr; gap:1rem;">
-            <div>
-              <label style="display:block; color:#90cdf4; font-size:0.9rem; margin-bottom:0.5rem;">👤 SSH User</label>
-              <input type="text" id="config-chroot-user" value="{{ config.chroot_user }}"
-                style="width:100%; padding:0.6rem; background:#2d3748; border:1px solid #4a5568; border-radius:6px; color:#fff;">
-              <small style="color:#718096;">Remote SSH kullanıcı adı.</small>
-            </div>
-            <div>
-              <label style="display:block; color:#90cdf4; font-size:0.9rem; margin-bottom:0.5rem;">🔑 SSH
-                Password</label>
-              <input type="password" id="config-chroot-pass" value="{{ config.chroot_pass }}"
-                style="width:100%; padding:0.6rem; background:#2d3748; border:1px solid #4a5568; border-radius:6px; color:#fff;">
-              <small style="color:#718096;">Boş bırakılırsa key-based ssh kullanılır.</small>
-            </div>
-          </div>
-          <div>
-            <label style="display:block; color:#90cdf4; font-size:0.9rem; margin-bottom:0.5rem;">🌍 Sistem IP /
-              Hostname</label>
-            <input type="text" id="config-system-host" value="{{ config.system_host }}"
-              style="width:100%; padding:0.6rem; background:#2d3748; border:1px solid #4a5568; border-radius:6px; color:#fff;"
-              placeholder="Örn: 192.168.1.50">
-            <small style="color:#718096;">Öğrenci giriş adresi için kullanılır. Boş bırakılırsa otomatik tespit
-              edilir.</small>
-          </div>
-          <div>
-            <label style="display:block; color:#90cdf4; font-size:0.9rem; margin-bottom:0.5rem;">🔒 Sınav/Kilit Modu
-              (SEB)</label>
-            <select id="config-kiosk-modu"
-              style="width:100%; padding:0.6rem; background:#2d3748; border:1px solid #4a5568; border-radius:6px; color:#fff;">
-              <option value="1" {% if config.kiosk_modu=='1' %}selected{% endif %}>Açık (Sadece SEB ile girilebilir)
-              </option>
-              <option value="0" {% if config.kiosk_modu=='0' %}selected{% endif %}>Kapalı (Herhangi bir tarayıcı ile
-                girilebilir)</option>
-            </select>
-            <small style="color:#718096;">Öğrencilerin sadece Safe Exam Browser ile girmesini zorunlu kılar.</small>
-          </div>
-          <div>
-            <label style="display:block; color:#90cdf4; font-size:0.9rem; margin-bottom:0.5rem;">🚪 SEB Çıkış İzni</label>
-            <select id="config-cikis-izni"
-              style="width:100%; padding:0.6rem; background:#2d3748; border:1px solid #4a5568; border-radius:6px; color:#fff;">
-              <option value="1" {% if config.cikis_izni=='1' %}selected{% endif %}>Açık (Öğrenciye Çıkış butonu gösterilir)</option>
-              <option value="0" {% if config.cikis_izni=='0' %}selected{% endif %}>Kapalı (Çıkış butonu gizlenir)</option>
-            </select>
-            <small style="color:#718096;">Öğrencilerin SEB içerisinden çıkış talep edebilmesini sağlar.</small>
-          </div>
-          <div>
-            <label style="display:block; color:#90cdf4; font-size:0.9rem; margin-bottom:0.5rem;">🌐 Aynı IP Kontrolü
-              (Fraud Detection)</label>
-            <select id="config-ip-kontrol"
-              style="width:100%; padding:0.6rem; background:#2d3748; border:1px solid #4a5568; border-radius:6px; color:#fff;">
-              <option value="1" {% if config.ip_kontrol|default('1')=='1' %}selected{% endif %}>Açık (Aynı IP'den farklı
-                öğrenci girişini engelle)</option>
-              <option value="0" {% if config.ip_kontrol|default('1')=='0' %}selected{% endif %}>Kapalı (IP kontrolü
-                yapma)</option>
-            </select>
-            <small style="color:#718096;">Aynı cihazdan farklı öğrenci numaralarıyla giriş yapılmasını engeller. Sorun
-              çıkarırsa kapatın.</small>
-          </div>
-          <div>
-            <label style="display:block; color:#90cdf4; font-size:0.9rem; margin-bottom:0.5rem;">📡 Terminal (TTYD)
-              Yayını URL</label>
-            <input type="text" id="config-ttyd-url" value="{{ config.terminal_url }}"
-              style="width:100%; padding:0.6rem; background:#2d3748; border:1px solid #4a5568; border-radius:6px; color:#fff;">
-            <small style="color:#718096;">Öğrenci ekranında gösterilecek terminal adresi (/terminal bırakın).</small>
-          </div>
-          <div>
-            <label style="display:block; color:#90cdf4; font-size:0.9rem; margin-bottom:0.5rem;">📁 Slayt Klasör Yolu</label>
-            <input type="text" id="config-slayt-klasoru" value="{{ config.slayt_klasoru }}"
-              style="width:100%; padding:0.6rem; background:#2d3748; border:1px solid #4a5568; border-radius:6px; color:#fff;"
-              placeholder="Örn: /Users/bekir/KAPADOKYA_SLAYT/01_SUNUMLAR/html">
-            <small style="color:#718096;">Slayt modunda gösterilecek HTML/PDF dosyalarının tam dizin yolu.</small>
-          </div>
-          <div>
-            <label style="display:block; color:#90cdf4; font-size:0.9rem; margin-bottom:0.5rem;">📅 Ders Günleri</label>
-            <div id="ders-gunleri-secim" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:0.25rem;">
-              <label style="color:#e2e8f0;font-size:0.85rem;cursor:pointer;display:flex;align-items:center;gap:3px;background:#2d3748;padding:4px 10px;border-radius:6px;border:1px solid #4a5568;">
-                <input type="checkbox" class="ders-gun-cb" value="0"> Pzr</label>
-              <label style="color:#e2e8f0;font-size:0.85rem;cursor:pointer;display:flex;align-items:center;gap:3px;background:#2d3748;padding:4px 10px;border-radius:6px;border:1px solid #4a5568;">
-                <input type="checkbox" class="ders-gun-cb" value="1" checked> Pzt</label>
-              <label style="color:#e2e8f0;font-size:0.85rem;cursor:pointer;display:flex;align-items:center;gap:3px;background:#2d3748;padding:4px 10px;border-radius:6px;border:1px solid #4a5568;">
-                <input type="checkbox" class="ders-gun-cb" value="2"> Sal</label>
-              <label style="color:#e2e8f0;font-size:0.85rem;cursor:pointer;display:flex;align-items:center;gap:3px;background:#2d3748;padding:4px 10px;border-radius:6px;border:1px solid #4a5568;">
-                <input type="checkbox" class="ders-gun-cb" value="3"> Çar</label>
-              <label style="color:#e2e8f0;font-size:0.85rem;cursor:pointer;display:flex;align-items:center;gap:3px;background:#2d3748;padding:4px 10px;border-radius:6px;border:1px solid #4a5568;">
-                <input type="checkbox" class="ders-gun-cb" value="4"> Per</label>
-              <label style="color:#e2e8f0;font-size:0.85rem;cursor:pointer;display:flex;align-items:center;gap:3px;background:#2d3748;padding:4px 10px;border-radius:6px;border:1px solid #4a5568;">
-                <input type="checkbox" class="ders-gun-cb" value="5"> Cum</label>
-              <label style="color:#e2e8f0;font-size:0.85rem;cursor:pointer;display:flex;align-items:center;gap:3px;background:#2d3748;padding:4px 10px;border-radius:6px;border:1px solid #4a5568;">
-                <input type="checkbox" class="ders-gun-cb" value="6"> Cmt</label>
-            </div>
-            <small style="color:#718096;">Devam raporunda sadece seçilen günler sayılır. Test günleri otomatik hariç tutulur.</small>
-          </div>
-          <div>
-            <label style="display:block; color:#90cdf4; font-size:0.9rem; margin-bottom:0.5rem;">⚠️ Devamsızlık Uyarı Eşiği</label>
-            <div style="display:flex;align-items:center;gap:0.5rem;">
-              <input type="number" id="config-devamsizlik-esik" min="1" max="30" value="3"
-                style="width:80px; padding:0.6rem; background:#2d3748; color:#e2e8f0; border:1px solid #4a5568; border-radius:6px;">
-              <small style="color:#718096;">ders (bu kadar veya daha fazla gelmeyenler raporda uyarılır)</small>
-            </div>
-          </div>
 
-          <hr style="border-color:#4a5568; margin:1.5rem 0;">
-          <h4 style="color:#90cdf4; margin-bottom:0.75rem;">🐘 PostgreSQL Bağlantı Ayarları</h4>
-          <div style="display:grid; grid-template-columns: 1fr 1fr; gap:1rem; margin-bottom:1rem;">
-            <div>
-              <label style="display:block; color:#a0aec0; font-size:0.85rem; margin-bottom:4px;">DB Type</label>
-              <select id="config-db-type" style="width:100%; padding:0.5rem; background:#2d3748; border:1px solid #4a5568; border-radius:6px; color:#fff;">
+      <div class="ayar-kaydet-bar">
+        <button class="btn-kucuk" style="background:#48bb78;" onclick="ayarlariKaydet()">💾 Tüm Ayarları Kaydet</button>
+        <button class="btn-kucuk" style="background:#4a5568;" onclick="ayarKartlarHepsiAc()">⊞ Hepsini Aç</button>
+        <button class="btn-kucuk" style="background:#4a5568;" onclick="ayarKartlarHepsiKapat()">⊟ Hepsini Kapat</button>
+        <span style="color:#718096;font-size:0.78rem;margin-left:auto;">Network · Veritabanı · Güvenlik · Ders Planı kartları topluca kaydedilir. VM Bakım ve Parola kendi butonlarını kullanır.</span>
+      </div>
+
+      <div class="ayar-kart-grid">
+
+        <!-- 🌐 Network & SSH -->
+        <div class="ayar-kart" data-kart="network">
+          <div class="ayar-kart-baslik" onclick="ayarKartToggle('network')">
+            <span>🌐 Network &amp; SSH</span>
+            <span class="kart-ok">▼</span>
+          </div>
+          <div class="ayar-kart-icerik">
+            <div class="alan">
+              <label>🖥️ Chroot Host IP (PCT 991)</label>
+              <input type="text" id="config-chroot-ip" value="{{ config.chroot_host }}">
+              <small>Öğrenci chroot ortamlarının oluşturulduğu sunucu.</small>
+            </div>
+            <div class="alan">
+              <label>🔌 Chroot SSH Port</label>
+              <input type="number" id="config-chroot-port" value="{{ config.chroot_port }}">
+              <small>Ana makine SSH portu (Default: 22).</small>
+            </div>
+            <div class="alan-grid-2">
+              <div class="alan">
+                <label>👤 SSH User</label>
+                <input type="text" id="config-chroot-user" value="{{ config.chroot_user }}">
+                <small>Remote SSH kullanıcı adı.</small>
+              </div>
+              <div class="alan">
+                <label>🔑 SSH Password</label>
+                <input type="password" id="config-chroot-pass" value="" autocomplete="new-password" placeholder="{% if config.chroot_pass %}••••• (değiştirmemek için boş bırak){% else %}Boş ise key-based{% endif %}">
+                <small>{% if config.chroot_pass %}Mevcut şifre saklı. Yeni değer girilirse güncellenir.{% else %}Boş ise key-based ssh kullanılır.{% endif %}</small>
+              </div>
+            </div>
+            <div class="alan">
+              <label>🌍 Sistem IP / Hostname</label>
+              <input type="text" id="config-system-host" value="{{ config.system_host }}" placeholder="Örn: 192.168.1.50">
+              <small>Öğrenci giriş adresi için. Boşsa otomatik tespit edilir.</small>
+            </div>
+            <div class="alan">
+              <label>📡 Terminal (TTYD) Yayını URL</label>
+              <input type="text" id="config-ttyd-url" value="{{ config.terminal_url }}">
+              <small>Öğrenci ekranındaki terminal adresi (/terminal bırakın).</small>
+            </div>
+            <div style="display:flex;gap:0.5rem;align-items:center;flex-wrap:wrap;">
+              <button class="btn-kucuk" style="background:#2b6cb0;" onclick="baglantiTestEt()">🩺 Bağlantıyı Test Et</button>
+              <span id="healthcheck-sonuc" style="font-size:0.82rem;font-weight:bold;"></span>
+            </div>
+          </div>
+        </div>
+
+        <!-- 🐘 Veritabanı -->
+        <div class="ayar-kart" data-kart="db">
+          <div class="ayar-kart-baslik" onclick="ayarKartToggle('db')">
+            <span>🐘 Veritabanı Bağlantı Ayarları</span>
+            <span class="kart-ok">▼</span>
+          </div>
+          <div class="ayar-kart-icerik">
+            <div class="alan">
+              <label>DB Type</label>
+              <select id="config-db-type">
                 <option value="sqlite" {% if config.db_type == 'sqlite' %}selected{% endif %}>SQLite (Lokal)</option>
                 <option value="postgres" {% if config.db_type == 'postgres' %}selected{% endif %}>PostgreSQL (Docker/Uzak)</option>
               </select>
+              <small>SQLite yerel test, PostgreSQL Docker prod için. DBWrapper ikisini de destekler.</small>
             </div>
-            <div>
-              <label style="display:block; color:#a0aec0; font-size:0.85rem; margin-bottom:4px;">DB Host</label>
-              <input type="text" id="config-db-host" value="{{ config.db_host }}" style="width:100%; padding:0.5rem; background:#2d3748; border:1px solid #4a5568; border-radius:6px; color:#fff;">
+            <div class="alan">
+              <label>DB Host</label>
+              <input type="text" id="config-db-host" value="{{ config.db_host }}">
             </div>
-          </div>
-          <div style="display:grid; grid-template-columns: 1fr 1fr 1fr; gap:1rem; margin-bottom:1rem;">
-            <div>
-              <label style="display:block; color:#a0aec0; font-size:0.85rem; margin-bottom:4px;">DB Port</label>
-              <input type="number" id="config-db-port" value="{{ config.db_port }}" style="width:100%; padding:0.5rem; background:#2d3748; border:1px solid #4a5568; border-radius:6px; color:#fff;">
+            <div class="alan-grid-2">
+              <div class="alan">
+                <label>DB Port</label>
+                <input type="number" id="config-db-port" value="{{ config.db_port }}">
+              </div>
+              <div class="alan">
+                <label>DB User</label>
+                <input type="text" id="config-db-user" value="{{ config.db_user }}">
+              </div>
             </div>
-            <div>
-              <label style="display:block; color:#a0aec0; font-size:0.85rem; margin-bottom:4px;">DB User</label>
-              <input type="text" id="config-db-user" value="{{ config.db_user }}" style="width:100%; padding:0.5rem; background:#2d3748; border:1px solid #4a5568; border-radius:6px; color:#fff;">
+            <div class="alan-grid-2">
+              <div class="alan">
+                <label>DB Password</label>
+                <input type="password" id="config-db-pass" value="" autocomplete="new-password" placeholder="{% if config.db_pass %}••••• (değiştirmemek için boş bırak){% else %}DB şifresi{% endif %}">
+                <small>{% if config.db_pass %}Mevcut şifre saklı. Yeni değer girilirse güncellenir.{% endif %}</small>
+              </div>
+              <div class="alan">
+                <label>DB Name</label>
+                <input type="text" id="config-db-name" value="{{ config.db_name }}">
+              </div>
             </div>
-            <div>
-              <label style="display:block; color:#a0aec0; font-size:0.85rem; margin-bottom:4px;">DB Password</label>
-              <input type="password" id="config-db-pass" value="{{ config.db_pass }}" style="width:100%; padding:0.5rem; background:#2d3748; border:1px solid #4a5568; border-radius:6px; color:#fff;">
-            </div>
-          </div>
-          <div style="margin-bottom:1rem;">
-            <label style="display:block; color:#a0aec0; font-size:0.85rem; margin-bottom:4px;">DB Name</label>
-            <input type="text" id="config-db-name" value="{{ config.db_name }}" style="width:100%; padding:0.5rem; background:#2d3748; border:1px solid #4a5568; border-radius:6px; color:#fff;">
-          </div>
-          <p style="color:#718096; font-size:0.75rem; margin-bottom:1rem;">⚠️ Not: Veritabanı tipi değişikliği sonrası uygulamanın yeniden başlatılması gerekebilir.</p>
-
-          <div style="display:flex; gap:1rem; align-items:center;">
-            <button class="btn-kucuk" style="background:#48bb78;" onclick="ayarlariKaydet()">💾 Ayarları Kaydet</button>
-            <button class="btn-kucuk" style="background:#2b6cb0;" onclick="baglantiTestEt()">🩺 Bağlantıyı Test
-              Et</button>
-            <span id="healthcheck-sonuc" style="font-size:0.85rem; font-weight:bold;"></span>
-          </div>
-
-          <hr style="border-color:#4a5568; margin:1.5rem 0;">
-          <h4 style="color:#90cdf4; margin-bottom:0.75rem;">🧹 VM Temizliği</h4>
-          <p style="color:#a0aec0;font-size:0.82rem;margin-bottom:0.75rem;">
-            DB'de kayıtlı olmayan (öğrenci silindi veya eski kalan) chroot VM'lerini tespit edip siler.
-          </p>
-          <div style="display:flex;gap:0.75rem;align-items:center;flex-wrap:wrap;">
-            <button class="btn-kucuk" style="background:#2b6cb0;" onclick="chrootListele()">🔍 Eski VM Tara</button>
-            <button class="btn-kucuk" id="chroot-temizle-btn" style="background:#742a2a;display:none;" onclick="chrootTemizle()">🗑️ Hepsini Sil</button>
-            <span id="chroot-tarama-sonuc" style="font-size:0.82rem;color:#a0aec0;"></span>
-          </div>
-          <div id="chroot-fazla-liste" style="margin-top:0.5rem;"></div>
-
-          <hr style="border-color:#4a5568; margin:1.5rem 0;">
-          <h4 style="color:#90cdf4; margin-bottom:0.75rem;">🔑 Şifre Değiştir</h4>
-          <div style="display:flex; gap:0.5rem; flex-wrap:wrap; align-items:flex-end;">
-            <div>
-              <label style="font-size:0.8rem; color:#a0aec0;">Mevcut Şifre</label>
-              <input type="password" id="sifre-mevcut" placeholder="Mevcut şifre"
-                style="display:block; padding:0.5rem; background:#2d3748; color:#e2e8f0; border:1px solid #4a5568; border-radius:6px; width:160px;">
-            </div>
-            <div>
-              <label style="font-size:0.8rem; color:#a0aec0;">Yeni Şifre</label>
-              <input type="password" id="sifre-yeni" placeholder="Yeni şifre"
-                style="display:block; padding:0.5rem; background:#2d3748; color:#e2e8f0; border:1px solid #4a5568; border-radius:6px; width:160px;">
-            </div>
-            <button class="btn-kucuk" style="background:#ed8936;" onclick="sifreDegistir()">🔑 Değiştir</button>
-            <span id="sifre-sonuc" style="font-size:0.85rem; font-weight:bold;"></span>
+            <small style="color:#fbd38d;">⚠️ Veritabanı tipi değişikliği sonrası uygulamayı yeniden başlatmak gerekir.</small>
           </div>
         </div>
+
+        <!-- 🛡️ Güvenlik & Fraud -->
+        <div class="ayar-kart" data-kart="guvenlik">
+          <div class="ayar-kart-baslik" onclick="ayarKartToggle('guvenlik')">
+            <span>🛡️ Güvenlik &amp; Fraud</span>
+            <span class="kart-ok">▼</span>
+          </div>
+          <div class="ayar-kart-icerik">
+            <div class="alan">
+              <label>🔒 Sınav/Kilit Modu (SEB)</label>
+              <select id="config-kiosk-modu">
+                <option value="1" {% if config.kiosk_modu=='1' %}selected{% endif %}>Açık (Sadece SEB ile girilebilir)</option>
+                <option value="0" {% if config.kiosk_modu=='0' %}selected{% endif %}>Kapalı (Herhangi bir tarayıcı ile)</option>
+              </select>
+              <small>Öğrencilerin sadece Safe Exam Browser ile girmesini zorunlu kılar.</small>
+            </div>
+            <div class="alan">
+              <label>🚪 SEB Çıkış İzni</label>
+              <select id="config-cikis-izni">
+                <option value="1" {% if config.cikis_izni=='1' %}selected{% endif %}>Açık (Çıkış butonu görünür)</option>
+                <option value="0" {% if config.cikis_izni=='0' %}selected{% endif %}>Kapalı (Çıkış butonu gizli)</option>
+              </select>
+              <small>Öğrencilerin SEB içinden çıkış talep edebilmesini sağlar.</small>
+            </div>
+            <div class="alan">
+              <label>🌐 Aynı IP Kontrolü (Fraud Detection)</label>
+              <select id="config-ip-kontrol">
+                <option value="1" {% if config.ip_kontrol|default('1')=='1' %}selected{% endif %}>Açık (Aynı IP'den farklı öğrenci girişini engelle)</option>
+                <option value="0" {% if config.ip_kontrol|default('1')=='0' %}selected{% endif %}>Kapalı (IP kontrolü yapma)</option>
+              </select>
+              <small>Aynı cihazdan farklı öğrenci numaralarıyla giriş yapılmasını engeller.</small>
+            </div>
+          </div>
+        </div>
+
+        <!-- 📚 Ders Planı -->
+        <div class="ayar-kart" data-kart="ders">
+          <div class="ayar-kart-baslik" onclick="ayarKartToggle('ders')">
+            <span>📚 Ders Planı</span>
+            <span class="kart-ok">▼</span>
+          </div>
+          <div class="ayar-kart-icerik">
+            <div class="alan">
+              <label>📁 Slayt Klasör Yolu</label>
+              <div style="display:flex;gap:0.5rem;align-items:center;flex-wrap:wrap;">
+                <input type="text" id="config-slayt-klasoru" value="{{ config.slayt_klasoru }}" placeholder="Örn: /Users/.../01_SUNUMLAR/html" style="flex:1;min-width:180px;">
+                <button type="button" class="btn-kucuk" style="background:#805ad5;" onclick="slaytKlasorGozatAc()">📂 Gözat</button>
+                <button type="button" class="btn-kucuk" style="background:#2b6cb0;" onclick="slaytKlasoruTest()">🔍 Test</button>
+              </div>
+              <small id="slayt-klasoru-sonuc">HTML/PDF dosyalarının bulunduğu dizin. Docker'da <code>SLIDE_HOST_BASE</code> altındaki bir alt klasör olmalı.</small>
+              <div id="slayt-gozat-panel" style="display:none; margin-top:0.6rem; background:#0f1419; border:1px solid #4a5568; border-radius:8px; padding:0.75rem;">
+                <div id="slayt-gozat-breadcrumb" style="font-size:0.78rem; color:#a0aec0; margin-bottom:0.5rem;"></div>
+                <div id="slayt-gozat-icerik" style="display:flex; flex-direction:column; gap:0.3rem; max-height:280px; overflow-y:auto;"></div>
+                <div style="display:flex; gap:0.5rem; margin-top:0.5rem; align-items:center;">
+                  <button type="button" class="btn-kucuk" style="background:#48bb78;" onclick="slaytKlasorMevcutSec()">✅ Bu Klasörü Seç</button>
+                  <button type="button" class="btn-kucuk" style="background:#4a5568;" onclick="slaytKlasorGozatKapat()">✖ Kapat</button>
+                  <span id="slayt-gozat-info" style="color:#718096;font-size:0.78rem;"></span>
+                </div>
+              </div>
+            </div>
+            <div class="alan">
+              <label>📅 Ders Günleri</label>
+              <div id="ders-gunleri-secim" style="display:flex;gap:6px;flex-wrap:wrap;">
+                <label style="color:#e2e8f0;font-size:0.82rem;cursor:pointer;display:flex;align-items:center;gap:3px;background:#2d3748;padding:4px 9px;border-radius:6px;border:1px solid #4a5568;"><input type="checkbox" class="ders-gun-cb" value="0"> Pzr</label>
+                <label style="color:#e2e8f0;font-size:0.82rem;cursor:pointer;display:flex;align-items:center;gap:3px;background:#2d3748;padding:4px 9px;border-radius:6px;border:1px solid #4a5568;"><input type="checkbox" class="ders-gun-cb" value="1" checked> Pzt</label>
+                <label style="color:#e2e8f0;font-size:0.82rem;cursor:pointer;display:flex;align-items:center;gap:3px;background:#2d3748;padding:4px 9px;border-radius:6px;border:1px solid #4a5568;"><input type="checkbox" class="ders-gun-cb" value="2"> Sal</label>
+                <label style="color:#e2e8f0;font-size:0.82rem;cursor:pointer;display:flex;align-items:center;gap:3px;background:#2d3748;padding:4px 9px;border-radius:6px;border:1px solid #4a5568;"><input type="checkbox" class="ders-gun-cb" value="3"> Çar</label>
+                <label style="color:#e2e8f0;font-size:0.82rem;cursor:pointer;display:flex;align-items:center;gap:3px;background:#2d3748;padding:4px 9px;border-radius:6px;border:1px solid #4a5568;"><input type="checkbox" class="ders-gun-cb" value="4"> Per</label>
+                <label style="color:#e2e8f0;font-size:0.82rem;cursor:pointer;display:flex;align-items:center;gap:3px;background:#2d3748;padding:4px 9px;border-radius:6px;border:1px solid #4a5568;"><input type="checkbox" class="ders-gun-cb" value="5"> Cum</label>
+                <label style="color:#e2e8f0;font-size:0.82rem;cursor:pointer;display:flex;align-items:center;gap:3px;background:#2d3748;padding:4px 9px;border-radius:6px;border:1px solid #4a5568;"><input type="checkbox" class="ders-gun-cb" value="6"> Cmt</label>
+              </div>
+              <small>Devam raporunda sadece seçilen günler sayılır.</small>
+            </div>
+            <div class="alan">
+              <label>⚠️ Devamsızlık Uyarı Eşiği</label>
+              <div style="display:flex;align-items:center;gap:0.5rem;">
+                <input type="number" id="config-devamsizlik-esik" min="1" max="30" value="3" style="width:90px;">
+                <small>ders (bu kadar veya fazla gelmeyenler raporda uyarılır)</small>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 🧹 VM Bakım -->
+        <div class="ayar-kart" data-kart="vm">
+          <div class="ayar-kart-baslik" onclick="ayarKartToggle('vm')">
+            <span>🧹 VM Bakım</span>
+            <span class="kart-ok">▼</span>
+          </div>
+          <div class="ayar-kart-icerik">
+            <small style="color:#a0aec0;">DB'de kayıtlı olmayan (öğrenci silindi veya eski kalan) chroot VM'lerini tespit edip siler.</small>
+            <div style="display:flex;gap:0.5rem;align-items:center;flex-wrap:wrap;">
+              <button class="btn-kucuk" style="background:#2b6cb0;" onclick="chrootListele()">🔍 Eski VM Tara</button>
+              <button class="btn-kucuk" id="chroot-temizle-btn" style="background:#742a2a;display:none;" onclick="chrootTemizle()">🗑️ Hepsini Sil</button>
+              <span id="chroot-tarama-sonuc" style="font-size:0.82rem;color:#a0aec0;"></span>
+            </div>
+            <div id="chroot-fazla-liste"></div>
+          </div>
+        </div>
+
+        <!-- 🔑 Parola -->
+        <div class="ayar-kart" data-kart="parola">
+          <div class="ayar-kart-baslik" onclick="ayarKartToggle('parola')">
+            <span>🔑 Parola Değiştir</span>
+            <span class="kart-ok">▼</span>
+          </div>
+          <div class="ayar-kart-icerik">
+            <div class="alan">
+              <label>Mevcut Parola</label>
+              <input type="password" id="sifre-mevcut" placeholder="Mevcut parola">
+            </div>
+            <div class="alan">
+              <label>Yeni Parola</label>
+              <input type="password" id="sifre-yeni" placeholder="Yeni parola">
+            </div>
+            <div style="display:flex;gap:0.5rem;align-items:center;flex-wrap:wrap;">
+              <button class="btn-kucuk" style="background:#ed8936;" onclick="sifreDegistir()">🔑 Değiştir</button>
+              <span id="sifre-sonuc" style="font-size:0.85rem;font-weight:bold;"></span>
+            </div>
+          </div>
+        </div>
+
       </div>
     </div>
 

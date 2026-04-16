@@ -63,20 +63,29 @@ def paket_zaman_kontrolu(paket_str: str) -> tuple:
 def slayt_listesi():
     from core.config import ders_durumu
     from pathlib import Path
-    
+    import logging
+    log = logging.getLogger('app')
+
     klasor = ders_durumu.get('slayt_klasoru', '')
     if not klasor:
+        log.warning("📁 slayt_klasoru ayarı boş — Ayarlar sekmesinden tanımla.")
         return []
-        
+
     yol = Path(klasor)
-    if not yol.exists() or not yol.is_dir():
+    if not yol.exists():
+        log.warning(f"📁 Slayt klasörü bulunamadı: {klasor} (container içinden erişilemiyor — docker-compose volume mount kontrol et)")
         return []
-        
+    if not yol.is_dir():
+        log.warning(f"📁 Slayt yolu bir klasör değil: {klasor}")
+        return []
+
     dosyalar = sorted(
         f.name for f in yol.iterdir()
         if f.suffix.lower() in ('.html', '.pdf')
         and not f.name.startswith('.')
     )
+    if not dosyalar:
+        log.warning(f"📁 Slayt klasörü boş ({klasor}) — .html veya .pdf dosyası bulunamadı.")
     return dosyalar
 
 def sinif_listesi():

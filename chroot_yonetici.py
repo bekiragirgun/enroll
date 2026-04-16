@@ -443,6 +443,10 @@ def _slugify(text):
 def sync_chroot_configs(username, real_name=""):
     """Chroot içindeki konfigürasyon dosyalarını host ile senkronize et."""
     username = _slugify(username)
+    # real_name sanitization: remove ":" and newlines to prevent passwd/shadow corruption
+    if real_name:
+        real_name = str(real_name).replace(":", " ").replace("\n", " ").strip()
+    
     student_path = CHROOT_BASE / username
     if not student_path.exists():
         log.error(f"Chroot dizini yok: {student_path}")

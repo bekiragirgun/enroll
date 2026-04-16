@@ -249,7 +249,9 @@ def _ct991_exec(command: list, retries: int = 2) -> subprocess.CompletedProcess:
             return subprocess.CompletedProcess(ssh_cmd, 1, stderr="sshpass not found")
         ssh_cmd = ["sshpass", "-p", CHROOT_PASS] + ssh_cmd
 
-    ssh_cmd += final_command
+    # Remote execution requires quoting each argument for the remote shell
+    quoted_remote_cmd = " ".join(shlex.quote(str(c)) for c in final_command)
+    ssh_cmd.append(quoted_remote_cmd)
 
     for attempt in range(retries + 1):
         _ssh_semaphore.acquire()
@@ -291,7 +293,8 @@ def _ct991_exec(command: list, retries: int = 2) -> subprocess.CompletedProcess:
                     import shutil
                     if shutil.which("sshpass"):
                         ssh_cmd = ["sshpass", "-p", CHROOT_PASS] + ssh_cmd
-                ssh_cmd += final_command
+                quoted_remote_cmd = " ".join(shlex.quote(str(c)) for c in final_command)
+                ssh_cmd.append(quoted_remote_cmd)
                 continue
 
             if result.returncode != 0:

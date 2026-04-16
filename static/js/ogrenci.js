@@ -1,8 +1,30 @@
 // XSS koruması — kullanıcı verisini HTML'e güvenli şekilde ekle
 function esc(s) { var d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
 
+// Centralized Fetch with CSRF and Cloudflare Session handling
+async function safeFetch(url, options = {}) {
+    try {
+        const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content;
+        if (csrfToken) {
+            if (!options.headers) options.headers = {};
+            options.headers['X-CSRFToken'] = csrfToken;
+        }
+        const res = await fetch(url, options);
+        if (res.url && res.url.includes('cloudflareaccess.com')) {
+            window.location.reload();
+            return new Promise(() => { });
+        }
+        return res;
+    } catch (e) {
+        if (e.name === 'TypeError' && e.message === 'Failed to fetch') {
+            window.location.reload();
+        }
+        throw e;
+    }
+}
+
 // Öğrenci tarafı — mod değişimini 500ms'de bir kontrol eder
-const POLLING_ARALIK = 1000; // 1 saniyeye düşürelim (sunucu yükü için)
+const POLLING_ARALIK = 1000;
 
 // Mevcut durumu bellekte tut
 let suAnkiDurum = {
@@ -175,7 +197,7 @@ let mevcutSinavId = null;
 
 async function aktifSinaviGetir(hedefContainer) {
   try {
-    const yanit = await fetch('/api/sinav/aktif');
+    const yanit = await safeFetch('/api/sinav/aktif');
     const veri = await yanit.json();
 
     if (!veri.aktif_sinav) return;
@@ -329,7 +351,7 @@ async function sinavCevaplariniGonder() {
   }
 
   try {
-    const yanit = await fetch('/api/sinav/cevap_kaydet', {
+    const yanit = await safeFetch('/api/sinav/cevap_kaydet', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -371,7 +393,7 @@ async function sinavCevaplariniGonder() {
 async function durumKontrol() {
   try {
     const apiUrl = '/api/durum';
-    const yanit = await fetch(apiUrl, {
+    const yanit = await safeFetch(apiUrl, {
       credentials: 'same-origin',
       headers: { 'Cache-Control': 'no-cache' }
     });
@@ -447,7 +469,7 @@ async function _sinavIhlalBaslat() {
   // 1. Mevcut cevapları taslak olarak sunucuya kaydet
   const cevaplar = _mevcutCevaplariTopla();
   try {
-    await fetch('/api/sinav/taslak_kaydet', {
+    await safeFetch('/api/sinav/taslak_kaydet', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ sinav_id: mevcutSinavId, cevaplar: cevaplar })
@@ -456,7 +478,7 @@ async function _sinavIhlalBaslat() {
 
   // 2. Otomatik ihlal bildirimi gönder
   try {
-    await fetch('/api/sinav/ihlal_bildir', {
+    await safeFetch('/api/sinav/ihlal_bildir', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ sinav_id: mevcutSinavId, aciklama: '' })
@@ -523,7 +545,7 @@ async function _ihlalAciklamaGonder() {
   var aciklama = textarea ? textarea.value.trim() : '';
 
   try {
-    await fetch('/api/sinav/ihlal_bildir', {
+    await safeFetch('/api/sinav/ihlal_bildir', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ sinav_id: mevcutSinavId, aciklama: aciklama })
@@ -542,7 +564,7 @@ function _ihlalPollingBaslat() {
   if (_ihlalPollingInterval) clearInterval(_ihlalPollingInterval);
   _ihlalPollingInterval = setInterval(async function() {
     try {
-      var yanit = await fetch('/api/sinav/ihlal_durum?sinav_id=' + mevcutSinavId);
+      var yanit = await safeFetch('/api/sinav/ihlal_durum?sinav_id=' + mevcutSinavId);
       var veri = await yanit.json();
 
       if (veri.durum === 'onaylandi') {
@@ -578,7 +600,7 @@ function _ihlalPollingBaslat() {
 // ── Devam Bilgisi ──────────────────────────────────────────────
 async function devamBilgisiCek() {
   try {
-    var yanit = await fetch('/api/ogrenci/devam', { credentials: 'same-origin' });
+    var yanit = await safeFetch('/api/ogrenci/devam', { credentials: 'same-origin' });
     if (!yanit.ok) return;
     var veri = await yanit.json();
     var ozet = veri.ozet;
@@ -692,7 +714,7 @@ async function yardimGonder(kategori) {
     btn.style.backgroundColor = '#718096';
     btn.style.transform = 'none';
 
-    const res = await fetch('/api/yardim_talep', {
+    const res = await safeFetch('/api/yardim_talep', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ kategori: kategori })
@@ -729,7 +751,7 @@ async function cikisTalepEt() {
     btn.style.backgroundColor = '#718096';
     btn.style.transform = 'none';
 
-    const res = await fetch('/api/seb_cikis_talep', { method: 'POST' });
+    const res = await safeFetch('/api/seb_cikis_talep', { method: 'POST' });
     const data = await res.json();
 
     if (data.durum === 'ok') {
@@ -791,7 +813,7 @@ function _sinavSplitRender(container, veri) {
 // ── Sınav Sonrası SEB Çıkışı (cikis_izni'nden bağımsız) ────
 function sinavSonrasiCikis() {
   // Oturumu kapat ve SEB'den çık
-  fetch('/api/ogrenci_cikis', { method: 'POST' }).catch(function() {});
+  safeFetch('/api/ogrenci_cikis', { method: 'POST' }).catch(function() {});
   window.location.href = '/seb-quit';
 }
 
@@ -812,7 +834,7 @@ async function cikisOnayla() {
   const btn = document.getElementById('btn-cikis-onayla');
   if (btn) { btn.disabled = true; btn.textContent = '⏳...'; }
   try {
-    const res = await fetch('/api/ogrenci_cikis', { method: 'POST' });
+    const res = await safeFetch('/api/ogrenci_cikis', { method: 'POST' });
     const veri = await res.json();
     if (veri.durum === 'ok') {
       const isSEB = navigator.userAgent.includes('SEB/');
