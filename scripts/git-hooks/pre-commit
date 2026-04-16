@@ -1,0 +1,94 @@
+#!/usr/bin/env bash
+# pre-commit guard — chroot_yonetici.py senkron kontrolü
+#
+# Amaç: Proje kökündeki chroot_yonetici.py değiştirilmiş ama en yeni
+# deb-package/chroot-terminal_X.Y/usr/local/bin/chroot-yonetici kopyası
+# güncellenmemiş ise commit'i engelle. Bu drift daha önce üretimde
+# NameError'a yol açtı (bkz. 2026-04-16 incident).
+#
+# Geçici bypass: git commit --no-verify
+
+set -euo pipefail
+
+REPO_ROOT=$(git rev-parse --show-toplevel)
+cd "$REPO_ROOT"
+
+ROOT_SCRIPT="chroot_yonetici.py"
+
+# Bu commit chroot_yonetici.py veya deb-package script'ini içeriyor mu?
+STAGED=$(git diff --cached --name-only)
+touches_script=0
+echo "$STAGED" | grep -qE "^${ROOT_SCRIPT}$|^deb-package/chroot-terminal_[^/]+/usr/local/bin/chroot-yonetici$" && touches_script=1
+
+if [ "$touches_script" -eq 0 ]; then
+    # İlgisiz commit, pass
+    exit 0
+fi
+
+# En yeni deb paket dizinini bul (semver sıralaması)
+LATEST_PKG=$(ls -d deb-package/chroot-terminal_*/ 2>/dev/null | sed 's|/$||' | sort -V | tail -n 1)
+
+if [ -z "${LATEST_PKG:-}" ]; then
+    # Henüz paket yok, skip
+    exit 0
+fi
+
+PKG_SCRIPT="${LATEST_PKG}/usr/local/bin/chroot-yonetici"
+
+if [ ! -f "$ROOT_SCRIPT" ] || [ ! -f "$PKG_SCRIPT" ]; then
+    # Dosyalardan biri yok, skip
+    exit 0
+fi
+
+# STAGED sürümlerini geçici dosyalara çıkar (working tree değil index)
+TMP_ROOT=$(mktemp)
+TMP_PKG=$(mktemp)
+trap 'rm -f "$TMP_ROOT" "$TMP_PKG"' EXIT
+
+# Kök dosyanın stage edilmiş hali (varsa) — yoksa HEAD
+if git diff --cached --name-only | grep -q "^${ROOT_SCRIPT}$"; then
+    git show ":${ROOT_SCRIPT}" > "$TMP_ROOT"
+else
+    cp "$ROOT_SCRIPT" "$TMP_ROOT"
+fi
+
+# Paket script'inin stage edilmiş hali (varsa) — yoksa working tree
+if git diff --cached --name-only | grep -q "^${PKG_SCRIPT}$"; then
+    git show ":${PKG_SCRIPT}" > "$TMP_PKG"
+else
+    cp "$PKG_SCRIPT" "$TMP_PKG"
+fi
+
+if ! cmp -s "$TMP_ROOT" "$TMP_PKG"; then
+    cat >&2 <<EOF
+
+╔══════════════════════════════════════════════════════════════════╗
+║  ❌ pre-commit: chroot_yonetici.py drift tespit edildi           ║
+╠══════════════════════════════════════════════════════════════════╣
+║                                                                  ║
+║  Kök:    ${ROOT_SCRIPT}
+║  Paket:  ${PKG_SCRIPT}
+║                                                                  ║
+║  İçerikleri farklı. build.sh deb paketini güncellememiş olabilir.║
+║                                                                  ║
+║  Çözümler:                                                       ║
+║                                                                  ║
+║  1) Senkronize et + yeniden stage:                               ║
+║     cp $ROOT_SCRIPT $PKG_SCRIPT
+║     git add $PKG_SCRIPT
+║                                                                  ║
+║  2) Veya yeni paket sürümü oluştur:                              ║
+║     cp -r $LATEST_PKG deb-package/chroot-terminal_<yeni_ver>     ║
+║     cp $ROOT_SCRIPT deb-package/chroot-terminal_<yeni_ver>/usr/local/bin/chroot-yonetici
+║     # DEBIAN/control içinde Version: <yeni_ver> güncelle          ║
+║     git add deb-package/chroot-terminal_<yeni_ver>/               ║
+║                                                                  ║
+║  3) Geçici bypass: git commit --no-verify                        ║
+║                                                                  ║
+╚══════════════════════════════════════════════════════════════════╝
+
+EOF
+    exit 1
+fi
+
+exit 0
