@@ -18,8 +18,25 @@ import logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 log = logging.getLogger(__name__)
 
-VERSION = "2026-04-06-CHROOT-MULTIARCH-V14"
+VERSION = "2026-04-16-CHROOT-OS-AWARE-V16"
 log.info(f"🚀 Chroot Manager Script Version: {VERSION}")
+
+def get_os_info():
+    """Host işletim sistemi bilgilerini /etc/os-release üzerinden oku."""
+    info = {"ID": "debian", "VERSION_ID": "12"} # Varsayılan
+    try:
+        with open("/etc/os-release") as f:
+            for line in f:
+                if "=" in line:
+                    k, v = line.strip().split("=", 1)
+                    info[k] = v.strip('"')
+    except Exception as e:
+        log.warning(f"⚠️ OS tespiti yapılamadı: {e}")
+    return info
+
+OS_INFO = get_os_info()
+HOST_OS = OS_INFO.get("ID", "debian").lower()
+log.info(f"🖥️  Host OS detected: {HOST_OS} (Version: {OS_INFO.get('VERSION_ID', '?')})")
 
 # Yapılandırma
 CHROOT_BASE = Path("/home/chroot")
@@ -68,12 +85,20 @@ def _fix_su_binary(chroot_path):
         extract_path = Path(tmpdir) / "extract"
         arch = "arm64" if platform.machine() == "aarch64" else "amd64"
 
-        # Birden fazla mirror dene
-        mirrors = [
-            f"http://deb.debian.org/debian/pool/main/u/util-linux/util-linux_2.38.1-5+deb12u3_{arch}.deb",
-            f"http://ftp.debian.org/debian/pool/main/u/util-linux/util-linux_2.38.1-5+deb12u3_{arch}.deb",
-            f"http://mirror.leaseweb.com/debian/pool/main/u/util-linux/util-linux_2.38.1-5+deb12u3_{arch}.deb",
-        ]
+        # Dağıtıma göre uygun paket URL'lerini belirle
+        if HOST_OS == "debian":
+            mirrors = [
+                f"http://deb.debian.org/debian/pool/main/u/util-linux/util-linux_2.38.1-5+deb12u3_{arch}.deb",
+                f"http://ftp.debian.org/debian/pool/main/u/util-linux/util-linux_2.38.1-5+deb12u3_{arch}.deb",
+            ]
+        elif HOST_OS == "ubuntu":
+            # Ubuntu 24.04 (Noble) util-linux versiyonu
+            mirrors = [
+                f"http://archive.ubuntu.com/ubuntu/pool/main/u/util-linux/util-linux_2.39.3-9ubuntu6_{arch}.deb",
+                f"http://security.ubuntu.com/ubuntu/pool/main/u/util-linux/util-linux_2.39.3-9ubuntu6_{arch}.deb",
+            ]
+        else:
+            mirrors = [f"http://deb.debian.org/debian/pool/main/u/util-linux/util-linux_2.38.1-5+deb12u3_{arch}.deb"]
 
         downloaded = False
         for url in mirrors:
@@ -132,9 +157,9 @@ def _fix_etc_hosts(chroot_path):
         return
 
     try:
-        hostname = socket.gethostname().strip() or "Debian12"
+        hostname = socket.gethostname().strip() or "chroot-host"
     except Exception:
-        hostname = "Debian12"
+        hostname = "chroot-host"
 
     try:
         icerik = hosts_file.read_text()
@@ -272,30 +297,43 @@ def setup_template():
     for p in ["proc", "sys", "dev/pts", "dev"]:
         subprocess.run(["umount", "-l", str(STUDENT_TEMPLATE / p)], check=False)
 
+    # Şablon için OS bazlı mirror ve distro seçimi
+    distro = "bookworm" if HOST_OS == "debian" else "noble" if HOST_OS == "ubuntu" else "bookworm"
+    mirror = "http://deb.debian.org/debian" if HOST_OS == "debian" else "http://archive.ubuntu.com/ubuntu"
+    keyring = "debian-archive-keyring" if HOST_OS == "debian" else "ubuntu-keyring"
+
     # Debian 12 base kur (mmdebstrap — SSL/hash bypass ile)
     if not STUDENT_TEMPLATE.exists():
         STUDENT_TEMPLATE.parent.mkdir(parents=True, exist_ok=True)
-        log.info("⬇️  mmdebstrap ile Debian 12 bookworm template indiriliyor...")
+        log.info(f"⬇️  mmdebstrap ile {distro} template indiriliyor ({mirror})...")
         _run([
             "mmdebstrap", f"--arch={target_arch}",
             '--aptopt=Acquire::https::Verify-Peer "false"',
             '--aptopt=Acquire::Check-Valid-Until "false"',
             '--aptopt=Acquire::AllowInsecureRepositories "true"',
             '--aptopt=APT::Get::AllowUnauthenticated "true"',
-            "--include=gnupg,debian-archive-keyring,gpgv,ca-certificates",
-            "bookworm",
+            f"--include=gnupg,{keyring},gpgv,ca-certificates",
+            distro,
             str(STUDENT_TEMPLATE),
-            "http://deb.debian.org/debian"
+            mirror
         ])
 
-    # 1. Full Repositories (Debian 12)
-    sources_list = STUDENT_TEMPLATE / "etc" / "apt" / "sources.list"
-    
-    repo_content = f"""
+    # Dağıtıma uygun sources.list içeriği
+    if HOST_OS == "debian":
+        repo_content = f"""
 deb http://deb.debian.org/debian bookworm main contrib non-free non-free-firmware
 deb http://deb.debian.org/debian bookworm-updates main contrib non-free non-free-firmware
 deb http://security.debian.org/debian-security bookworm-security main contrib non-free non-free-firmware
 """
+    elif HOST_OS == "ubuntu":
+        repo_content = f"""
+deb http://archive.ubuntu.com/ubuntu noble main restricted universe multiverse
+deb http://archive.ubuntu.com/ubuntu noble-updates main restricted universe multiverse
+deb http://archive.ubuntu.com/ubuntu noble-backports main restricted universe multiverse
+deb http://security.ubuntu.com/ubuntu noble-security main restricted universe multiverse
+"""
+    else:
+        repo_content = "deb http://deb.debian.org/debian bookworm main"
     sources_list.write_text(repo_content.strip() + "\n")
     log.info("📝 sources.list Debian 12 mirrorları ile güncellendi.")
 
@@ -443,6 +481,10 @@ def _slugify(text):
 def sync_chroot_configs(username, real_name=""):
     """Chroot içindeki konfigürasyon dosyalarını host ile senkronize et."""
     username = _slugify(username)
+    # real_name sanitization: remove ":" and newlines to prevent passwd/shadow corruption
+    if real_name:
+        real_name = str(real_name).replace(":", " ").replace("\n", " ").strip()
+    
     student_path = CHROOT_BASE / username
     if not student_path.exists():
         log.error(f"Chroot dizini yok: {student_path}")

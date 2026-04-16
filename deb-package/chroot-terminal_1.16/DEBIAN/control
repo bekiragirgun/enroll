@@ -1,9 +1,9 @@
 Package: chroot-terminal
-Version: 1.15
+Version: 1.16
 Section: admin
 Priority: optional
 Architecture: all
-Depends: openssh-server, python3, rsync, mmdebstrap, sshpass, network-manager, debian-archive-keyring, bash-completion, iputils-ping, ca-certificates, libcap2-bin
+Depends: openssh-server, python3, rsync, mmdebstrap, sshpass, network-manager, debian-archive-keyring | ubuntu-keyring, bash-completion, iputils-ping, ca-certificates, libcap2-bin
 Maintainer: Bekir Agirgun <bekir.agirgun@kapadokya.edu.tr>
 Description: Chroot Terminal System for Linux Lab
  Provides isolated chroot environments for students

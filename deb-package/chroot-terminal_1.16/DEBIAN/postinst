@@ -1,7 +1,18 @@
 #!/bin/bash
 set -e
 
-echo "=== Chroot Terminal System v1.14 kurulumu ==="
+echo "=== Chroot Terminal System v1.16 kurulumu (OS-Aware) ==="
+
+# ── İşletim Sistemi Tespit ────────────────────────────────
+if [ -f /etc/os-release ]; then
+    . /etc/os-release
+    HOST_OS=$ID
+    HOST_VER=$VERSION_ID
+else
+    HOST_OS="debian"
+    HOST_VER="12"
+fi
+echo "    Tespit Edilen Sistem: $HOST_OS $HOST_VER"
 
 # ── LXC/Konteyner Tespiti ve Optimizasyonu ─────────────────
 _is_container() {
@@ -65,20 +76,21 @@ echo "[3/9] Ulimit ayarları uygulandı (limits.d)"
 echo "[4/9] Sistem grubu oluşturuluyor..."
 groupadd -f ogrenciler
 
-# ── Network: systemd-networkd → NetworkManager ──
-echo "[5/9] Network katmanı yapılandırılıyor (NetworkManager)..."
+# Hangi ağ yöneticisinin (renderer) kullanılacağını belirle
+RENDERER="NetworkManager"
+if systemctl is-active systemd-networkd >/dev/null 2>&1; then
+    RENDERER="networkd"
+fi
+echo "    Netplan Renderer: $RENDERER"
 
-# Crash eden systemd servislerini doğrudan symlink ile mask'la
-# (systemctl mask apt install sırasında güvenilmez, ln -sf her zaman çalışır)
 for svc in multipathd.service \
            systemd-networkd.service \
            systemd-networkd.socket \
-           systemd-networkd-wait-online.service \
-           systemd-resolved.service \
-           systemd-timesyncd.service; do
+           systemd-networkd-wait-online.service; do
     systemctl disable "$svc" 2>/dev/null || true
     systemctl stop "$svc" 2>/dev/null || true
-    ln -sf /dev/null /etc/systemd/system/"$svc"
+    # Sadece kritik servisleri mask'la
+    [ "$svc" != "systemd-networkd.service" ] || [ "$RENDERER" != "networkd" ] && ln -sf /dev/null /etc/systemd/system/"$svc"
 done
 
 # Eski cloud-init netplan config'ini kaldır (networkd renderer kullanıyor)
@@ -107,7 +119,7 @@ if [ -n "$_IFACE" ] && [ -n "$_IP" ] && [ -n "$_GW" ]; then
 # Chroot Terminal — Statik IP (DHCP'den alınan değerlerle)
 network:
   version: 2
-  renderer: NetworkManager
+  renderer: ${RENDERER}
   ethernets:
     ${_IFACE}:
       addresses:
@@ -126,14 +138,18 @@ else
 fi
 
 # Statik DNS — resolved olmayınca resolv.conf boş kalabilir
-chattr -i /etc/resolv.conf 2>/dev/null || true
-rm -f /etc/resolv.conf 2>/dev/null || true
-cat > /etc/resolv.conf << 'DNSEOF'
+if [ ! -L /etc/resolv.conf ]; then
+    chattr -i /etc/resolv.conf 2>/dev/null || true
+    rm -f /etc/resolv.conf 2>/dev/null || true
+    cat > /etc/resolv.conf << 'DNSEOF'
 nameserver 8.8.8.8
 nameserver 1.1.1.1
 DNSEOF
-# resolv.conf'un üzerine yazılmasını engelle
-chattr +i /etc/resolv.conf 2>/dev/null || true
+    # resolv.conf'un üzerine yazılmasını engelle (sadece gerçek dosya ise)
+    chattr +i /etc/resolv.conf 2>/dev/null || true
+else
+    echo "    Bilgi: /etc/resolv.conf bir symlink, yazma koruması uygulanmadı."
+fi
 
 # NetworkManager'ı etkinleştir
 systemctl unmask NetworkManager.service 2>/dev/null || true
