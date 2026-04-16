@@ -60,9 +60,10 @@ boxes/*.box
 # Lima
 .lima/
 
-# Logs
+# Logs & Archive
 *.log
 logs/
+docs/archive/
 
 
 # Git
