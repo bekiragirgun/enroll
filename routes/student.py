@@ -157,6 +157,19 @@ def giris():
     session['soyad'] = ogrenci['soyad']
     session['giris_zamani'] = _time.time()
 
+    # Aktivite log — giriş kaydı. Paket sayısı ne olursa olsun her giriş
+    # (yeni yoklama veya mevcut paket içinde tekrar girişi) ayrı satır.
+    try:
+        with db_baglantisi() as db:
+            db.execute(
+                'INSERT INTO ogrenci_aktivite_log (numara, ip, aktivite_tipi, detay, tarih, saat) '
+                'VALUES (?,?,?,?,?,?)',
+                (numara, istemci, 'giris', f'paket={ders_paketi}; sinif={sinif_ad}', tarih, saat)
+            )
+            db.commit()
+    except Exception as e:
+        log.error(f"Giriş aktivite log hatası: {e}")
+
     try:
         from chroot_terminal import chroot_var_mi, chroot_olustur
         if not chroot_var_mi(numara):

@@ -686,6 +686,58 @@ if __name__ == '__main__':
     except Exception as e:
         print(f"  ⚠️  Pre-warm scheduler başlatılamadı: {e}")
 
+    # Auto-kick scheduler — paket bitişinde (11:35 / 15:15 / 18:00) açık
+    # kalan tüm öğrenci session'larını otomatik kapatır + chroot'ları siler.
+    # Öğretmenin manuel tetiklemesini beklemez.
+    def _auto_kick_scheduler():
+        from datetime import datetime
+        # Paket bitiş saatleri → paket string
+        BITIS = {
+            '11:35': '1. Paket (09:00-11:35)',
+            '15:15': '2. Paket (12:40-15:15)',
+            '18:00': '3. Paket (15:25-18:00)',
+        }
+        tetiklendi = set()
+
+        while True:
+            try:
+                eventlet.sleep(60)
+                now = datetime.now()
+                if now.weekday() != 0:  # yalnızca pazartesi
+                    continue
+                hhmm = now.strftime('%H:%M')
+                if hhmm not in BITIS:
+                    continue
+                paket = BITIS[hhmm]
+                gun_key = (now.strftime('%Y-%m-%d'), paket)
+                if gun_key in tetiklendi:
+                    continue
+                tetiklendi.add(gun_key)
+
+                app.logger.info(f"🤖 Auto-kick — {paket} ({hhmm}) bitti, session'lar kapatılıyor")
+                try:
+                    with app.test_request_context(
+                        '/api/paket_sonu', method='POST', json={'paket': paket}
+                    ):
+                        from flask import session
+                        session['ogretmen'] = True
+                        from routes.api import api_paket_sonu
+                        resp = api_paket_sonu()
+                        app.logger.info(f"🤖 {paket} auto-kick response: {resp.status_code}")
+                except Exception as e:
+                    app.logger.error(f"Auto-kick hata ({paket}): {e}")
+            except Exception as e:
+                try:
+                    app.logger.error(f"Auto-kick scheduler hata: {e}")
+                except Exception:
+                    pass
+
+    try:
+        eventlet.spawn(_auto_kick_scheduler)
+        print("  🤖 Auto-kick scheduler aktif (pazartesi 11:35 / 15:15 / 18:00)")
+    except Exception as e:
+        print(f"  ⚠️  Auto-kick scheduler başlatılamadı: {e}")
+
     # IP Tespiti
     try:
         s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)

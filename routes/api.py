@@ -1213,20 +1213,9 @@ def api_ogrenci_cikis():
         return jsonify({'durum': 'hata', 'mesaj': 'Bugün yoklama kaydınız bulunamadı.'})
 
     paket = kayit['paket']
-
-    # Test modunda paket saati kontrolü atlanır
-    import os
-    if os.environ.get('TEST_MODE') != '1':
-        bas, bit, gecerli = paket_zaman_kontrolu(paket)
-        if not gecerli:
-            return jsonify({
-                'durum': 'hata',
-                'mesaj': f'Çıkış yalnızca paket saatleri içinde yapılabilir ({bas}–{bit}).',
-                'zaman_disi': True,
-                'paket': paket,
-                'bas': bas,
-                'bit': bit,
-            })
+    # Paket saati kontrolü kaldırıldı: öğrenci istediği zaman kendi
+    # oturumunu kapatabilir. toplu_cikis zaten paket sonunda herkesi
+    # zorla çıkarıyor, ekstra koruma gereksizdi ve ters yönde çalışıyordu.
 
     # Çıkışı kaydet
     with db_baglantisi() as db:
