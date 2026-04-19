@@ -357,11 +357,15 @@ def api_giris_toggle():
 @api_bp.route('/healthcheck', methods=['POST'])
 @ogretmen_giris_gerekli
 def api_healthcheck():
-    veri = request.get_json()
-    host = veri.get('chroot_host', '')
-    port = veri.get('chroot_port', 22)
-    user = veri.get('chroot_user', 'root')
-    password = veri.get('chroot_pass', '')
+    veri = request.get_json() or {}
+    # Frontend güvenlik nedeniyle (HTML kaynak kodunda şifre görünmesin diye)
+    # password alanını boş render eder. Boş alanlar için DB'deki mevcut değerler
+    # fallback olarak kullanılır — "Test Et" butonu kullanıcı parolayı tekrar
+    # yazmasa da çalışır.
+    host = (veri.get('chroot_host') or '').strip() or ders_durumu.get('chroot_host', '')
+    port = veri.get('chroot_port') or ders_durumu.get('chroot_port', 22)
+    user = (veri.get('chroot_user') or '').strip() or ders_durumu.get('chroot_user', 'root')
+    password = veri.get('chroot_pass') or ders_durumu.get('chroot_pass', '')
 
     import re
     # Hostname/IP validation: Alfanumerik, nokta ve tire
@@ -1636,6 +1640,102 @@ def api_devamsizlik_esik_kaydet():
     esik = veri.get('esik', 3)
     ayar_kaydet('devamsizlik_esik', str(esik))
     return jsonify({'durum': 'ok', 'esik': int(esik)})
+
+
+@api_bp.route('/chroot/pre_warm_paket/<int:paket_no>', methods=['POST'])
+@ogretmen_giris_gerekli
+def api_chroot_pre_warm_paket(paket_no):
+    """Belirli bir paket için muhtemel öğrencilerin chroot'unu toplu yaratır.
+
+    Hedef kitle: Son 4 pazartesi içinde o pakette yoklama kaydı olan öğrenciler.
+    Bu "muhtemel aktif" öğrenci listesidir — paket saati başlamadan 10 dk önce
+    çağrılırsa (manuel veya otomatik scheduler) derse gelen öğrenci terminale
+    anında erişir. Paket dışı gelenler için routes/student.py login thread'i
+    zaten chroot yaratır.
+
+    paket_no: 1, 2 veya 3
+    """
+    import threading
+    from datetime import datetime, timedelta
+    from chroot_terminal import chroot_olustur_batch, chroot_var_mi, _slugify
+
+    if paket_no not in (1, 2, 3):
+        return jsonify({'durum': 'hata', 'mesaj': 'paket_no 1, 2 veya 3 olmalı'}), 400
+
+    # Paket prefix'i (yoklama.paket LIKE eşleşmesi için)
+    paket_prefix = f"{paket_no}. Paket"
+
+    # Son 4 pazartesi'yi hesapla (bugün dahil)
+    bugun = datetime.now().date()
+    pazartesiler = []
+    check = bugun
+    while len(pazartesiler) < 4:
+        if check.weekday() == 0:  # Python Pzt=0
+            pazartesiler.append(check.strftime('%Y-%m-%d'))
+        check = check - timedelta(days=1)
+        if (bugun - check).days > 35:  # 5 hafta limit
+            break
+
+    if not pazartesiler:
+        return jsonify({'durum': 'hata', 'mesaj': 'Henüz pazartesi bulunamadı'}), 400
+
+    with db_baglantisi() as db:
+        # Son N pazartesi'de o pakete gelen distinct öğrenciler
+        placeholders = ','.join(['?'] * len(pazartesiler))
+        rows = db.execute(
+            f"""SELECT DISTINCT o.numara, o.ad, o.soyad
+                FROM yoklama y
+                JOIN ogrenciler o ON o.numara = y.numara
+                WHERE y.paket LIKE ?
+                  AND y.tarih IN ({placeholders})""",
+            (paket_prefix + '%', *pazartesiler)
+        ).fetchall()
+
+    if not rows:
+        return jsonify({
+            'durum': 'ok',
+            'mesaj': f'{paket_prefix} için son 4 pazartesi yoklaması bulunamadı',
+            'paket': paket_prefix,
+            'bakilan_tarihler': pazartesiler,
+            'toplam': 0, 'zaten_var': 0, 'yaratilacak': 0,
+        })
+
+    yapilacak = []
+    zaten_var = 0
+    for o in rows:
+        slug = _slugify(o['numara'])
+        if chroot_var_mi(slug):
+            zaten_var += 1
+        else:
+            yapilacak.append({'username': slug, 'ad': o['ad'], 'soyad': o['soyad']})
+
+    if not yapilacak:
+        log.info(f"🔥 Pre-warm [{paket_prefix}]: tüm {len(rows)} öğrencinin chroot'u zaten mevcut")
+        return jsonify({
+            'durum': 'ok',
+            'mesaj': f'{paket_prefix} — tüm {len(rows)} chroot zaten hazır',
+            'paket': paket_prefix,
+            'bakilan_tarihler': pazartesiler,
+            'toplam': len(rows), 'zaten_var': zaten_var, 'yaratilacak': 0,
+        })
+
+    def _worker():
+        log.info(f"🔥 Pre-warm başladı [{paket_prefix}]: {len(yapilacak)} chroot")
+        sonuc = chroot_olustur_batch(yapilacak)
+        basarili = sum(1 for v in sonuc.values() if v)
+        log.info(f"🔥 Pre-warm tamamlandı [{paket_prefix}]: {basarili}/{len(yapilacak)} başarılı")
+
+    threading.Thread(target=_worker, daemon=True).start()
+
+    return jsonify({
+        'durum': 'ok',
+        'mesaj': f'{paket_prefix} — {len(yapilacak)} öğrenci için chroot yaratılıyor (~{max(1, len(yapilacak)//10)} dk)',
+        'paket': paket_prefix,
+        'bakilan_tarihler': pazartesiler,
+        'toplam': len(rows),
+        'zaten_var': zaten_var,
+        'yaratilacak': len(yapilacak),
+    })
 
 
 @api_bp.route('/chroot/pre_warm/<int:sinif_id>', methods=['POST'])

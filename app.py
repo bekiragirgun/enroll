@@ -633,6 +633,59 @@ if __name__ == '__main__':
     except Exception as e:
         print(f"  ⚠️  Log handler kurulamadı: {e}")
 
+    # Pre-warm scheduler — pazartesi günleri paket saatine 10 dk kala
+    # otomatik chroot batch yaratır. Test günlerinde (diğer günler) çalışmaz.
+    def _pre_warm_scheduler():
+        from datetime import datetime
+        import urllib.request
+        # Paket saatleri — 10 dk önce tetikle
+        TETIK = {
+            '08:50': 1,  # 1. Paket 09:00 için 10 dk erken
+            '12:30': 2,  # 2. Paket 12:40
+            '15:15': 3,  # 3. Paket 15:25
+        }
+        tetiklendi = set()  # ('2026-04-20', 1) formatında
+
+        while True:
+            try:
+                eventlet.sleep(60)  # dakikada bir kontrol
+                now = datetime.now()
+                # Sadece pazartesi (Python Pzt=0)
+                if now.weekday() != 0:
+                    continue
+                hhmm = now.strftime('%H:%M')
+                if hhmm not in TETIK:
+                    continue
+                paket_no = TETIK[hhmm]
+                gun_key = (now.strftime('%Y-%m-%d'), paket_no)
+                if gun_key in tetiklendi:
+                    continue
+                tetiklendi.add(gun_key)
+
+                # Kendi endpoint'imizi çağır — auth bypass için internal flag
+                # yok, onun yerine direkt fonksiyonu çağıralım
+                app.logger.info(f"🤖 Auto pre-warm — Paket {paket_no} için {hhmm}")
+                try:
+                    with app.test_request_context():
+                        from flask import session
+                        session['ogretmen'] = True  # internal call için auth bypass
+                        from routes.api import api_chroot_pre_warm_paket
+                        resp = api_chroot_pre_warm_paket(paket_no)
+                        app.logger.info(f"🤖 Paket {paket_no} pre-warm response: {resp.status_code}")
+                except Exception as e:
+                    app.logger.error(f"Auto pre-warm hata (paket {paket_no}): {e}")
+            except Exception as e:
+                try:
+                    app.logger.error(f"Pre-warm scheduler hata: {e}")
+                except Exception:
+                    pass
+
+    try:
+        eventlet.spawn(_pre_warm_scheduler)
+        print("  🤖 Pre-warm scheduler aktif (pazartesi 08:50 / 12:30 / 15:15)")
+    except Exception as e:
+        print(f"  ⚠️  Pre-warm scheduler başlatılamadı: {e}")
+
     # IP Tespiti
     try:
         s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
