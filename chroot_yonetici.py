@@ -19,7 +19,7 @@ import logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 log = logging.getLogger(__name__)
 
-VERSION = "2026-04-19-BGT227-PACKAGES-V18"
+VERSION = "2026-04-20-SUDO-HOSTS-FIX-V19"
 log.info(f"🚀 Chroot Manager Script Version: {VERSION}")
 
 def get_os_info():
@@ -606,13 +606,25 @@ def sync_chroot_configs(username, real_name=""):
                     shadow_file.write_text("\n".join(lines) + "\n")
                     log.info(f"📝 {shadow_file} için placeholder eklendi")
 
-        # /etc/hosts ve /etc/hostname senkronizasyonu (Sudo fix)
+        # /etc/hosts ve /etc/hostname senkronizasyonu (Sudo fix).
+        # KRİTİK: chroot içinde kernel uname() host hostname'ini (ör. Debian12)
+        # döndürür — bu yüzden /etc/hosts'ta hem 'ogrenci-vm' hem de gerçek
+        # host hostname'inin 127.0.0.1'e map edilmesi şart. Aksi halde
+        # `sudo` her çağrıda "unable to resolve host" uyarısı verir.
         try:
+            try:
+                host_hn = socket.gethostname().strip() or "host"
+            except Exception:
+                host_hn = "host"
             hosts_file = student_path / "etc" / "hosts"
-            hosts_content = "127.0.0.1\tlocalhost\n127.0.1.1\togrenci-vm\n"
+            hosts_content = (
+                "127.0.0.1\tlocalhost\n"
+                "127.0.1.1\togrenci-vm\n"
+                f"127.0.0.1\t{host_hn}\n"
+            )
             hosts_file.write_text(hosts_content)
             (student_path / "etc" / "hostname").write_text("ogrenci-vm\n")
-            log.info(f"📝 {hosts_file} ve hostname güncellendi")
+            log.info(f"📝 {hosts_file} ve hostname güncellendi (host: {host_hn})")
         except Exception as e:
             log.warning(f"⚠️ Hosts güncelleme hatası: {e}")
 
