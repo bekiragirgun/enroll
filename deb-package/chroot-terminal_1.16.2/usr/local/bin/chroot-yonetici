@@ -19,7 +19,7 @@ import logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 log = logging.getLogger(__name__)
 
-VERSION = "2026-04-19-PTMXMODE-REMOUNT-V17"
+VERSION = "2026-04-19-BGT227-PACKAGES-V18"
 log.info(f"🚀 Chroot Manager Script Version: {VERSION}")
 
 def get_os_info():
@@ -437,12 +437,36 @@ deb http://security.ubuntu.com/ubuntu noble-security main restricted universe mu
         
         _run(["chroot", str(STUDENT_TEMPLATE), "apt-get", "install", "-y", "--allow-unauthenticated",
               "build-essential", "python3", "python3-pip",
-              "git", "curl", "wget", "vim", "nano", "sudo", "locales",
+              "git", "curl", "wget", "vim", "nano", "sudo",
+              # locale: locales-all tüm UTF-8 locale'leri hazır sunar; locale-gen gerekmez.
+              # "man: can't set the locale" uyarısı buradan kaynaklıydı.
+              "locales", "locales-all",
               "login", "util-linux", "passwd",
               "dnsutils", "net-tools", "iputils-ping", "iproute2",
-              "man-db", "tree", "zip", "unzip", "bzip2", "xz-utils", "tar", "gzip",
+              # man-db zaten vardı; info (GNU info reader) + plocate (mlocate replacement)
+              # BGT227'de kullanılacak temel komutlar.
+              "man-db", "info", "plocate",
+              "tree", "zip", "unzip", "bzip2", "xz-utils", "tar", "gzip",
               "htop", "psmisc", "acl", "gawk", "sed", "grep", "findutils", "lsof",
               "openssh-client", "less", "file"], env=env)
+
+        # Varsayılan locale'i /etc/default/locale'e yaz — SSH session'ında
+        # LANG/LC_ALL otomatik set edilir, "terminal is not fully functional" ve
+        # "can't set the locale" uyarılarını keser.
+        locale_default = STUDENT_TEMPLATE / "etc" / "default" / "locale"
+        locale_default.parent.mkdir(parents=True, exist_ok=True)
+        locale_default.write_text(
+            'LANG="en_US.UTF-8"\n'
+            'LC_ALL="en_US.UTF-8"\n'
+            'LANGUAGE="en_US:en"\n'
+        )
+
+        # plocate veritabanını ilk defa oluştur — aksi halde `locate` boş döner.
+        # updatedb hata verirse (template'te bazı fs yok) sessiz geç.
+        subprocess.run(
+            ["chroot", str(STUDENT_TEMPLATE), "updatedb"],
+            env=env, check=False
+        )
     finally:
         log.info("🧹 Geçici filesystem'ler çözülüyor...")
         subprocess.run(["umount", "-l", str(pts)], check=False)
