@@ -99,11 +99,17 @@ def ayarlari_yukle():
         chroot_terminal.CHROOT_REAL_SSH_PORT = chroot_port
         chroot_terminal.CHROOT_USER = chroot_user
         chroot_terminal.CHROOT_PASS = chroot_pass
-        # Script yolunu kullanıcıya göre güncelle
+        # Script yolu — git repo DIŞINDA olmalı. Aksi halde Docker container
+        # her sync'te git takibindeki chroot_yonetici.py'yi overwrite eder ve
+        # kullanıcı her `git pull`'da conflict yaşar. User-writable, git-dışı
+        # XDG konumu seçtik: ~/.local/share/chroot-manager/chroot_yonetici.py
+        # (root için /root/.local/share/chroot-manager/..., non-root için
+        # /home/<user>/.local/share/chroot-manager/...) — sudo gerekmez.
         if chroot_user == "root":
-            chroot_terminal.CHROOT_MANAGE_SCRIPT = "/root/enroll/chroot_yonetici.py"
+            home = "/root"
         else:
-            chroot_terminal.CHROOT_MANAGE_SCRIPT = f"/home/{chroot_user}/enroll/chroot_yonetici.py"
+            home = f"/home/{chroot_user}"
+        chroot_terminal.CHROOT_MANAGE_SCRIPT = f"{home}/.local/share/chroot-manager/chroot_yonetici.py"
         log.info(f"✅ Ayarlar yüklendi: Host={chroot_host}, Port={chroot_port}, User={chroot_user}")
     except Exception as e:
         log.error(f"❌ Modül ayarları yüklenirken hata: {e}")
