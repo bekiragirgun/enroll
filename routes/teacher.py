@@ -13,17 +13,35 @@ def _ogretmen_sifre():
 def ogretmen_giris():
     hata = None
     if request.method == 'POST':
-        pw_input = request.form.get('sifre')
+        # JSON veya Form verisi desteği
+        data = request.get_json() if request.is_json else request.form
+        pw_input = data.get('sifre')
         pw_expected = _ogretmen_sifre()
+        
         if pw_input == pw_expected:
             session['ogretmen'] = True
+            if request.is_json:
+                return jsonify({'durum': 'ok', 'mesaj': 'Giriş başarılı'})
             return redirect(url_for('teacher_bp.ogretmen_panel'), 303)
+        
         hata = 'Hatalı şifre!'
+        if request.is_json:
+            return jsonify({'durum': 'hata', 'mesaj': hata}), 401
+            
     return render_template('ogretmen_giris.html', hata=hata)
+
+@teacher_bp.route('/status')
+def ogretmen_durum():
+    """Oturumun açık olup olmadığını kontrol eder."""
+    return jsonify({
+        'authenticated': session.get('ogretmen', False)
+    })
 
 @teacher_bp.route('/logout')
 def ogretmen_cikis():
     session.pop('ogretmen', None)
+    if request.is_json:
+        return jsonify({'durum': 'ok', 'mesaj': 'Çıkış yapıldı'})
     return redirect(url_for('teacher_bp.ogretmen_giris'))
 
 @teacher_bp.route('/')
