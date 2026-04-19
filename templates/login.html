@@ -52,6 +52,7 @@
       {% endif %}
 
       <form method="POST" action="/giris">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <div class="form-grup">
           <label>Sınıf</label>
           <select name="sinif_id" id="sinif-sec" required

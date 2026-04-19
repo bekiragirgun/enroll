@@ -315,7 +315,9 @@ def db_olustur():
                 id {id_type},
                 baslik TEXT NOT NULL,
                 aktif INTEGER DEFAULT 0,
-                olusturma_tarihi TEXT NOT NULL
+                olusturma_tarihi TEXT NOT NULL,
+                sure_dakika INTEGER DEFAULT 0,
+                baslama_zamani TIMESTAMP
             )
         """)
         
@@ -412,6 +414,8 @@ def db_olustur():
         """)
 
         # Mevcut tablolara yeni kolonlar (ALTER — yoksa ekle, varsa atla)
+        _kolon_ekle(cursor, db_type, 'sinavlar', 'sure_dakika', "INTEGER DEFAULT 0")
+        _kolon_ekle(cursor, db_type, 'sinavlar', 'baslama_zamani', "TIMESTAMP")
         _kolon_ekle(cursor, db_type, 'sorular', 'bloom_seviyesi', "TEXT DEFAULT ''")
         _kolon_ekle(cursor, db_type, 'sorular', 'zorluk', "TEXT DEFAULT ''")
         _kolon_ekle(cursor, db_type, 'ogrenci_cevaplari', 'taslak', "INTEGER DEFAULT 0")

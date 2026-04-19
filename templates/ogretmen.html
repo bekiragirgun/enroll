@@ -216,13 +216,19 @@
           <div style="display:flex;gap:0.5rem;align-items:center;flex-wrap:wrap;">
             <input type="date" id="yoklama-tarih" value="{{ tarih }}" style="padding:0.3rem 0.5rem;background:#2d3748;color:#e2e8f0;border:1px solid #4a5568;border-radius:6px;font-size:0.8rem;"
               onchange="yoklamaTarihDegisti()">
+            <select id="yoklama-gecmis-tarihler" onchange="yoklamaGecmisTarihSec()"
+              title="Geçmiş ders günlerini listele"
+              style="padding:0.3rem 0.5rem;background:#2d3748;color:#e2e8f0;border:1px solid #4a5568;border-radius:6px;font-size:0.8rem;">
+              <option value="">📅 Geçmiş ders günleri…</option>
+            </select>
+            <label style="color:#a0aec0;font-size:0.75rem;display:flex;align-items:center;gap:3px;" title="Pazartesi dışı tarihler test amaçlıdır">
+              <input type="checkbox" id="yoklama-test-tarihleri-goster" onchange="yoklamaTarihlerYukle()"> Test günlerini göster
+            </label>
             <select id="yoklama-paket-filtre" style="padding:0.3rem 0.5rem;background:#2d3748;color:#e2e8f0;border:1px solid #4a5568;border-radius:6px;font-size:0.8rem;"
               onchange="yoklamaCek()">
               <option value="">Tüm Paketler</option>
             </select>
             <span style="color:#4a5568; font-size:0.8rem;">Otomatik yenileniyor</span>
-            <button class="btn-kucuk" style="background:#742a2a;border-color:#9b2c2c;color:#feb2b2;"
-              onclick="yoklamaTemizle()">🗑️ Temizle</button>
           </div>
         </div>
       </div>

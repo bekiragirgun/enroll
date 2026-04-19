@@ -49,6 +49,7 @@
   {% endif %}
 
   <form method="POST" action="/terminal/login">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <div class="form-group">
       <label for="ad">Ad</label>
       <input type="text" id="ad" name="ad" required placeholder="Örn: Bekir" autocomplete="off">

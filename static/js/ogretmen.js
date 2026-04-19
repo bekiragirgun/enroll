@@ -513,6 +513,58 @@ function yoklamaTarihDegisti() {
   yoklamaCek();
 }
 
+// Geçmiş ders günleri dropdown'ını doldur (sadece ders günleri — default pazartesi)
+async function yoklamaTarihlerYukle() {
+  const sel = document.getElementById('yoklama-gecmis-tarihler');
+  if (!sel) return;
+  const testGoster = document.getElementById('yoklama-test-tarihleri-goster')?.checked || false;
+
+  try {
+    const r = await safeFetch('/api/yoklama/tarihler');
+    const d = await r.json();
+    const tarihler = d.tarihler || [];
+
+    // Default: sadece ders günü; checkbox açıksa test günleri de
+    const listele = testGoster ? tarihler : tarihler.filter(t => t.ders_gunu);
+
+    sel.innerHTML = '<option value="">📅 Geçmiş ders günleri…</option>';
+    listele.forEach(t => {
+      const opt = document.createElement('option');
+      opt.value = t.tarih;
+      const isaret = t.ders_gunu ? '✓' : '•';
+      const etiket = t.ders_gunu ? '' : ' (test)';
+      opt.textContent = `${isaret} ${t.tarih} ${t.gun} — ${t.sayi} kayıt${etiket}`;
+      sel.appendChild(opt);
+    });
+
+    if (listele.length === 0) {
+      const opt = document.createElement('option');
+      opt.value = '';
+      opt.textContent = testGoster ? '(hiç kayıt yok)' : '(pazartesi kaydı yok — "test günleri göster" ile kontrol et)';
+      opt.disabled = true;
+      sel.appendChild(opt);
+    }
+  } catch (e) {
+    console.error('Tarihler yüklenemedi:', e);
+  }
+}
+
+// Dropdown'dan geçmiş bir tarih seçildi → date input'a yaz + refresh
+function yoklamaGecmisTarihSec() {
+  const sel = document.getElementById('yoklama-gecmis-tarihler');
+  const inp = document.getElementById('yoklama-tarih');
+  if (!sel || !inp || !sel.value) return;
+  inp.value = sel.value;
+  yoklamaTarihDegisti();
+  // Seçimi sıfırla ki aynı tarih tekrar seçilebilsin
+  sel.value = '';
+}
+
+// Sayfa yüklendiğinde + yoklama sekmesine girilince dropdown'u doldur
+document.addEventListener('DOMContentLoaded', () => {
+  yoklamaTarihlerYukle();
+});
+
 async function yoklamaCek() {
   try {
     const paket = document.getElementById('yoklama-paket-filtre')?.value || '';
