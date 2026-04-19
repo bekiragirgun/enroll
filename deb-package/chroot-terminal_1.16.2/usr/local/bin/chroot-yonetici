@@ -19,7 +19,7 @@ import logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 log = logging.getLogger(__name__)
 
-VERSION = "2026-04-16-CHROOT-OS-AWARE-V16"
+VERSION = "2026-04-19-PTMXMODE-REMOUNT-V17"
 log.info(f"🚀 Chroot Manager Script Version: {VERSION}")
 
 def get_os_info():
