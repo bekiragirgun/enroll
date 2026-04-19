@@ -19,7 +19,7 @@ import logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 log = logging.getLogger(__name__)
 
-VERSION = "2026-04-20-UPDATEDB-ON-CREATE-V20"
+VERSION = "2026-04-20-DEVNODES-ON-CREATE-V21"
 log.info(f"🚀 Chroot Manager Script Version: {VERSION}")
 
 def get_os_info():
@@ -725,6 +725,15 @@ def create_student_chroot(username, real_name=""):
     # /etc/hosts + ping capability — rsync xattr taşımaz, her chroot'ta yeniden uygula
     _fix_etc_hosts(student_path)
     _fix_ping_caps(student_path)
+
+    # KRİTİK: /dev/null, /dev/zero, /dev/tty vb. rsync ile taşınamaz — regular
+    # file olarak kopyalanır ve nroff/man/locale her yazma denediğinde fail eder
+    # ("cannot create /dev/null: Permission denied"). mknod ile düzelt.
+    # ForceCommand SSH mount tetiklemediği için bind-mount'a güvenemiyoruz;
+    # chroot'un kendi filesystem'inde gerçek device node olması gerek.
+    dev_dir = student_path / "dev"
+    dev_dir.mkdir(parents=True, exist_ok=True)
+    _restore_device_nodes(dev_dir)
 
     # plocate veritabanı — öğrenci `locate <x>` çalıştırdığında boş döndürmesin.
     # Hata versin ya da vermesin sessiz geç (bazı fs eksik olabilir).
