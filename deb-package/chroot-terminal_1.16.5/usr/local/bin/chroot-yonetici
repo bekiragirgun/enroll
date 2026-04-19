@@ -19,7 +19,7 @@ import logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 log = logging.getLogger(__name__)
 
-VERSION = "2026-04-20-OS-MIMIC-PACKAGES-V24"
+VERSION = "2026-04-20-FORCECMD-MOUNTS-V25"
 log.info(f"🚀 Chroot Manager Script Version: {VERSION}")
 
 def get_os_info():
@@ -815,7 +815,11 @@ def create_ssh_entry(username):
     if group_match not in ssh_config_text:
         with open(ssh_config, 'a') as f:
             f.write(f"\n{group_match}\n")
-            f.write('    ForceCommand /bin/bash -c "while true; do sudo /usr/sbin/chroot /home/chroot/$USER /bin/su - $USER; echo \'Oturum kapatilamaz, yeniden baslatiliyor...\'; sleep 1; done"\n')
+            # ForceCommand — login'den önce mount'ları idempotent tazele.
+            # chroot-yonetici mount /proc /sys /dev /dev/pts mount'larını yapar
+            # (lazy umount + remount). Bu sayede öğrenci `sudo updatedb`,
+            # `ps aux`, `df` vb. komutları chroot içinden çalıştırabilir.
+            f.write('    ForceCommand /bin/bash -c "sudo /usr/local/bin/chroot-yonetici mount $USER >/dev/null 2>&1; while true; do sudo /usr/sbin/chroot /home/chroot/$USER /bin/su - $USER; echo \'Oturum kapatilamaz, yeniden baslatiliyor...\'; sleep 1; done"\n')
 
     # Chroot login script'ini kopyala
     chrootlogin_src = Path("/usr/sbin/chrootlogin")
