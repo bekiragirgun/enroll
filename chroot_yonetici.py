@@ -19,7 +19,7 @@ import logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 log = logging.getLogger(__name__)
 
-VERSION = "2026-04-20-SUDO-HOSTS-FIX-V19"
+VERSION = "2026-04-20-UPDATEDB-ON-CREATE-V20"
 log.info(f"🚀 Chroot Manager Script Version: {VERSION}")
 
 def get_os_info():
@@ -725,6 +725,15 @@ def create_student_chroot(username, real_name=""):
     # /etc/hosts + ping capability — rsync xattr taşımaz, her chroot'ta yeniden uygula
     _fix_etc_hosts(student_path)
     _fix_ping_caps(student_path)
+
+    # plocate veritabanı — öğrenci `locate <x>` çalıştırdığında boş döndürmesin.
+    # Hata versin ya da vermesin sessiz geç (bazı fs eksik olabilir).
+    subprocess.run(
+        ["chroot", str(student_path), "updatedb"],
+        check=False,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
 
     log.info(f"✅ {username} chroot ortamı hazır.")
     return True
