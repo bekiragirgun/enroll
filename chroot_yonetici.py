@@ -19,7 +19,7 @@ import logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 log = logging.getLogger(__name__)
 
-VERSION = "2026-04-20-TERM-FALLBACK-V23"
+VERSION = "2026-04-20-OS-MIMIC-PACKAGES-V24"
 log.info(f"🚀 Chroot Manager Script Version: {VERSION}")
 
 def get_os_info():
@@ -448,7 +448,21 @@ deb http://security.ubuntu.com/ubuntu noble-security main restricted universe mu
               "man-db", "info", "plocate",
               "tree", "zip", "unzip", "bzip2", "xz-utils", "tar", "gzip",
               "htop", "psmisc", "acl", "gawk", "sed", "grep", "findutils", "lsof",
-              "openssh-client", "less", "file"], env=env)
+              "openssh-client", "less", "file",
+              # OS mimic — öğrenci Linux dersinde karşılaşması muhtemel her
+              # komut hazır olsun. "command not found" ile rezil olmayalım.
+              "aptitude",                # alternatif paket yöneticisi
+              "nmap", "netcat-openbsd", "traceroute", "mtr-tiny",  # ağ tanı
+              "jq",                     # JSON parser (text işleme derslerinde klasik)
+              "at",                     # cron dışı zamanlı iş
+              "bsdmainutils", "bsdextrautils",  # cal, ncal, hexdump vb.
+              "bash-completion",        # TAB-complete ergonomisi
+              "tmux", "screen",         # terminal multiplexer
+              "strace",                 # syscall izleme (LabAP3 konusu)
+              "rsync",                  # dosya senkron
+              "whois",                  # DNS whois
+              "tcpdump",                # paket yakalama (ağ dersinde)
+              ], env=env)
 
         # Varsayılan locale'i /etc/default/locale'e yaz — SSH session'ında
         # LANG/LC_ALL otomatik set edilir, "terminal is not fully functional" ve
