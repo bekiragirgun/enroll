@@ -21,6 +21,8 @@ def sinav_listesi():
                 'baslik': s['baslik'],
                 'aktif': bool(s['aktif']),
                 'olusturma_tarihi': s['olusturma_tarihi'],
+                'sure_dakika': s['sure_dakika'],
+                'baslama_zamani': s['baslama_zamani'],
                 'soru_sayisi': soru_sayisi
             })
     return jsonify({'sinavlar': sinavlar_array})
@@ -30,11 +32,13 @@ def sinav_listesi():
 def sinav_olustur():
     veri = request.get_json()
     baslik = veri.get('baslik', '').strip()
+    sure_dakika = int(veri.get('sure_dakika', 0))
     if not baslik:
         return jsonify({'durum': 'hata', 'mesaj': 'Sınav başlığı boş olamaz'}), 400
     
     with db_baglantisi() as db:
-        cursor = db.execute("INSERT INTO sinavlar (baslik, olusturma_tarihi) VALUES (?, ?)", (baslik, bugun()))
+        cursor = db.execute("INSERT INTO sinavlar (baslik, sure_dakika, olusturma_tarihi) VALUES (?, ?, ?)", 
+                            (baslik, sure_dakika, bugun()))
         db.commit()
     return jsonify({'durum': 'ok', 'id': cursor.lastrowid})
 
@@ -138,7 +142,9 @@ def sinav_aktiflestir():
         if aktif:
             # Sadece 1 sınav aktif olabilir
             db.execute("UPDATE sinavlar SET aktif=0")
-        db.execute("UPDATE sinavlar SET aktif=? WHERE id=?", (1 if aktif else 0, sinav_id))
+            db.execute("UPDATE sinavlar SET aktif=1, baslama_zamani=CURRENT_TIMESTAMP WHERE id=?", (sinav_id,))
+        else:
+            db.execute("UPDATE sinavlar SET aktif=0, baslama_zamani=NULL WHERE id=?", (sinav_id,))
         db.commit()
 
     # App tarafındaki modu tetiklemek için terminal websocketlerinden faydalanılabilir ya da 1 sn. polling
@@ -195,11 +201,49 @@ def aktif_sinav():
     """Öğrenciye aktif sınavı ve sorularını getir (cevaplar olmadan)."""
     with db_baglantisi() as db:
         # Aktif sınavı bul
-        sinav = db.execute("SELECT * FROM sinavlar WHERE aktif=1 LIMIT 1").fetchone()
+        sinav = db.execute("SELECT *, CURRENT_TIMESTAMP as simdi FROM sinavlar WHERE aktif=1 LIMIT 1").fetchone()
         if not sinav:
             return jsonify({'aktif_sinav': None})
             
         sinav_id = sinav['id']
+        
+        # Süre kontrolü (Otomatik Kapanma)
+        if sinav['sure_dakika'] > 0 and sinav['baslama_zamani']:
+             from datetime import datetime
+             # Not: CURRENT_TIMESTAMP'i db'den aldık (simdi) çünkü DB saati ile Python saati farklı olabilir (timezone vb)
+             # SQLite ve PG dönen format farklı olabilir. RealDictCursor ise dict'tir.
+             
+             # Basitçe: Eğer sure_dakika dolmuşsa aktif=0 yap.
+             # Bu kontrol her öğrenci aktif sınavı sorduğunda (polling) tetiklenir.
+             
+             # PostgreSQL tipik olarak datetime objesi döner. SQLite ise string döner.
+             try:
+                 baslama = sinav['baslama_zamani']
+                 simdi = sinav['simdi']
+                 
+                 if isinstance(baslama, str):
+                     # SQLite: YYYY-MM-DD HH:MM:SS formatında string
+                     # . yerine : gelmiş olabilir, kontrol et.
+                     fmt = '%Y-%m-%d %H:%M:%S'
+                     baslama_dt = datetime.strptime(baslama.split('.')[0], fmt)
+                     simdi_dt = datetime.strptime(simdi.split('.')[0], fmt)
+                 else:
+                     # PostgreSQL: datetime objeleri
+                     baslama_dt = baslama
+                     simdi_dt = simdi
+                
+                 gecen_sn = (simdi_dt - baslama_dt).total_seconds()
+                 if gecen_sn > (sinav['sure_dakika'] * 60):
+                     db.execute("UPDATE sinavlar SET aktif=0 WHERE id=?", (sinav_id,))
+                     db.commit()
+                     return jsonify({'aktif_sinav': None, 'mesaj': 'Sınav süresi doldu'})
+                     
+                 sinav_kalan_sn = (sinav['sure_dakika'] * 60) - gecen_sn
+             except Exception as e:
+                 print(f"Süre hesaplama hatası: {e}")
+                 sinav_kalan_sn = sinav['sure_dakika'] * 60
+        else:
+             sinav_kalan_sn = None
         sorular = db.execute("SELECT id, metin, tip, puan FROM sorular WHERE sinav_id=?", (sinav_id,)).fetchall()
 
         soru_listesi = []
@@ -240,7 +284,9 @@ def aktif_sinav():
             'id': sinav_id,
             'baslik': sinav['baslik'],
             'sorular': soru_listesi,
-            'zaten_cevapladi': cevaplamis_mi
+            'zaten_cevapladi': cevaplamis_mi,
+            'kalan_sure': sinav_kalan_sn,
+            'toplam_sure': sinav['sure_dakika']
         }
     })
 
