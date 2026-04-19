@@ -5,4 +5,6 @@ requests>=2.31.0
 docker>=6.0.0
 python-dotenv>=1.0.0
 psycopg2-binary>=2.9.9
+# eventlet + psycopg2 uyumu — greenlet yield'ları için. Auth timeout kökü.
+psycogreen>=1.0.2
 flask-wtf>=1.2.0

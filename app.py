@@ -13,6 +13,17 @@ eventlet.monkey_patch()
 from eventlet.debug import hub_prevent_multiple_readers
 hub_prevent_multiple_readers(False)
 
+# psycogreen — psycopg2 bağlantılarının eventlet greenlet'leri ile uyumlu
+# çalışmasını sağlar. Olmadan: PG auth sırasında greenlet yield edemez →
+# "canceling authentication due to timeout" hatası + CPU %99 loop.
+try:
+    from psycogreen.eventlet import patch_psycopg
+    patch_psycopg()
+except ImportError:
+    # psycogreen yüklü değilse uyar ama başlamayı engelleme
+    import sys
+    print("⚠️  psycogreen yüklü değil — PG auth timeout riski var", file=sys.stderr)
+
 import os
 import pty
 import subprocess

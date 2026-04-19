@@ -6,10 +6,24 @@ services:
       POSTGRES_USER: ${DB_USER:-postgres}
       POSTGRES_PASSWORD: ${DB_PASSWORD:-postgres_pass}
       POSTGRES_DB: ${DB_NAME:-ders_takip}
+    # Eventlet + psycopg2 sorunları için authentication timeout'u 60s → 180s.
+    # Eğer app container greenlet yield edemezse PG auth iptal etmeden daha çok
+    # zaman tanır.
+    command:
+      - postgres
+      - -c
+      - authentication_timeout=180s
+      - -c
+      - max_connections=200
     ports:
       - "127.0.0.1:5432:5432"
     volumes:
       - ./postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d ders_takip"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
     restart: always
 
   app:
@@ -40,4 +54,14 @@ services:
       # .env'deki SLIDE_HOST_BASE altındaki TÜM alt klasörler otomatik erişilebilir;
       # böylece kullanıcı UI'dan farklı alt klasörler girse de docker recreate gerekmez.
       - ${SLIDE_HOST_BASE:-/tmp/empty-slaytlar}:${SLIDE_HOST_BASE:-/tmp/empty-slaytlar}:ro
+    # Healthcheck — app donarsa veya CPU tırmanırsa healthcheck fail olur,
+    # docker otomatik restart eder. Ders sırasında sessiz recovery sağlar.
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:3333/api/durum', timeout=5)"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    # Hafıza limiti — leak olursa OOM sonrası restart (restart:always ile)
+    mem_limit: 1g
     restart: always
