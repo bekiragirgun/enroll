@@ -78,3 +78,24 @@ site/
 
 # DockSec scan output
 .wolf/scans/
+
+# ─────────────────────────────────────────────────────────────
+# GIZLI — Sınav materyalleri (public repo için KRİTİK)
+# ─────────────────────────────────────────────────────────────
+# Sınav sorularının ve doğru cevapların git'e girmesi,
+# repo public olduğunda akademik dürüstlüğü bozar.
+# Dosyalar scripts/private/ altında tutulur + bu kural ile
+# kaza ile add edilmeleri engellenir. Defense in depth.
+
+# Soru bankası üretim scriptleri (sorular + cevaplar plain metin)
+scripts/private/
+
+# PostgreSQL dump dosyaları (DB içinde tüm sorular var)
+*.sql
+*.dump
+data/backups/
+
+# Diğer potansiyel sınav içerikli dosyalar
+*sinav_icerigi*
+*soru_bankasi*
+*exam_content*
