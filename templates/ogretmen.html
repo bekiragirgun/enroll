@@ -854,6 +854,16 @@
             <span class="kart-ok">▼</span>
           </div>
           <div class="ayar-kart-icerik">
+            <small style="color:#fbd38d;font-weight:600;">🔥 Ders Başlamadan Önce</small>
+            <small style="color:#a0aec0;">Sınıfın tüm öğrencileri için chroot'ları ders başlamadan 5 dk önce toplu yaratır (tek SSH bağlantısında, 20'şerli batch). Terminal yavaşlığı ortadan kalkar.</small>
+            <div style="display:flex;gap:0.5rem;align-items:center;flex-wrap:wrap;">
+              <select id="chroot-prewarm-sinif" style="padding:0.4rem 0.6rem;background:#2d3748;color:#e2e8f0;border:1px solid #4a5568;border-radius:6px;font-size:0.85rem;min-width:200px;">
+                <option value="">Sınıf seç…</option>
+              </select>
+              <button class="btn-kucuk" style="background:#ed8936;" onclick="chrootPreWarm()">🔥 Chroot'ları Önceden Hazırla</button>
+              <span id="chroot-prewarm-sonuc" style="font-size:0.82rem;color:#a0aec0;"></span>
+            </div>
+            <hr style="border-color:#2d3748;margin:0.5rem 0;">
             <small style="color:#a0aec0;">DB'de kayıtlı olmayan (öğrenci silindi veya eski kalan) chroot VM'lerini tespit edip siler.</small>
             <div style="display:flex;gap:0.5rem;align-items:center;flex-wrap:wrap;">
               <button class="btn-kucuk" style="background:#2b6cb0;" onclick="chrootListele()">🔍 Eski VM Tara</button>

@@ -1406,6 +1406,54 @@ async function sifreDegistir() {
   }
 }
 
+// Chroot pre-warm — sınıfın tüm öğrenci chroot'larını önceden toplu yarat
+async function chrootPreWarmSinifDoldur() {
+  const sel = document.getElementById('chroot-prewarm-sinif');
+  if (!sel || sel.options.length > 1) return;
+  try {
+    const r = await safeFetch('/api/siniflar');
+    const d = await r.json();
+    (d.siniflar || []).forEach(s => {
+      const opt = document.createElement('option');
+      opt.value = s.id;
+      opt.textContent = `${s.ad} (${s.kayitli} öğr)`;
+      sel.appendChild(opt);
+    });
+  } catch (e) {
+    console.error('Sınıflar alınamadı:', e);
+  }
+}
+
+async function chrootPreWarm() {
+  const sel = document.getElementById('chroot-prewarm-sinif');
+  const sonuc = document.getElementById('chroot-prewarm-sonuc');
+  if (!sel || !sel.value) {
+    if (sonuc) { sonuc.style.color = '#fc8181'; sonuc.textContent = 'Önce sınıf seç'; }
+    return;
+  }
+  if (sonuc) { sonuc.style.color = '#a0aec0'; sonuc.textContent = 'Yaratılıyor...'; }
+  try {
+    const r = await safeFetch(`/api/chroot/pre_warm/${sel.value}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+    });
+    const d = await r.json();
+    if (d.durum === 'ok') {
+      if (sonuc) {
+        sonuc.style.color = '#48bb78';
+        sonuc.textContent = `✅ ${d.mesaj} (var: ${d.zaten_var}, yaratılacak: ${d.yaratilacak})`;
+      }
+    } else {
+      if (sonuc) { sonuc.style.color = '#fc8181'; sonuc.textContent = `❌ ${d.mesaj}`; }
+    }
+  } catch (e) {
+    if (sonuc) { sonuc.style.color = '#fc8181'; sonuc.textContent = 'Bağlantı hatası'; }
+  }
+}
+
+// Pre-warm dropdown'ını sayfa yüklendiğinde doldur
+document.addEventListener('DOMContentLoaded', () => chrootPreWarmSinifDoldur());
+
 async function chrootListele() {
   const sonuc = document.getElementById('chroot-tarama-sonuc');
   const liste = document.getElementById('chroot-fazla-liste');

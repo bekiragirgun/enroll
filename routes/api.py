@@ -464,12 +464,17 @@ def api_ogrenci_devam():
     katilim_tarihleri = {r['tarih'] for r in katilimlar}
     tum_tarihler_ham = [r['tarih'] for r in tum_gunler]
 
-    # Ders günü filtresi
+    # Ders günü filtresi — ders_gunleri ayarında Pzt=1 (proje convention)
+    # ama Python datetime.weekday() Pzt=0 döndürür. (+1) % 7 ile çevir:
+    # Python Pzt(0) → 1, Sal(1) → 2, ..., Paz(6) → 0  ✓
     from datetime import datetime as _dt
     ders_gunleri_ayar = ayar_getir('ders_gunleri', '')
     if ders_gunleri_ayar:
         gecerli_gunler = {int(g.strip()) for g in ders_gunleri_ayar.split(',') if g.strip().isdigit()}
-        tum_tarihler = [t for t in tum_tarihler_ham if _dt.strptime(t, '%Y-%m-%d').weekday() in gecerli_gunler]
+        tum_tarihler = [
+            t for t in tum_tarihler_ham
+            if ((_dt.strptime(t, '%Y-%m-%d').weekday() + 1) % 7) in gecerli_gunler
+        ]
     else:
         tum_tarihler = tum_tarihler_ham
 
@@ -1391,6 +1396,60 @@ def api_ogrenci_guncelle():
         db.commit()
     return jsonify({'durum': 'ok', 'mesaj': 'Öğrenci güncellendi'})
 
+@api_bp.route('/ogrenciler/import', methods=['POST'])
+@ogretmen_giris_gerekli
+def api_ogrenci_import():
+    """CSV verisinden toplu öğrenci ekleme."""
+    sinif_id = request.form.get('sinif_id')
+    if 'file' not in request.files or not sinif_id:
+        return jsonify({'durum': 'hata', 'mesaj': 'Dosya ve sınıf gerekli'}), 400
+    
+    file = request.files['file']
+    if file.filename == '':
+        return jsonify({'durum': 'hata', 'mesaj': 'Dosya seçilmedi'}), 400
+
+    import csv
+    import io
+    
+    try:
+        stream = io.StringIO(file.stream.read().decode('utf-8-sig'), newline=None)
+        reader = csv.DictReader(stream)
+        
+        eklenen = 0
+        atlanan = 0
+        
+        with db_baglantisi() as db:
+            for row in reader:
+                # Column mapping (case insensitive check could be better but let's stick to standard)
+                numara = str(row.get('numara') or row.get('Numara') or '').strip()
+                ad = str(row.get('ad') or row.get('Ad') or '').strip().upper()
+                soyad = str(row.get('soyad') or row.get('Soyad') or '').strip().upper()
+                
+                if not numara or not ad or not soyad:
+                    atlanan += 1
+                    continue
+                
+                # INSERT OR IGNORE (DBWrapper ile Postgres'te ON CONFLICT DO NOTHING olur)
+                res = db.execute(
+                    'INSERT OR IGNORE INTO ogrenciler (sinif_id, numara, ad, soyad, sifre) VALUES (?,?,?,?,?)',
+                    (sinif_id, numara, ad, soyad, numara)
+                )
+                if res.rowcount > 0:
+                    eklenen += 1
+                else:
+                    atlanan += 1
+            db.commit()
+            
+        return jsonify({
+            'durum': 'ok', 
+            'mesaj': f'{eklenen} öğrenci eklendi, {atlanan} kayıt atlandı (çakışma veya eksik veri).',
+            'eklenen': eklenen,
+            'atlanan': atlanan
+        })
+    except Exception as e:
+        log.error(f"CSV Import Hatası: {e}")
+        return jsonify({'durum': 'hata', 'mesaj': f'Dosya işlenirken hata oluştu: {str(e)}'}), 500
+
 @api_bp.route('/sinif_ekle', methods=['POST'])
 @ogretmen_giris_gerekli
 def api_sinif_ekle():
@@ -1577,6 +1636,69 @@ def api_devamsizlik_esik_kaydet():
     esik = veri.get('esik', 3)
     ayar_kaydet('devamsizlik_esik', str(esik))
     return jsonify({'durum': 'ok', 'esik': int(esik)})
+
+
+@api_bp.route('/chroot/pre_warm/<int:sinif_id>', methods=['POST'])
+@ogretmen_giris_gerekli
+def api_chroot_pre_warm(sinif_id):
+    """Ders başlamadan önce sınıfın tüm öğrencileri için chroot'ları toplu oluştur.
+
+    Mevcut chroot'lar atlanır; sadece eksik olanlar yaratılır. chroot_olustur_batch
+    tek SSH bağlantısında 20'şerli chunk'lar halinde işler — 40 kişilik bir sınıf
+    için ~2-3 dakikada hazır olur.
+
+    Arka plan thread'te çalışır; endpoint hemen döner.
+    """
+    import threading
+    from chroot_terminal import chroot_olustur_batch, chroot_var_mi, _slugify
+
+    with db_baglantisi() as db:
+        sinif = db.execute('SELECT ad FROM siniflar WHERE id=?', (sinif_id,)).fetchone()
+        if not sinif:
+            return jsonify({'durum': 'hata', 'mesaj': 'Sınıf bulunamadı'}), 404
+        ogrenciler = db.execute(
+            'SELECT numara, ad, soyad FROM ogrenciler WHERE sinif_id=?',
+            (sinif_id,)
+        ).fetchall()
+
+    if not ogrenciler:
+        return jsonify({'durum': 'hata', 'mesaj': 'Sınıfta kayıtlı öğrenci yok'}), 400
+
+    # Eksik olanları bul
+    yapilacak = []
+    zaten_var = 0
+    for o in ogrenciler:
+        slug = _slugify(o['numara'])
+        if chroot_var_mi(slug):
+            zaten_var += 1
+        else:
+            yapilacak.append({'username': slug, 'ad': o['ad'], 'soyad': o['soyad']})
+
+    if not yapilacak:
+        log.info(f"🔥 Pre-warm [{sinif['ad']}]: tüm {len(ogrenciler)} öğrencinin chroot'u zaten mevcut")
+        return jsonify({
+            'durum': 'ok',
+            'mesaj': f'Tüm {len(ogrenciler)} chroot zaten hazır',
+            'toplam': len(ogrenciler),
+            'zaten_var': zaten_var,
+            'yaratilacak': 0,
+        })
+
+    def _batch_worker():
+        log.info(f"🔥 Pre-warm başladı [{sinif['ad']}]: {len(yapilacak)} chroot yaratılacak")
+        sonuc = chroot_olustur_batch(yapilacak)
+        basarili = sum(1 for v in sonuc.values() if v)
+        log.info(f"🔥 Pre-warm tamamlandı [{sinif['ad']}]: {basarili}/{len(yapilacak)} başarılı")
+
+    threading.Thread(target=_batch_worker, daemon=True).start()
+
+    return jsonify({
+        'durum': 'ok',
+        'mesaj': f'{len(yapilacak)} öğrenci için chroot arkaplanda yaratılıyor (yaklaşık {max(1, len(yapilacak)//10)} dk sürer)',
+        'toplam': len(ogrenciler),
+        'zaten_var': zaten_var,
+        'yaratilacak': len(yapilacak),
+    })
 
 
 @api_bp.route('/chroot/listele')
