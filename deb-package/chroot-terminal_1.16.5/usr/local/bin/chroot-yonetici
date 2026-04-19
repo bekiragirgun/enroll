@@ -19,7 +19,7 @@ import logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 log = logging.getLogger(__name__)
 
-VERSION = "2026-04-20-UPDATEDB-WITH-PROC-V22"
+VERSION = "2026-04-20-TERM-FALLBACK-V23"
 log.info(f"🚀 Chroot Manager Script Version: {VERSION}")
 
 def get_os_info():
@@ -485,6 +485,19 @@ deb http://security.ubuntu.com/ubuntu noble-security main restricted universe mu
 
     # ping capability: rsync xattr taşımadığı için template'te de setcap çağır
     _fix_ping_caps(STUDENT_TEMPLATE)
+
+    # TERM fallback — ForceCommand / su - TERM propagate etmediğinde
+    # `info`, `less`, `vim` "Terminal type unknown" hatası veriyor.
+    # /etc/profile.d üzerinden xterm-256color fallback.
+    term_profile = STUDENT_TEMPLATE / "etc" / "profile.d" / "term-default.sh"
+    term_profile.parent.mkdir(parents=True, exist_ok=True)
+    term_profile.write_text(
+        '# TERM env değişkeni set edilmemişse xterm-256color fallback.\n'
+        'if [ -z "$TERM" ] || [ "$TERM" = "unknown" ] || [ "$TERM" = "dumb" ]; then\n'
+        '    export TERM=xterm-256color\n'
+        'fi\n'
+    )
+    term_profile.chmod(0o644)
 
     # Temizlik
     _run(["chroot", str(STUDENT_TEMPLATE), "apt-get", "clean"])
