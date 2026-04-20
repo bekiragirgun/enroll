@@ -80,6 +80,9 @@ app.config['SEND_FILE_MAX_AGE_DEFAULT'] = 0  # Static dosyaları cache'leme
 app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
 app.config['SESSION_COOKIE_HTTPONLY'] = True
 app.config['SESSION_COOKIE_SECURE'] = False  # HTTP üzerinden çalışıyoruz
+# CSRF token süresi — default 1 saat, ders günü 8+ saat sürüyor.
+# Öğrenci giriş sayfasını açıp beklerse token expire olmasın.
+app.config['WTF_CSRF_TIME_LIMIT'] = None  # Token session boyunca geçerli
 log = app.logger
 log.setLevel(logging.INFO)
 
@@ -333,9 +336,15 @@ def ogretmen_baglan_event(veri=None):
         ssh_cmd = [
             'ssh', '-t',
             '-o', 'StrictHostKeyChecking=accept-new',
-            '-o', 'ControlPath=none',
+            # V26: ControlPath=none kaldırıldı — ~/.ssh/config'deki ControlMaster
+            # multiplexing devrede. İlk bağlantı master açar, sonrakiler aynı
+            # TCP+SSH kanalını paylaşır (30 öğrenci × handshake yerine ~1 handshake).
             '-p', f'{CHROOT_REAL_SSH_PORT}',
             f'{CHROOT_USER}@{CHROOT_HOST}',
+            # V26: chroot öncesi mount — snapshot revert ya da ilk boot'ta
+            # /dev/pts, /proc, /sys bind-mount'ları eksikse PTY allocation fail
+            # eder. chroot-yonetici mount idempotenttir.
+            f"sudo /usr/local/bin/chroot-yonetici mount {safe_username} >/dev/null 2>&1; "
             f"sudo /bin/bash -c \"while true; do chroot {safe_chroot_path} /usr/bin/su - {safe_username}; echo 'Oturum kapatılamaz, yeniden başlatılıyor...'; sleep 1; done\""
         ]
         if CHROOT_PASS:
@@ -487,8 +496,10 @@ def ogrenci_baglan_event(veri):
         ssh_cmd = [
             'ssh', '-t',
             '-o', 'StrictHostKeyChecking=accept-new',
-            '-o', 'ControlPath=none',
+            # V26: ControlPath=none kaldırıldı — ControlMaster multiplexing aktif.
             '-p', str(CHROOT_REAL_SSH_PORT), f'{CHROOT_USER}@{CHROOT_HOST}',
+            # V26: chroot öncesi mount — idempotent, PTY allocation için şart.
+            f"sudo /usr/local/bin/chroot-yonetici mount {safe_username} >/dev/null 2>&1; "
             f"sudo /bin/bash -c \"while true; do chroot {safe_chroot_path} /usr/bin/su - {safe_username}; echo 'Oturum kapatılamaz, yeniden başlatılıyor...'; sleep 1; done\""
         ]
         if CHROOT_PASS:
