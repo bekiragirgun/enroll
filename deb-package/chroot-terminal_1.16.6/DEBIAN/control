@@ -1,0 +1,12 @@
+Package: chroot-terminal
+Version: 1.16.6
+Section: admin
+Priority: optional
+Architecture: all
+Depends: openssh-server, python3, rsync, mmdebstrap, sshpass, network-manager, debian-archive-keyring | ubuntu-keyring, bash-completion, iputils-ping, ca-certificates, libcap2-bin, zstd, tar
+Maintainer: Bekir Agirgun <bekir.agirgun@kapadokya.edu.tr>
+Description: Chroot Terminal System for Linux Lab
+ Provides isolated chroot environments for students
+ with PTY stability fixes, automatic cleanup, and
+ SSH optimization. Designed for Kapadokya University
+ Linux laboratory courses.
