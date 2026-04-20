@@ -31,79 +31,109 @@ Kapadokya Universitesi Linux dersleri icin gelistirilmis, gercek zamanli yoklama
 - **SEB Cikis** — SEB icerisinden cikis talep etme veya dogrudan cikma
 
 ### Altyapi
-- **Chroot Izolasyon** — Her ogrenci icin ayri chroot ortami (debootstrap tabanli)
-- **DEB Paketi (v1.5)** — VM tarafini tek komutla kuran `chroot-terminal` paketi
+- **Chroot Izolasyon** — Her ogrenci icin ayri chroot ortami (mmdebstrap tabanli)
+- **DEB Paketi (v1.16.7)** — VM tarafini tek komutla kuran `chroot-terminal` paketi
+- **Template Cache (V26)** — /var/cache/chroot-terminal/template.tar.zst (~388 MB zstd) — snapshot revert sonrasi init 10 dk yerine ~1.3 saniyede tamamlanir
+- **devpts Private Propagation (V27)** — host <-> chroot mount bulasmasi kesilir; "PTY allocation request failed" regresyonu biter
+- **TR Locale (V28)** — Chroot isletim sistemi tamamen Turkce: tr_TR.UTF-8, Europe/Istanbul, manpages-tr, PAGER=less, LESS="-R -M -i --mouse"
 - **PTY Stabilite** — ptmxmode=666, boot'ta PTY onarimi (SSH'den once)
 - **LXC Boot Optimizasyonu** — Gereksiz servisler mask'lenir, timeout 10s
-- **SSH Connection Pool** — ControlMaster ile hizli baglantilar, otomatik pool reset
+- **SSH Multiplexing** — ControlMaster auto, 10 dk persist, chacha20-poly1305 cipher; 1. baglanti ~280ms, sonrakiler ~15-22ms (22x speedup 30 ogrenci icin)
 - **Kernel Optimizasyonu** — PTY, fd, TCP, ulimit ayarlari (deb ile otomatik)
 - **Yuk Testi** — 40 esanlamli ogrenci giris simulasyonu
 
 ## Mimari
 
 ```
-[Ogretmen Mac/PC]                    [Ogrenci Tarayici/SEB]
+[Ogretmen Mac/PC baremetal]          [Ogrenci Tarayici/SEB]
         |                                    |
         v                                    v
-+------------------+              +------------------+
-|  Flask + SocketIO |<--- HTTP -->|  Polling (3s)    |
-|  (app.py :3333)   |             |  ogrenci.js      |
-+------------------+              +------------------+
++--------------------------+      +------------------+
+|  Flask + SocketIO        |<-----|  Polling (3s)    |
+|  (manage.sh / :3333)     |      |  ogrenci.js      |
+|  + Docker PostgreSQL     |      +------------------+
+|    (127.0.0.1:5432)      |
++--------------------------+
         |
-        | SSH (ControlMaster pool)
+        | SSH (ControlMaster multiplexed, ~15ms)
         v
-+------------------+
-|  Ubuntu VM (LXC) |
-|  (chroot-terminal|
-|   deb v1.5)      |
-|  - chroot/user1  |
-|  - chroot/user2  |
-|  - ...           |
-+------------------+
++---------------------------------+
+|  Parallels Debian 12 VM         |
+|  (chroot-terminal deb v1.16.7)  |
+|  - /home/chroot/template        |  <-- tr_TR.UTF-8
+|  - /var/cache/.../template.tar.zst (388 MB zstd cache)
+|  - /home/chroot/u25901002       |  <-- rsync from template
+|  - /home/chroot/u25901003       |
+|  - ... (devpts private, TR locale)
++---------------------------------+
 ```
+
+Baremetal Flask + Docker-yalnizca-PostgreSQL konfigurasyonu (derste weak-network ogrencilerin NAT latency sorunlarini azaltmak icin Nisan 2026'da Docker-app'ten tasindi).
 
 ## Kurulum
 
-### 1. Ana Sunucu (Flask)
+### 1. Ana Sunucu (Flask baremetal)
 
 ```bash
-# Python ortami
-conda create -n ders_takip python=3.11 -y
-conda activate ders_takip
+# Python ortami (iki secenek, manage.sh ikisini de destekler)
+# Opsiyon A: local venv
+python3 -m venv venv && source venv/bin/activate && pip install -r requirements.txt
 
-# Bagimliliklar
+# Opsiyon B: conda
+conda create -n kapadokya-DT python=3.11 -y
+conda activate kapadokya-DT
 pip install -r requirements.txt
 
-# Baslat
-python app.py
+# PostgreSQL (Docker'da tutuluyor)
+docker compose up -d db   # db container'i 127.0.0.1:5432'de dinler
+
+# Flask'i baremetal baslat (docker disinda)
+nohup bash manage.sh > logs/app.log 2>&1 &
+
+# Logu izle
+tail -f logs/app.log
+```
+
+`.env` icin minimum config:
+```ini
+SECRET_KEY=<guvenli-string>
+CHROOT_HOST=10.211.55.27        # Parallels VM IP
+CHROOT_USER=bekir
+CHROOT_PASS=<sifre>
+DB_TYPE=postgres
+DB_HOST=127.0.0.1
+DB_PORT=5432
+DB_USER=postgres
+DB_PASS=postgres_pass
+DB_NAME=ders_takip
+SLIDE_HOST_BASE=/path/to/slaytlar
 ```
 
 ### 2. Ogrenci VM (Chroot Sunucusu)
 
 ```bash
-# Repo indir
-git clone https://github.com/bekiragirgun/enroll.git
-cd enroll/deb-package
+# DEB paketi kur
+sudo dpkg -i chroot-terminal_1.16.7.deb
+sudo apt-get install -f  # eksik depends varsa
 
-# DEB paketi olustur ve kur
-bash build.sh
-sudo apt install ./chroot-terminal_1.5.deb
-
-# Chroot sablonunu olustur (ilk sefer, ~10dk)
+# Chroot sablonunu olustur
 sudo chroot-yonetici init
+# Ilk sefer: ~10dk (mmdebstrap + apt-get)
+# Sonraki: ~1.3s (template.tar.zst cache'inden restore)
 
 # Kontrol
 chroot-yonetici health
 ```
 
-DEB paketi v1.5 otomatik olarak su ayarlari yapar:
+DEB paketi v1.16.7 otomatik olarak su ayarlari yapar:
 - LXC boot optimizasyonu (udevd, multipathd, resolved mask'lenir)
 - Systemd timeout'lari 10s (boot hizlandirma)
 - Kernel optimizasyonu (PTY 16384, fd 262144, TCP, ulimit)
 - SSH optimizasyonu (MaxSessions 80, keepalive, no compression)
-- PTY onarimi servisi (SSH'den once calisir, ptmxmode=666)
+- PTY onarimi servisi (SSH'den once calisir, ptmxmode=666, devpts private)
 - 10dk'da bir temizleme timer'i
 - NTP senkronizasyonu (Europe/Istanbul)
+- TR locale: tr_TR.UTF-8 + manpages-tr + Europe/Istanbul timezone
 
 ### 3. Ayarlar (Ogretmen Paneli)
 
@@ -225,23 +255,27 @@ ders_takip/
     test_seed.py            # Test DB seed (40 ogrenci)
     yuk_testi.py            # Esanlamli giris yuk testi
   deb-package/
-    build.sh                # DEB paketi olusturma scripti
-    chroot-terminal_1.5/    # v1.5 paket icerigi (LXC opt, PTY fix, SSH)
+    build.sh                    # DEB paketi olusturma scripti
+    chroot-terminal_1.16.7/     # v1.16.7 paket icerigi (V28 TR locale)
 ```
 
 ## Sorun Giderme
 
 | Sorun | Cozum |
 |-------|-------|
-| PTY allocation failed | VM'de: `chroot-yonetici cleanup && chroot-yonetici repair` |
+| PTY allocation failed | VM'de: `chroot-yonetici cleanup && chroot-yonetici repair` (V27 host devpts'yi --make-private yapar) |
+| Tum chroot'larin mount'u kopmus | `for u in $(ls /home/chroot \| grep -v template); do sudo chroot-yonetici mount $u; done` |
 | SSH Connection refused | VM'de: `sudo systemctl restart sshd` |
-| SSH pool stale | Otomatik: pool reset + retry. Manuel: `rm /tmp/ssh_pool_*` |
-| sudo-rs PTY hatasi | `echo SIFRE \| sudo -S mount -t devpts devpts /dev/pts` |
-| Boot cok yavas (LXC) | `sudo apt install ./chroot-terminal_1.5.deb` (servisleri mask'ler) |
+| CSRF token expired | `WTF_CSRF_TIME_LIMIT = None` (app.py'de set). Ogrenci sayfayi F5 yapip yeni token alsin. |
+| Chroot'ta LANG=C / Ingilizce | `chroot-yonetici mount <user>` — `_apply_tr_locale` idempotent (V28) |
+| info / pager calismiyor | V28'de manpages-tr + PAGER=less + LESS="-R -M -i --mouse" — fresh chroot'larda hazir |
+| Template init 10 dk suruyor | Ilk seferden sonra /var/cache/chroot-terminal/template.tar.zst olusur, sonrakiler ~1.3s |
+| Snapshot revert sonrasi | V26 cache olduysa init saniyeler icinde tamamlanir; yoksa full rebuild |
+| Paket Sonu 0 ogrenci buluyor | `yoklama.paket` bos kalmis olabilir (UTC timezone bug, V-dan once). TR timezone fix artik hazir |
 | SEB baglanmiyor | `.seb` dosyasini tekrar indirin (system_host + port kontrolu) |
 | SEB cikis calismiyor | `/seb-quit` route'u mevcut, SEB config'de quitURL kontrol edin |
 | Disk dolu | VM'de: `sudo growpart /dev/sda 2 && sudo resize2fs /dev/sda2` |
-| Sunucu yanitlamiyor | `Ctrl+C` ile durdurup tekrar `python app.py` |
+| Flask sunucu yanitlamiyor | `pkill -f manage.sh && nohup bash manage.sh > logs/app.log 2>&1 &` |
 | Eski IP/ayarlar | Ogretmen paneli → Ayarlar tabindan guncelle |
 
 ---
