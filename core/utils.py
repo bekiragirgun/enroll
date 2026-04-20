@@ -1,7 +1,15 @@
 import re
 from datetime import datetime
+from zoneinfo import ZoneInfo
 from flask import request
 from core.db import db_baglantisi
+
+# Kapadokya Üni. — ders saatleri her zaman Türkiye saati referansı.
+# Docker/UTC ortamlarda paket_hesapla "—" dönüyordu; explicit TZ ile fixlendi.
+TR_TZ = ZoneInfo('Europe/Istanbul')
+
+def _tr_now():
+    return datetime.now(TR_TZ)
 
 # IPv4 ve IPv6 temel doğrulama deseni
 _IP_PATTERN = re.compile(
@@ -13,10 +21,10 @@ _IP_PATTERN = re.compile(
 )
 
 def bugun():
-    return datetime.now().strftime('%Y-%m-%d')
+    return _tr_now().strftime('%Y-%m-%d')
 
 def simdi():
-    return datetime.now().strftime('%H:%M:%S')
+    return _tr_now().strftime('%H:%M:%S')
 
 def istemci_ip():
     """Gerçek istemci IP'sini al (proxy arkasında bile çalışır)."""
@@ -30,9 +38,9 @@ def istemci_ip():
     return request.remote_addr or '0.0.0.0'
 
 def paket_hesapla():
-    """Şu anki saate göre ders paketini belirle (3 paket × ~2.5 saat)."""
+    """Şu anki Türkiye saatine göre ders paketini belirle (3 paket × ~2.5 saat)."""
     from datetime import time as t
-    now = datetime.now().time()
+    now = _tr_now().time()
     if t(9, 0) <= now <= t(11, 35):
         return '1. Paket (09:00-11:35)'
     elif t(12, 40) <= now <= t(15, 15):
@@ -41,6 +49,24 @@ def paket_hesapla():
         return '3. Paket (15:25-18:00)'
     else:
         return '—'
+
+
+def paket_son_biten():
+    """Son biten (ya da devam eden) paketi döndürür.
+
+    "Paket Sonu" butonu ara zamanlarda basıldığında (ör. 12:00'de), en son
+    biten paket üzerinden temizlik yapsın diye paket_hesapla'dan ayrı bir
+    helper. Ders henüz başlamadıysa '—' döner.
+    """
+    from datetime import time as t
+    now = _tr_now().time()
+    if now < t(9, 0):
+        return '—'
+    if now <= t(12, 40):
+        return '1. Paket (09:00-11:35)'
+    if now <= t(15, 25):
+        return '2. Paket (12:40-15:15)'
+    return '3. Paket (15:25-18:00)'
 
 # Paket string → (baslangic, bitis) zaman aralığı
 _PAKET_SAATLERI = {
@@ -52,7 +78,7 @@ _PAKET_SAATLERI = {
 def paket_zaman_kontrolu(paket_str: str) -> tuple:
     """Verilen paket string'i için (baslangic_str, bitis_str, gecerli_mi) döndür."""
     from datetime import time as t
-    now = datetime.now().time()
+    now = _tr_now().time()
     for anahtar, (bas, bit) in _PAKET_SAATLERI.items():
         if anahtar in paket_str:
             bs = t(int(bas[:2]), int(bas[3:]))

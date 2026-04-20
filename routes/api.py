@@ -741,17 +741,41 @@ def api_loglar():
 # ────────────────────────────────────────────────────────────────────
 
 def _donem_ve_hafta_sayisi(db):
-    """En eski yoklama tarihi = 1. hafta başı. O günden bugüne kaç hafta geçtiyse max_hafta."""
-    satir = db.execute("SELECT MIN(tarih) as t FROM yoklama").fetchone()
-    if not satir or not satir['t']:
-        return None, 0
-    try:
-        baslangic = datetime.strptime(satir['t'], '%Y-%m-%d').date()
-    except ValueError:
-        return None, 0
+    """Dönem başı + max_hafta döner.
+
+    Kurallar (Rapor + Haftalık hizalanması için):
+    - Dönem başı: ayarlarda 'donem_baslangic' varsa kullan, yoksa en eski
+      yoklama tarihini al.
+    - max_hafta: dönem sabit 14 hafta. Dönem başından bugüne geçen takvim
+      haftası 14'ten büyükse 14'te cap'lenir; küçükse geçen hafta sayısı.
+      (Rapor + Haftalık aynı sayıyı görmeli — karışıklığın kök nedeni buydu.)
+    """
+    DONEM_HAFTA_SAYISI = 14
+
+    donem_row = db.execute(
+        "SELECT deger FROM ayarlar WHERE anahtar='donem_baslangic'"
+    ).fetchone()
+    if donem_row and donem_row['deger']:
+        try:
+            baslangic = datetime.strptime(donem_row['deger'], '%Y-%m-%d').date()
+        except ValueError:
+            baslangic = None
+    else:
+        baslangic = None
+
+    if baslangic is None:
+        satir = db.execute("SELECT MIN(tarih) as t FROM yoklama").fetchone()
+        if not satir or not satir['t']:
+            return None, 0
+        try:
+            baslangic = datetime.strptime(satir['t'], '%Y-%m-%d').date()
+        except ValueError:
+            return None, 0
+
     bugun_d = datetime.now().date()
     gecen_gun = (bugun_d - baslangic).days
-    max_hafta = max(1, gecen_gun // 7 + 1)
+    gecen_hafta = max(1, gecen_gun // 7 + 1)
+    max_hafta = min(DONEM_HAFTA_SAYISI, gecen_hafta)
     return baslangic, max_hafta
 
 
@@ -852,10 +876,27 @@ def _devamlilik_hesapla(sinif_id=None):
                 (sinif_id,)
             ).fetchall()
 
+        # ders_gunleri filtresi — test günü kayıtları (ör. Perşembe) hafta
+        # hücresini doldurmasın. Rapor ile aynı filtre.
+        ders_gunleri_ayar = ayar_getir('ders_gunleri', '')
+        gecerli_gunler = None
+        if ders_gunleri_ayar:
+            # Ayar formatı: "1" = Pazartesi (proje konvansiyonu Pzt=1).
+            # Python weekday() ise Pzt=0; (weekday+1)%7 ile dönüştürülür.
+            gecerli_gunler = {int(g.strip()) for g in ders_gunleri_ayar.split(',') if g.strip().isdigit()}
+
         yoklama_var = {}  # {numara: set(haftalar)}
         for k in kayitlar:
+            if gecerli_gunler is not None:
+                try:
+                    wd_py = datetime.strptime(k['tarih'], '%Y-%m-%d').weekday()
+                except (ValueError, TypeError):
+                    continue
+                wd_proje = (wd_py + 1) % 7
+                if wd_proje not in gecerli_gunler:
+                    continue
             h = _tarih_to_hafta(k['tarih'], donem_baslangic)
-            if h is None or h < 1:
+            if h is None or h < 1 or h > max_hafta:
                 continue
             yoklama_var.setdefault(k['numara'], set()).add(h)
 
@@ -1145,10 +1186,11 @@ def api_paket_sonu():
     """
     import time
     import threading
-    from core.utils import paket_hesapla
+    from core.utils import paket_son_biten
 
     veri = request.get_json(silent=True) or {}
-    hedef_paket = veri.get('paket', '') or paket_hesapla()
+    # Ara zamanda basılırsa son biten paket üzerinden temizlik yapsın.
+    hedef_paket = veri.get('paket', '') or paket_son_biten()
 
     # 1. Toplu çıkış tetikle (öğrenciler giriş sayfasına yönlendirilir)
     ders_durumu['toplu_cikis_zamani'] = time.time()
@@ -1541,22 +1583,43 @@ def api_yoklama_rapor():
         esik_row = db.execute("SELECT deger FROM ayarlar WHERE anahtar='devamsizlik_esik'").fetchone()
         esik = int(esik_row['deger']) if esik_row else 3
 
-    # Set olustur: {(numara, tarih)}
-    katilim_set = {(r['numara'], r['tarih']) for r in yoklama_kayitlari}
-    toplam_ders = len(ders_gunleri)
+    # Haftalık Devamlılık ile hizalama — Rapor da aynı backend'i kullansın.
+    # Kök motor: _devamlilik_hesapla (override + ders_gunleri filtresi + max_hafta cap).
+    sinif_id_int = int(sinif_id) if sinif_id else None
+    devamlilik = _devamlilik_hesapla(sinif_id=sinif_id_int)
+
+    if devamlilik is None or devamlilik.get('max_hafta', 0) == 0:
+        return jsonify({
+            'tarihler': [], 'toplam_ders': 0, 'esik': esik, 'rapor': []
+        })
+
+    max_hafta = devamlilik['max_hafta']
+    donem_baslangic_iso = devamlilik['donem_baslangic']
+    donem_bas_date = datetime.strptime(donem_baslangic_iso, '%Y-%m-%d').date()
+
+    # Haftaları tarih sütununa eşle — her hafta = dönem başı + (h-1)*7 gün.
+    # ders_gunleri ayarı varsa o günün en yakın tarihini göster (yoksa Pzt).
+    from datetime import timedelta as _td
+    hafta_tarih = {}
+    for h in range(1, max_hafta + 1):
+        hafta_tarih[h] = (donem_bas_date + _td(days=(h - 1) * 7)).strftime('%Y-%m-%d')
+    tarihler = [hafta_tarih[h] for h in range(1, max_hafta + 1)]
+
+    toplam_ders = max_hafta
 
     rapor = []
-    for o in ogrenciler:
-        katilim = sum(1 for t in ders_gunleri if (o['numara'], t) in katilim_set)
-        devamsizlik = toplam_ders - katilim
-        yuzde = round((katilim / toplam_ders * 100)) if toplam_ders > 0 else 0
+    for satir in devamlilik['ogrenciler']:
+        katilim = satir['katildi']
+        devamsizlik = satir['devamsizlik']
+        yuzde = satir['yuzde']
         gunler = {}
-        for t in ders_gunleri:
-            gunler[t] = 'geldi' if (o['numara'], t) in katilim_set else 'gelmedi'
+        for huc in satir['hucreler']:
+            tarih = hafta_tarih[huc['hafta']]
+            gunler[tarih] = 'geldi' if huc['durum'] == 'katildi' else 'gelmedi'
 
         rapor.append({
-            'numara': o['numara'],
-            'ad_soyad': o['ad'] + ' ' + o['soyad'],
+            'numara': satir['numara'],
+            'ad_soyad': satir['ad'] + ' ' + satir['soyad'],
             'katilim': katilim,
             'devamsizlik': devamsizlik,
             'yuzde': yuzde,
@@ -1565,7 +1628,7 @@ def api_yoklama_rapor():
         })
 
     return jsonify({
-        'tarihler': ders_gunleri,
+        'tarihler': tarihler,
         'toplam_ders': toplam_ders,
         'esik': esik,
         'rapor': rapor
