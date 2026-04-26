@@ -26,7 +26,23 @@ services:
       retries: 5
     restart: always
 
+  # ─────────────────────────────────────────────────────────────────────
+  # NOT: Flask uygulaması artık BAREMETAL çalışıyor (manage.sh + conda).
+  # Docker Desktop NAT katmanı zayıf network'lü öğrencilerde latency yapıyordu
+  # + Python 3.14 / eventlet uyumsuzluğu sorun çıkarıyordu (Nisan 2026).
+  #
+  # Baremetal başlatma:
+  #   docker compose up -d         # sadece db (default — bu profile dışında)
+  #   ./manage.sh start            # Flask'ı conda Python 3.11 ile başlatır
+  #
+  # Eski Docker modunu (acil durum / referans için) çalıştırmak istersen:
+  #   docker compose --profile docker up -d app
+  #
+  # `profiles: [docker]` sayesinde `docker compose up -d` bu servisi
+  # OTOMATİK BAŞLATMAZ — port 3333 baremetal Flask için serbest kalır.
+  # ─────────────────────────────────────────────────────────────────────
   app:
+    profiles: [docker]
     build: .
     container_name: ders_takip_app
     depends_on:
@@ -55,13 +71,14 @@ services:
       # böylece kullanıcı UI'dan farklı alt klasörler girse de docker recreate gerekmez.
       - ${SLIDE_HOST_BASE:-/tmp/empty-slaytlar}:${SLIDE_HOST_BASE:-/tmp/empty-slaytlar}:ro
     # Healthcheck — app donarsa veya CPU tırmanırsa healthcheck fail olur,
-    # docker otomatik restart eder. Ders sırasında sessiz recovery sağlar.
+    # docker otomatik restart eder.
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:3333/api/durum', timeout=5)"]
       interval: 30s
       timeout: 10s
       retries: 3
       start_period: 30s
-    # Hafıza limiti — leak olursa OOM sonrası restart (restart:always ile)
     mem_limit: 1g
-    restart: always
+    # restart: always KALDIRILDI — Docker daemon her açıldığında container'ı
+    # otomatik açıp port 3333'ü baremetal Flask'tan çalıyordu.
+    restart: "no"
