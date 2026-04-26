@@ -183,16 +183,19 @@ def api_durum():
         if numara in onaylanan:
             cikis_onaylandi = True
 
-    # Toplu çıkış kontrolü
+    # Toplu çıkış kontrolü — SADECE ÖĞRENCİ session'larını etkiler.
+    # Öğretmen session'ı toplu_cikis'ten AFFEDİLMEZ (yoksa öğretmen
+    # "Paket Sonu"na basınca kendi session'ı da siliniyor → 401 zinciri).
     toplu_cikis = False
     giris_zamani = session.get('giris_zamani', 0) or 0
     toplu_cikis_zamani = ders_durumu.get('toplu_cikis_zamani', 0) or 0
-    if toplu_cikis_zamani > 0 and toplu_cikis_zamani > giris_zamani:
+    is_ogretmen = bool(session.get('ogretmen'))
+    if not is_ogretmen and toplu_cikis_zamani > 0 and toplu_cikis_zamani > giris_zamani:
         toplu_cikis = True
         session.clear()
 
     # Bireysel force-çıkış kontrolü (öğretmen tek öğrenciyi çıkarır)
-    if not toplu_cikis and numara:
+    if not toplu_cikis and numara and not is_ogretmen:
         force_cikis_zamani = ders_durumu.get('force_cikis', {}).get(numara, 0)
         if force_cikis_zamani and giris_zamani and force_cikis_zamani > giris_zamani:
             toplu_cikis = True
