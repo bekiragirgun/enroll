@@ -227,22 +227,19 @@ def _ct991_exec(command: list, retries: int = 2) -> subprocess.CompletedProcess:
         else:
             final_command = ["sudo"] + command
 
-    # Pool hazırsa ControlPath ile hızlı bağlan, değilse pool'u başlat
-    use_pool = _ssh_pool_baslat()
-    control_path = _pool_socket if use_pool else "none"
-
+    # V28: Pool devre dışı — ~/.ssh/config'deki ControlMaster auto (host 10.211.55.27)
+    # çok daha basit ve güvenilir. Pool'un kendi master'ı bazen hang oluyordu.
     ssh_cmd = [
         "ssh", "-o", "ConnectTimeout=10",
         "-o", "StrictHostKeyChecking=accept-new",
         "-o", "BatchMode=yes" if not CHROOT_PASS else "BatchMode=no",
-        "-o", f"ControlPath={control_path}",
-        "-o", "ControlMaster=no",  # Master zaten _pool_process, biz slave olarak bağlanıyoruz
         "-p", str(CHROOT_REAL_SSH_PORT),
         f"{CHROOT_USER}@{CHROOT_HOST}"
     ]
 
-    if CHROOT_PASS and not use_pool:
-        # Pool sshpass kullanıyorsa slave bağlantılarda tekrar gerekmez
+    if CHROOT_PASS:
+        # V28: Her çağrıda sshpass prefix — ~/.ssh/config ControlMaster ilk
+        # çağrıda master açar, sonrakiler mux üzerinden geçer (sshpass no-op).
         import shutil
         if not shutil.which("sshpass"):
             log.error("sshpass paketi yüklü değil!")
@@ -271,30 +268,17 @@ def _ct991_exec(command: list, retries: int = 2) -> subprocess.CompletedProcess:
             if result.returncode == 0:
                 return result
 
-            # SSH bağlantı hatası (exit 255) → pool'u sıfırla ve retry
+            # SSH bağlantı hatası (exit 255) → mux soketi temizle ve retry
             if result.returncode == 255 and attempt < retries:
-                _ssh_pool_reset()
+                # V28: ~/.ssh/config'deki mux soketini temizle
+                try:
+                    from pathlib import Path as _P
+                    _P(f"/tmp/ssh-mux-{CHROOT_USER}@{CHROOT_HOST}:{CHROOT_REAL_SSH_PORT}").unlink(missing_ok=True)
+                except Exception:
+                    pass
                 wait = (attempt + 1) * 2
-                log.warning(f"SSH bağlantı hatası, pool sıfırlandı, {wait}s sonra tekrar denenecek ({attempt+1}/{retries})")
+                log.warning(f"SSH bağlantı hatası, mux reset, {wait}s sonra tekrar denenecek ({attempt+1}/{retries})")
                 time.sleep(wait)
-                # Yeni pool ile ssh_cmd'yi yeniden oluştur
-                use_pool = _ssh_pool_baslat()
-                control_path = _pool_socket if use_pool else "none"
-                ssh_cmd = [
-                    "ssh", "-o", "ConnectTimeout=10",
-                    "-o", "StrictHostKeyChecking=accept-new",
-                    "-o", "BatchMode=yes" if not CHROOT_PASS else "BatchMode=no",
-                    "-o", f"ControlPath={control_path}",
-                    "-o", "ControlMaster=no",
-                    "-p", str(CHROOT_REAL_SSH_PORT),
-                    f"{CHROOT_USER}@{CHROOT_HOST}"
-                ]
-                if CHROOT_PASS and not use_pool:
-                    import shutil
-                    if shutil.which("sshpass"):
-                        ssh_cmd = ["sshpass", "-p", CHROOT_PASS] + ssh_cmd
-                quoted_remote_cmd = " ".join(shlex.quote(str(c)) for c in final_command)
-                ssh_cmd.append(quoted_remote_cmd)
                 continue
 
             if result.returncode != 0:

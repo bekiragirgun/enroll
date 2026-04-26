@@ -228,30 +228,29 @@ _state.log_buffer        = log_buffer
 def _pty_oku_ve_yayinla(fd, hedef_event, hedef_room=None, broadcast=False):
     """PTY fd'den oku ve SocketIO üzerinden yayınla.
 
-    fd kapandığında veya hata oluştuğunda sessizce çıkar.
+    V28: Basit blocking os.read — monkey_patch ile yield olur.
     """
-    import select
+    log.info(f"📖 Reader başladı fd={fd} event={hedef_event} broadcast={broadcast}")
+    toplam = 0
     while True:
         try:
-            # select ile bekle - fd kapanırsa hemen çıkar
-            ready, _, _ = select.select([fd], [], [], 1.0)
-            if not ready:
-                continue
             data = os.read(fd, 4096)
             if not data:
+                log.info(f"📖 Reader fd={fd} EOF — çıkılıyor (toplam {toplam} byte)")
                 break
+            toplam += len(data)
             text = data.decode('utf-8', errors='replace')
             if broadcast:
                 socketio.emit(hedef_event, text, namespace='/terminal')
             elif hedef_room:
                 socketio.emit(hedef_event, text, room=hedef_room, namespace='/terminal')
-                # İzleme relay: Eğer bu fd izlenen öğrenciye aitse, öğretmene de gönder
                 if ogretmen_izlenen_sid and hedef_room == ogretmen_izlenen_sid and ogretmen_sid:
                     socketio.emit('izleme_cikti', text, room=ogretmen_sid, namespace='/terminal')
-        except (OSError, IOError, EOFError, ValueError):
+        except (OSError, IOError, EOFError, ValueError) as e:
+            log.info(f"📖 Reader fd={fd} kapandı: {e}")
             break
         except Exception as e:
-            log.error(f"PTY Okuma hatası: {e}")
+            log.error(f"❌ PTY Okuma hatası: {e}")
             break
 
 @socketio.on('connect', namespace='/terminal')
@@ -298,7 +297,9 @@ def terminal_kopma(*args):
 
 @socketio.on('ogretmen_baglan', namespace='/terminal')
 def ogretmen_baglan_event(veri=None):
+    log.info(f"🔌 ogretmen_baglan event: sid={request.sid}, session_ogretmen={session.get('ogretmen')}")
     if not session.get('ogretmen'):
+        log.warning(f"⚠️ ogretmen_baglan reddedildi — session.ogretmen yok")
         return
     global ogretmen_sid, ogretmen_pty_fd, ogretmen_pty_pid, ders_durumu
     ogretmen_sid = request.sid
@@ -311,6 +312,7 @@ def ogretmen_baglan_event(veri=None):
     ogretmen_pty_fd = None
     ogretmen_pty_pid = None
 
+    log.info(f"🔎 eski_pid={eski_pid}, eski_fd={eski_fd}")
     if eski_pid:
         try: os.killpg(os.getpgid(eski_pid), signal.SIGTERM)
         except ProcessLookupError: pass
@@ -320,16 +322,30 @@ def ogretmen_baglan_event(veri=None):
         except OSError: pass
         import time
         time.sleep(0.3)  # Reader thread'in çıkmasını bekle
+    log.info(f"🔎 eski PTY temizlik tamam")
 
-    from chroot_terminal import chroot_var_mi, chroot_olustur, CHROOT_HOST, CHROOT_REAL_SSH_PORT, CHROOT_USER, CHROOT_PASS, CHROOT_BASE, _slugify
+    try:
+        from chroot_terminal import chroot_var_mi, chroot_olustur, CHROOT_HOST, CHROOT_REAL_SSH_PORT, CHROOT_USER, CHROOT_PASS, CHROOT_BASE, _slugify
+        log.info(f"🔎 chroot_terminal import OK (HOST={CHROOT_HOST}, USER={CHROOT_USER}, PASS={'yes' if CHROOT_PASS else 'NO'})")
+    except Exception as ie:
+        import traceback
+        log.error(f"❌ chroot_terminal import hatası: {ie}")
+        log.error(traceback.format_exc())
+        return
     ogretmen_numara = _slugify(ogretmen_numara)
 
     try:
-        if not chroot_var_mi(ogretmen_numara):
+        log.info(f"🔎 chroot_var_mi({ogretmen_numara}) kontrol ediliyor...")
+        var = chroot_var_mi(ogretmen_numara)
+        log.info(f"🔎 chroot_var_mi sonuç: {var}")
+        if not var:
             log.info(f"Öğretmen chroot ortamı oluşturuluyor...")
             chroot_olustur(ogretmen_numara, "Öğretmen", "Paneli")
+            log.info(f"✅ chroot_olustur tamamlandı")
 
+        log.info(f"🔎 pty.openpty çağrılıyor")
         master_fd, slave_fd = pty.openpty()
+        log.info(f"🔎 PTY açıldı master={master_fd} slave={slave_fd}")
         safe_username = shlex.quote(ogretmen_numara)
         safe_chroot_path = shlex.quote(f"{CHROOT_BASE}/{ogretmen_numara}")
 
@@ -349,8 +365,12 @@ def ogretmen_baglan_event(veri=None):
         ]
         if CHROOT_PASS:
             ssh_cmd = ['sshpass', '-p', CHROOT_PASS] + ssh_cmd
+            log.info(f"🔎 sshpass ile ssh spawn ediliyor (PASS set)")
+        else:
+            log.info(f"🔎 sshpass'siz ssh spawn ediliyor (PASS YOK!)")
 
         proc = subprocess.Popen(ssh_cmd, stdin=slave_fd, stdout=slave_fd, stderr=slave_fd, preexec_fn=os.setsid)
+        log.info(f"🔎 subprocess.Popen başarılı PID={proc.pid}")
         os.close(slave_fd)
 
         ogretmen_pty_fd = master_fd
@@ -358,11 +378,14 @@ def ogretmen_baglan_event(veri=None):
 
         t = threading.Thread(target=_pty_oku_ve_yayinla, args=(master_fd, 'ogretmen_cikti', None, True), daemon=True)
         t.start()
+        log.info(f"🔎 Reader thread başlatıldı")
 
         emit('bagli_ogrenci_sayisi', len(ogrenci_sidleri))
 
     except Exception as e:
-        log.error(f"Öğretmen terminal bağlantı hatası: {str(e)}")
+        import traceback
+        log.error(f"❌ Öğretmen terminal bağlantı hatası: {str(e)}")
+        log.error(traceback.format_exc())
         emit('hata', f'Terminal bağlantı hatası: {str(e)}')
 
 @socketio.on('ogretmen_girdi', namespace='/terminal')
@@ -448,9 +471,59 @@ def ogretmen_mudahale_toggle_event(veri):
     ogretmen_mudahale = veri.get('aktif', False)
     log.info(f"Öğretmen müdahale modu: {'açık' if ogretmen_mudahale else 'kapalı'}")
 
+def _ogrenci_session_temizle(username=None, skip_sid=None):
+    """V28: Aynı kullanıcıya ait ESKİ PTY/process/reader greenlet'lerini kapat.
+
+    F5 ya da WebSocket timeout disconnect tetiklemediğinde, her yeni bağlantı
+    eski reader greenlet'i leak ediyordu. Bu temizleyici:
+      - username veriliyse o kullanıcının tüm eski sid'lerini bulur
+      - username yoksa subprocess'i ölmüş tüm session'ları toplar (reaper)
+    """
+    temizlenen = 0
+    for old_sid in list(ogrenci_sidleri.keys()):
+        if old_sid == skip_sid:
+            continue
+        old_username = ogrenci_sidleri.get(old_sid)
+        hedef_mi = False
+        if username is not None:
+            # Aynı user için yeni login — eskileri nuke et
+            if old_username == username:
+                hedef_mi = True
+        else:
+            # Reaper: subprocess ölmüşse kapat
+            proc_tuple = ogrenci_surecleri.get(old_sid)
+            if proc_tuple:
+                proc, _ = proc_tuple
+                if proc.poll() is not None:  # subprocess exit
+                    hedef_mi = True
+            else:
+                hedef_mi = True  # Process yoksa da sid'i temizle
+
+        if not hedef_mi:
+            continue
+
+        ogrenci_sidleri.pop(old_sid, None)
+        proc_tuple = ogrenci_surecleri.pop(old_sid, None)
+        if proc_tuple:
+            proc, fd = proc_tuple
+            ogrenci_pty_locks.pop(fd, None)
+            try: os.close(fd)
+            except OSError: pass
+            try: os.killpg(os.getpgid(proc.pid), signal.SIGTERM)
+            except Exception:
+                try: proc.terminate()
+                except Exception: pass
+        temizlenen += 1
+    if temizlenen:
+        log.info(f"🧹 {temizlenen} eski öğrenci session'ı temizlendi (user={username})")
+    return temizlenen
+
+
 @socketio.on('ogrenci_baglan', namespace='/terminal')
 def ogrenci_baglan_event(veri):
+    log.info(f"🔌 ogrenci_baglan event: sid={request.sid}, session_numara={session.get('numara')}, veri={veri}")
     if not session.get('numara'):
+        log.warning(f"⚠️ ogrenci_baglan reddedildi — session.numara yok")
         return
     sid = request.sid
     username = veri.get('username', '')
@@ -459,12 +532,22 @@ def ogrenci_baglan_event(veri):
         emit('hata', 'Kullanıcı adı gerekli!')
         return
 
+    # V28: Current sid temizliği (nadir: aynı sid yeniden baglan diyorsa)
     if sid in ogrenci_surecleri:
         proc, fd = ogrenci_surecleri.pop(sid)
+        ogrenci_pty_locks.pop(fd, None)
         try: os.close(fd)
         except: pass
         try: os.killpg(os.getpgid(proc.pid), signal.SIGTERM)
         except: pass
+
+    # V28: Aynı username için eski sid'leri de kapat — F5 / reconnect leak fix.
+    # Inline call os.killpg'de hang yapabiliyor, bu yüzden greenlet'e spawn et
+    # (fire-and-forget). 60 sn'lik reaper yedek güvence.
+    try:
+        eventlet.spawn_n(_ogrenci_session_temizle, username, sid)
+    except Exception as _e:
+        log.warning(f"session temizle spawn hata: {_e}")
 
     ogrenci_sidleri[sid] = username
     try:
@@ -748,6 +831,22 @@ if __name__ == '__main__':
         print("  🤖 Auto-kick scheduler aktif (pazartesi 11:35 / 15:15 / 18:00)")
     except Exception as e:
         print(f"  ⚠️  Auto-kick scheduler başlatılamadı: {e}")
+
+    # V28: Periyodik reader reaper — 60 sn'de bir ölü PTY'leri süpürür.
+    # F5 / crash / timeout disconnect kaçırıldığında leak birikmesin.
+    def _ogrenci_reaper():
+        while True:
+            try:
+                eventlet.sleep(60)
+                _ogrenci_session_temizle()  # ölü subprocess'leri bul & kapat
+            except Exception as e:
+                try: app.logger.error(f"Reaper hata: {e}")
+                except Exception: pass
+    try:
+        eventlet.spawn(_ogrenci_reaper)
+        print("  🧹 PTY reaper aktif (60 sn periyot — ölü subprocess temizliği)")
+    except Exception as e:
+        print(f"  ⚠️  Reaper başlatılamadı: {e}")
 
     # IP Tespiti
     try:
