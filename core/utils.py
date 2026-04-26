@@ -38,14 +38,22 @@ def istemci_ip():
     return request.remote_addr or '0.0.0.0'
 
 def paket_hesapla():
-    """Şu anki Türkiye saatine göre ders paketini belirle (3 paket × ~2.5 saat)."""
+    """Şu anki Türkiye saatine göre ders paketini belirle.
+
+    Öğrenciler dersten 15 dakika öncesinden (tolerans) giriş yapabilir;
+    o aralık da ilgili pakete sayılır. Aksi halde aralarda 'arada kalmış'
+    kayıtlar oluşup "📦 Paket Sonu" butonu onları bulamıyor.
+    """
     from datetime import time as t
     now = _tr_now().time()
-    if t(9, 0) <= now <= t(11, 35):
+    # 1. paket: 08:45 — 11:35 (15 dk erken toleransla)
+    if t(8, 45) <= now <= t(11, 35):
         return '1. Paket (09:00-11:35)'
-    elif t(12, 40) <= now <= t(15, 15):
+    # 2. paket: 12:25 — 15:15
+    elif t(12, 25) <= now <= t(15, 15):
         return '2. Paket (12:40-15:15)'
-    elif t(15, 25) <= now <= t(18, 0):
+    # 3. paket: 15:10 — 18:00 (2. ile örtüşmesin diye 15:10; 15:15'te 2. bitiyor)
+    elif t(15, 10) <= now <= t(18, 0):
         return '3. Paket (15:25-18:00)'
     else:
         return '—'
