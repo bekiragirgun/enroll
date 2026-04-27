@@ -8,6 +8,28 @@ Başlatmak için:
 Öğretmen paneli: http://localhost:3333/teacher
 """
 
+# ─── FD limit (CRITICAL — eventlet.monkey_patch ÖNCESİ) ──────────
+# macOS'ta zsh "unlimited" göstermesine rağmen BSD heritage'tan ötürü
+# kernel default hard limit OPEN_MAX = 10240 — buna ulaşınca [Errno 24]
+# Too many open files. Her öğrenci ~5 FD (websocket + PTY pair + SSH
+# pipe), 30 öğrenci × 5 + DB pool + log + listening socket → 200+ FD
+# kolayca. Explicit setrlimit ile kernel'e gerçek isteğimizi söylüyoruz;
+# kern.maxfilesperproc (~184k) altına kadar yükseltilir.
+import resource as _resource
+import sys as _sys
+try:
+    _soft, _hard = _resource.getrlimit(_resource.RLIMIT_NOFILE)
+    _target = 65536
+    # Hard limit RLIM_INFINITY (max int64) ise dokunmaya gerek yok;
+    # gerçek bir sayıysa onun altında kalmamız şart (process kendi
+    # hard'ını yükseltemez). soft <= hard zorunluluğu için min al.
+    _new_soft = min(_target, _hard) if _hard > 0 else _target
+    _resource.setrlimit(_resource.RLIMIT_NOFILE, (_new_soft, _hard))
+    _soft2, _hard2 = _resource.getrlimit(_resource.RLIMIT_NOFILE)
+    print(f"📂 FD limiti: soft={_soft2}, hard={_hard2}", flush=True)
+except (ValueError, OSError) as _e:
+    print(f"⚠️  FD limit yükseltilemedi: {_e}", flush=True)
+
 import eventlet
 eventlet.monkey_patch()
 from eventlet.debug import hub_prevent_multiple_readers

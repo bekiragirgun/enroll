@@ -66,6 +66,20 @@ cmd_start() {
     PYTHON_BIN=$(pick_python)
     echo "✅ Python: $PYTHON_BIN"
 
+    # ─── FD limiti — yedek katman ────────────────────────────────
+    # NOT: Asıl fix app.py'nin EN BAŞINDA resource.setrlimit() ile
+    # yapılıyor (macOS BSD heritage'tan ötürü zsh "unlimited" yalan
+    # söylüyor; kernel default OPEN_MAX = 10240). Burası shell-level
+    # best-effort. Python child setrlimit'i kendisi yapacak.
+    local TARGET_NOFILE=65536
+    local CURRENT_NOFILE
+    CURRENT_NOFILE=$(ulimit -n 2>/dev/null)
+    if [ "$CURRENT_NOFILE" != "unlimited" ] && [ "$CURRENT_NOFILE" -lt "$TARGET_NOFILE" ] 2>/dev/null; then
+        ulimit -n "$TARGET_NOFILE" 2>/dev/null || true
+    fi
+    echo "📂 Shell ulimit -n: $(ulimit -n)  (asıl set: app.py setrlimit)"
+    # ──────────────────────────────────────────────────────────────
+
     # Eski log'u döndür (> 5MB ise)
     if [ -f "$LOGFILE" ] && [ "$(stat -f%z "$LOGFILE" 2>/dev/null || stat -c%s "$LOGFILE" 2>/dev/null)" -gt 5242880 ]; then
         mv "$LOGFILE" "${LOGFILE}.$(date '+%Y%m%d-%H%M%S')"
